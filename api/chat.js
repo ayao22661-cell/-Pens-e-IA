@@ -7,12 +7,19 @@ export default async function handler(req, res) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return res.status(401).json({ error: "Clé API absente." });
 
-    // 🏆 Liste des modèles en cascade (du plus généreux au plus coûteux en quota)
+    // 🏆 Liste des modèles en cascade (Priorité au ratio Qualité / Quota)
     const modelsToTry = [
+        // ━━━ LIGNE DE FRONT
         "gemini-3.1-flash-lite", // Bouclier principal : 500 requêtes/jour
+        
+        // ━━━ SECONDE LIGNE GEMINI
         "gemini-3-flash",        // Back-up 1 : 20 requêtes/jour
-        "gemini-2.5-flash-lite", // Back-up 2 : 20 requêtes/jour
-        "gemini-2.5-flash"       // Actuellement épuisé (23/20), mais utile pour demain
+        "gemini-2.5-flash",      // Back-up 2 : 20 requêtes/jour (utile dès demain)
+        "gemini-2.5-flash-lite", // Back-up 3 : 20 requêtes/jour
+
+        // ━━━ ULTIMES RECOURS GEMMA (Versions "Instruction Tuned" pour le chat)
+        "gemma-4-31b-it",        // Filet de sécurité 1 : 1 500 requêtes/jour
+        "gemma-3-27b-it"         // Filet de sécurité 2 : 14 400 requêtes/jour
     ];
 
     // Modification : la fonction prend maintenant le nom du modèle en paramètre
