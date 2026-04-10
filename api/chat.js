@@ -7,12 +7,17 @@ export default async function handler(req, res) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return res.status(401).json({ error: "Clé API absente." });
 
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 3000;
+    // 🏆 Liste des modèles en cascade (du plus généreux au plus coûteux en quota)
+    const modelsToTry = [
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-1.5-pro"
+    ];
 
-    async function callGemini() {
+    // Modification : la fonction prend maintenant le nom du modèle en paramètre
+    async function callGemini(modelName) {
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -31,7 +36,9 @@ export default async function handler(req, res) {
         return { response, data };
     }
 
-    function isOverloaded(data) {
+    // Modification : on ajoute la vérification du code HTTP 429
+    function isOverloaded(data, response) {
+        if (response.status === 429) return true;
         const msg = (data.error?.message || "").toLowerCase();
         return msg.includes("high demand") || msg.includes("experiencing") || msg.includes("overloaded");
     }
@@ -39,30 +46,32 @@ export default async function handler(req, res) {
     try {
         let lastData, lastResponse;
 
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            const { response, data } = await callGemini();
+        // Boucle sur les modèles au lieu d'une boucle de "retries" sur le même modèle
+        for (const model of modelsToTry) {
+            const { response, data } = await callGemini(model);
             lastData = data;
             lastResponse = response;
 
-            // Succès
+            // ✅ Succès
             if (response.ok && !data.error && data.candidates?.length > 0) {
                 const reply = data.candidates[0].content.parts[0].text || "Réponse vide.";
-                return res.status(200).json([{ generated_text: reply }]);
+                // On inclut le modèle utilisé pour tes tests/logs côté frontend
+                return res.status(200).json([{ generated_text: reply, used_model: model }]);
             }
 
-            // Surcharge → on réessaie après délai
-            if (isOverloaded(data) && attempt < MAX_RETRIES) {
-                await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
-                continue;
+            // ⚠️ Surcharge → on passe au modèle suivant instantanément
+            if (isOverloaded(data, response)) {
+                console.warn(`[INFO] Modèle ${model} surchargé. Passage au suivant...`);
+                continue; // Relance la boucle avec le modèle suivant
             }
 
-            // Autre erreur → on sort immédiatement
+            // ❌ Autre erreur (Clé invalide, Prompt bloqué par la sécurité, etc.) → on sort immédiatement
             break;
         }
 
-        // Après tous les essais, on retourne l'erreur
-        const errMsg = lastData.error?.message || "Erreur API inconnue";
-        return res.status(lastResponse.status || 500).json({ error: errMsg });
+        // Si on arrive ici, c'est que tous les modèles ont échoué ou qu'une erreur fatale est survenue
+        const errMsg = lastData?.error?.message || "Le serveur IA est très sollicité. Veuillez réessayer.";
+        return res.status(lastResponse?.status || 500).json({ error: errMsg });
 
     } catch (error) {
         return res.status(500).json({ error: "Erreur serveur : " + error.message });
