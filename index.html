@@ -3,47 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pensée — IA de Codage</title>
-    <!-- Importation des polices : Syne (corps), JetBrains Mono (code), Space Grotesk (Logo) -->
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>Pensée — IA Personnelle</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* ============================================================
-           RESET & VARIABLES GLOBALES
-           ============================================================ */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg: #0d0f14;
-            --bg2: #13161e;
-            --bg3: #1a1e28;
-            --border: rgba(255,255,255,0.07);
-            --border2: rgba(255,255,255,0.12);
-            --accent: #00e5a0;
-            --accent-dim: rgba(0,229,160,0.12);
-            --text: #e8eaf0;
-            --text2: #8b90a0;
-            --text3: #555a6a;
-            --user-bubble: #1a2e24;
-            --user-border: rgba(0,229,160,0.25);
-            --code-bg: #0a0c10;
-            --red: #ff6b6b;
-            --yellow: #f5c542;
-            --shadow: 0 20px 50px rgba(0,0,0,0.5);
+            --bg:         #080a0f;
+            --bg2:        #0e1118;
+            --bg3:        #151a24;
+            --bg4:        #1c2230;
+            --border:     rgba(255,255,255,0.06);
+            --border2:    rgba(255,255,255,0.11);
+            --accent:     #00e5a0;
+            --accent2:    #00b87d;
+            --accent-dim: rgba(0,229,160,0.10);
+            --accent-glow:rgba(0,229,160,0.18);
+            --text:       #dde2ee;
+            --text2:      #7a8099;
+            --text3:      #44495a;
+            --user-bg:    #0f2019;
+            --user-border:rgba(0,229,160,0.20);
+            --code-bg:    #060810;
+            --red:        #ff5f5f;
+            --yellow:     #f0c040;
+            --shadow:     0 32px 80px rgba(0,0,0,0.7);
+            --radius:     20px;
+            --radius-sm:  12px;
         }
 
+        /* ============================================================
+           BASE
+           ============================================================ */
         body {
-    font-family: 'Syne', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    position: relative;
-     }
+            font-family: 'Syne', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Grain texture subtil */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.4;
+        }
 
         /* ============================================================
-           ÉCRAN DE CONNEXION (CODE SEUL)
+           ÉCRAN DE CONNEXION
            ============================================================ */
         #loginScreen {
             position: fixed;
@@ -55,143 +70,264 @@
             justify-content: center;
             flex-direction: column;
             padding: 20px;
-            transition: opacity 0.4s ease, visibility 0.4s;
+            transition: opacity 0.5s ease;
+        }
+
+        /* Fond animé login */
+        #loginScreen::before {
+            content: '';
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0,229,160,0.06) 0%, transparent 70%);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: breathe 6s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            50% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
         }
 
         .login-card {
             background: var(--bg2);
-            border: 1px solid var(--border);
-            padding: 50px 40px;
+            border: 1px solid var(--border2);
+            padding: 52px 44px 44px;
             border-radius: 28px;
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
             text-align: center;
-            box-shadow: var(--shadow);
-            animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+            box-shadow: var(--shadow), 0 0 0 1px rgba(0,229,160,0.04) inset;
+            animation: slideUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Ligne accent en haut de la card */
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 10%; right: 10%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            border-radius: 1px;
         }
 
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(40px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
         }
 
-        .login-card .logo-dot {
-            width: 16px; height: 16px;
-            margin: 0 auto 24px;
+        .login-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 28px;
         }
 
-        .login-card h2 { 
-            font-family: 'Space Grotesk', sans-serif; 
-            font-size: 32px; 
-            margin-bottom: 12px; 
-            letter-spacing: -0.03em;
+        .login-logo-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 16px var(--accent);
+            animation: pulse 2s infinite;
         }
-        .login-card h2 span { color: var(--accent); }
-        .login-card p { color: var(--text2); font-size: 14px; margin-bottom: 35px; line-height: 1.5; }
 
-        .login-group { margin-bottom: 25px; text-align: center; }
-        .login-group label { 
-            display: block; 
-            font-size: 11px; 
-            font-family: 'JetBrains Mono', monospace; 
-            color: var(--text3); 
-            margin-bottom: 10px; 
-            text-transform: uppercase; 
-            letter-spacing: 0.15em;
+        .login-logo-name {
+            font-family: 'Fraunces', serif;
+            font-size: 26px;
+            font-weight: 300;
+            letter-spacing: 0.02em;
+            color: var(--text);
+        }
+        .login-logo-name em {
+            color: var(--accent);
+            font-style: italic;
+        }
+
+        .login-card p {
+            color: var(--text2);
+            font-size: 13.5px;
+            line-height: 1.65;
+            margin-bottom: 36px;
+            font-family: 'Syne', sans-serif;
+            font-weight: 400;
+        }
+
+        .login-group {
+            margin-bottom: 12px;
+            text-align: left;
+        }
+
+        .login-group label {
+            display: block;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text3);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
         }
 
         .login-input {
             width: 100%;
             background: var(--bg3);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 18px;
-            color: white;
+            border-radius: var(--radius-sm);
+            padding: 15px 18px;
+            color: var(--text);
             font-family: 'JetBrains Mono', monospace;
-            font-size: 20px;
-            text-align: center;
-            letter-spacing: 0.5em;
+            font-size: 14px;
+            letter-spacing: 0.04em;
             outline: none;
             transition: all 0.25s ease;
         }
-        .login-input:focus { border-color: var(--accent); background: rgba(0,229,160,0.03); box-shadow: 0 0 20px rgba(0,229,160,0.05); }
+        .login-input::placeholder { color: var(--text3); letter-spacing: 0.04em; }
+        .login-input:focus {
+            border-color: rgba(0,229,160,0.5);
+            background: rgba(0,229,160,0.03);
+            box-shadow: 0 0 0 3px rgba(0,229,160,0.07);
+        }
+
+        .login-separator { height: 8px; }
 
         #loginBtn {
             width: 100%;
             background: var(--accent);
-            color: #0d0f14;
+            color: #060810;
             border: none;
-            padding: 18px;
-            border-radius: 14px;
+            padding: 16px;
+            border-radius: var(--radius-sm);
             font-weight: 700;
             font-family: 'Syne', sans-serif;
-            font-size: 16px;
+            font-size: 14px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.25s ease;
+            margin-top: 24px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
         }
-        #loginBtn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px var(--accent-dim); background: #00ffb3; }
-        #loginBtn:active { transform: translateY(0); }
+        #loginBtn:hover {
+            background: #1dffc0;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(0,229,160,0.25);
+        }
+        #loginBtn:active { transform: translateY(0); box-shadow: none; }
 
-        #loginError { color: var(--red); font-size: 12px; margin-top: 20px; display: none; font-family: 'JetBrains Mono', monospace; }
+        #loginError {
+            color: var(--red);
+            font-size: 11px;
+            margin-top: 16px;
+            display: none;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.08em;
+        }
 
-        .shake { animation: shake 0.4s ease-in-out; border-color: var(--red) !important; }
+        .shake { animation: shake 0.4s ease-in-out; }
         @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20% { transform: translateX(-10px); }
-            40% { transform: translateX(10px); }
-            60% { transform: translateX(-10px); }
-            80% { transform: translateX(10px); }
+            0%,100% { transform: translateX(0); }
+            20%      { transform: translateX(-8px); }
+            40%      { transform: translateX(8px); }
+            60%      { transform: translateX(-8px); }
+            80%      { transform: translateX(8px); }
         }
 
         /* ============================================================
-           HEADER & NAVIGATION
+           HEADER
            ============================================================ */
         header {
-            padding: 14px 24px;
+            padding: 13px 22px;
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
-            gap: 12px;
-            background: var(--bg2);
+            gap: 14px;
+            background: rgba(14,17,24,0.92);
+            backdrop-filter: blur(12px);
             flex-shrink: 0;
             z-index: 100;
+            position: relative;
         }
+
+        .logo-mark {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
         .logo-dot {
-            width: 10px; height: 10px;
+            width: 9px; height: 9px;
             border-radius: 50%;
             background: var(--accent);
             box-shadow: 0 0 10px var(--accent);
             animation: pulse 2s infinite;
+            flex-shrink: 0;
         }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 10px var(--accent)} 50%{opacity:0.5;box-shadow:0 0 4px var(--accent)} }
 
-        header h1 { font-family: 'Space Grotesk', sans-serif; font-size:18px; font-weight:700; letter-spacing:0.02em; }
-        header h1 span { color: var(--accent); }
-        .creator-tag { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); letter-spacing:0.04em; margin-left: 4px; }
+        .logo-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo-text h1 {
+            font-family: 'Fraunces', serif;
+            font-size: 17px;
+            font-weight: 300;
+            letter-spacing: 0.01em;
+            line-height: 1;
+        }
+        .logo-text h1 em { color: var(--accent); font-style: italic; }
+
+        .creator-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text3);
+            letter-spacing: 0.12em;
+            margin-top: 3px;
+        }
+
+        .header-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #statusBadge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: none;
+        }
+        #statusBadge.ok  { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.15); }
+        #statusBadge.err { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
 
         #logoutBtn {
-            margin-left: auto;
             background: none;
             border: 1px solid var(--border);
             color: var(--text3);
-            padding: 6px 14px;
+            padding: 6px 13px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 11px;
+            font-size: 10px;
             transition: 0.2s;
             font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
-        #logoutBtn:hover { color: var(--red); border-color: var(--red); background: rgba(255,107,107,0.05); }
-
-        #statusBadge { font-family:'JetBrains Mono',monospace; font-size:11px; padding:4px 10px; border-radius:20px; display:none; margin-right: 10px; }
-        #statusBadge.ok { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.2); }
-        #statusBadge.err { display:inline; color:var(--red); background:rgba(255,107,107,0.1); border:1px solid rgba(255,107,107,0.2); }
+        #logoutBtn:hover { color: var(--red); border-color: rgba(255,95,95,0.4); background: rgba(255,95,95,0.05); }
 
         /* ============================================================
-           WIDGETS (CREDITS & ALERTS)
+           BARRE CRÉDITS
            ============================================================ */
         #creditBar {
-            padding: 8px 24px;
+            padding: 7px 22px;
             background: var(--bg2);
             border-bottom: 1px solid var(--border);
             display: flex;
@@ -199,197 +335,488 @@
             gap: 12px;
             flex-shrink: 0;
         }
-        .credit-label { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text3); white-space:nowrap; }
-        .credit-track { flex:1; height:4px; background:var(--bg3); border-radius:2px; overflow:hidden; }
-        #creditFill { height:100%; width:100%; background:var(--accent); border-radius:2px; transition:width 0.4s ease; }
-        #creditCount { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text2); white-space:nowrap; min-width:70px; text-align:right; }
-
-        #alertBanner { display:none; padding:10px 24px; font-size:13px; font-family:'JetBrains Mono',monospace; text-align:center; flex-shrink:0; }
-        #alertBanner.low   { display:block; background:rgba(245,197,66,0.08); color:var(--yellow); border-bottom:1px solid rgba(245,197,66,0.15); }
-        #alertBanner.empty { display:block; background:rgba(255,107,107,0.08); color:var(--red); border-bottom:1px solid rgba(255,107,107,0.15); }
+        .credit-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text3);
+            white-space: nowrap;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .credit-track {
+            flex: 1;
+            height: 3px;
+            background: var(--bg4);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        #creditFill {
+            height: 100%;
+            width: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease;
+        }
+        #creditCount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text2);
+            white-space: nowrap;
+            min-width: 56px;
+            text-align: right;
+        }
 
         /* ============================================================
-           ZONE DE CHAT
+           BANNIÈRE ALERTE
+           ============================================================ */
+        #alertBanner {
+            display: none;
+            padding: 9px 22px;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            text-align: center;
+            flex-shrink: 0;
+            letter-spacing: 0.04em;
+        }
+        #alertBanner.low   { display:block; background:rgba(240,192,64,0.07); color:var(--yellow); border-bottom:1px solid rgba(240,192,64,0.12); }
+        #alertBanner.empty { display:block; background:rgba(255,95,95,0.07); color:var(--red); border-bottom:1px solid rgba(255,95,95,0.12); }
+
+        /* ============================================================
+           MESSAGES
            ============================================================ */
         #messages {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    scroll-behavior: smooth;
-}
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 28px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            scroll-behavior: smooth;
+        }
+        #messages::after {
+            content: "";
+            display: block;
+            min-height: 12px;
+            flex-shrink: 0;
+        }
+        #messages::-webkit-scrollbar { width: 3px; }
+        #messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+        #messages::-webkit-scrollbar-track { background: transparent; }
 
-/* Ajout crucial : forcer le scroll jusqu'en bas sur mobile */
-#messages::after {
-    content: "";
-    display: block;
-    min-height: 10px;
-    flex-shrink: 0;
-}
-        #messages::-webkit-scrollbar { width:4px; }
-        #messages::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+        .msg {
+            display: flex;
+            flex-direction: column;
+            max-width: 82%;
+            min-width: 0;
+            overflow: hidden;
+            animation: msgIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            flex-shrink: 0;
+        }
+        @keyframes msgIn {
+            from { opacity:0; transform:translateY(14px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
 
-        .msg { display:flex; flex-direction:column; max-width:85%; min-width:0; overflow:hidden; animation:fadeIn 0.25s ease; flex-shrink:0; }        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        
-        .msg.user { align-self:flex-end; align-items:flex-end; }
-        .msg.bot  { align-self:flex-start; align-items:flex-start; }
+        .msg.user { align-self: flex-end; align-items: flex-end; }
+        .msg.bot  { align-self: flex-start; align-items: flex-start; }
 
-        .msg-label { font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text3); margin-bottom:6px; letter-spacing:0.1em; text-transform:uppercase; }
+        .msg-label {
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text3);
+            margin-bottom: 7px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
 
-        .bubble { padding:14px 20px; border-radius:16px; font-size:14.5px; line-height:1.7; word-break:break-word; overflow-wrap:break-word; position: relative; min-width:0; max-width:100%; }
-        .user .bubble { background:var(--user-bubble); border:1px solid var(--user-border); border-bottom-right-radius:4px; }
-        .bot  .bubble { background:var(--bg3); border:1px solid var(--border); border-bottom-left-radius:4px; }
+        .bubble {
+            padding: 14px 20px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.75;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            position: relative;
+            min-width: 0;
+            max-width: 100%;
+        }
 
-        /* STYLE DU CODE DANS LES BULLES */
-        .bubble pre { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:12px; margin:12px 0; overflow-x:auto; max-width:100%; font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.6; color:#a8d8a8; }
-        .bubble code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(0,229,160,0.08); color:var(--accent); padding:2px 6px; border-radius:4px; word-break:break-all; }
+        .user .bubble {
+            background: var(--user-bg);
+            border: 1px solid var(--user-border);
+            border-bottom-right-radius: 5px;
+        }
+
+        .bot .bubble {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 5px;
+        }
+
+        /* Accent line gauche sur les bulles bot */
+        .bot .bubble::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 16px; bottom: 16px;
+            width: 2px;
+            background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+            border-radius: 1px;
+            opacity: 0.3;
+        }
+
+        /* Code dans les bulles */
+        .bubble pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            margin: 12px 0;
+            overflow-x: auto;
+            max-width: 100%;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11.5px;
+            line-height: 1.65;
+            color: #88c8a8;
+        }
+        .bubble code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            background: rgba(0,229,160,0.08);
+            color: var(--accent);
+            padding: 2px 7px;
+            border-radius: 5px;
+            word-break: break-all;
+        }
         .bubble pre code { background:none; color:inherit; padding:0; word-break:normal; }
 
-        .msg-actions { display: flex; gap: 12px; margin-top: 8px; align-self: flex-start; }
-        .copy-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 11px; font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 6px; transition: color 0.2s; }
+        .msg-actions { display:flex; gap:10px; margin-top:8px; align-self:flex-start; }
+        .copy-btn {
+            background: none;
+            border: none;
+            color: var(--text3);
+            cursor: pointer;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: color 0.2s;
+            letter-spacing: 0.06em;
+            padding: 2px 0;
+        }
         .copy-btn:hover { color: var(--accent); }
 
         /* ============================================================
-           SUGGESTIONS & APERÇUS
+           SUGGESTIONS
            ============================================================ */
-        #suggestions { display:flex; gap:10px; padding:0 24px 16px; flex-wrap:wrap; flex-shrink:0; }
-        .suggestion { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text2); background:var(--bg3); border:1px solid var(--border); border-radius:20px; padding:7px 15px; cursor:pointer; transition:all 0.2s ease; white-space:nowrap; }
-        .suggestion:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); transform: translateY(-1px); }
+        #suggestions {
+            display: flex;
+            gap: 8px;
+            padding: 0 24px 18px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .suggestion {
+            font-size: 11.5px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text2);
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 7px 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+        }
+        .suggestion:hover {
+            border-color: rgba(0,229,160,0.4);
+            color: var(--accent);
+            background: var(--accent-dim);
+            transform: translateY(-1px);
+        }
 
-        #uploadPreview { display: none; align-items: center; gap: 10px; padding: 10px 24px; background: var(--bg2); border-top: 1px solid var(--border); flex-wrap: wrap; flex-shrink: 0; }
-        #uploadPreview.visible { display:flex; }
-        
-        .attached-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--bg3); border: 1px solid rgba(0,229,160,0.25); border-radius: 8px; padding: 6px 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); }
-        .attached-chip button { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; transition: color 0.2s; }
+        /* ============================================================
+           FICHIERS ATTACHÉS
+           ============================================================ */
+        #uploadPreview {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            background: var(--bg2);
+            border-top: 1px solid var(--border);
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        #uploadPreview.visible { display: flex; }
+
+        .attached-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg3);
+            border: 1px solid rgba(0,229,160,0.2);
+            border-radius: 8px;
+            padding: 5px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+        }
+        .attached-chip button {
+            background: none;
+            border: none;
+            color: var(--text3);
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            transition: color 0.2s;
+        }
         .attached-chip button:hover { color: var(--red); }
 
-        /* ============================================================
-           ZONE DE SAISIE (INPUT AREA)
-           ============================================================ */
-        #inputArea { padding:16px 24px; border-top:1px solid var(--border); background:var(--bg2); display:flex; gap:12px; align-items:flex-end; flex-shrink:0; }
-        
-        #uploadBtn { 
-            background: var(--bg3); border: 1px solid var(--border); border-radius: 14px; 
-            width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; 
-            cursor: pointer; font-size: 22px; transition: all 0.2s ease; flex-shrink: 0; 
+        .file-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(0,229,160,0.07);
+            border: 1px solid rgba(0,229,160,0.18);
+            border-radius: 7px;
+            padding: 5px 11px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+            margin-bottom: 7px;
         }
-        #uploadBtn:hover { border-color:var(--accent); background:var(--accent-dim); }
-        #fileInput { display:none; }
 
-        #userInput { 
-            flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:14px; 
-            padding:14px 20px; font-family:'Syne',sans-serif; font-size:15px; color:var(--text); 
-            outline:none; resize:none; max-height:160px; line-height:1.6; transition: border-color 0.2s; 
+        /* ============================================================
+           INPUT AREA
+           ============================================================ */
+        #inputArea {
+            padding: 14px 22px;
+            border-top: 1px solid var(--border);
+            background: rgba(14,17,24,0.95);
+            backdrop-filter: blur(8px);
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            flex-shrink: 0;
         }
-        #userInput:focus { border-color:rgba(0,229,160,0.5); }
+
+        #uploadBtn {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            width: 46px; height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        #uploadBtn:hover { border-color: rgba(0,229,160,0.4); background: var(--accent-dim); }
+        #fileInput { display: none; }
+
+        #userInput {
+            flex: 1;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 13px 18px;
+            font-family: 'Syne', sans-serif;
+            font-size: 14.5px;
+            color: var(--text);
+            outline: none;
+            resize: none;
+            max-height: 150px;
+            line-height: 1.6;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        #userInput:focus {
+            border-color: rgba(0,229,160,0.4);
+            box-shadow: 0 0 0 3px rgba(0,229,160,0.06);
+        }
         #userInput::placeholder { color: var(--text3); }
 
-        #sendBtn { 
-            background:var(--accent); border:none; border-radius:14px; padding:14px 26px; 
-            font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:#0d0f14; 
-            cursor:pointer; transition:all 0.2s ease; white-space:nowrap; letter-spacing:0.03em; 
+        #sendBtn {
+            background: var(--accent);
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 13px 24px;
+            font-family: 'Syne', sans-serif;
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #060810;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            letter-spacing: 0.04em;
         }
-        #sendBtn:hover { background:#00ffb3; transform: translateY(-1px); box-shadow: 0 5px 15px var(--accent-dim); }
-        #sendBtn:active { transform: translateY(0); }
-        #sendBtn:disabled { opacity:0.4; cursor:not-allowed; transform: none; }
+        #sendBtn:hover {
+            background: #1dffc0;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0,229,160,0.22);
+        }
+        #sendBtn:active { transform: translateY(0); box-shadow: none; }
+        #sendBtn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
 
         /* ============================================================
-           OVERLAYS & FOOTER
+           DROP OVERLAY
            ============================================================ */
-        #dropOverlay { 
-            display: none; position: absolute; inset: 0; 
-            background: rgba(0,229,160,0.08); border: 2px dashed var(--accent); 
-            z-index: 1000; align-items: center; justify-content: center; 
-            font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent); 
-            pointer-events: none; backdrop-filter: blur(2px);
+        #dropOverlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0,229,160,0.05);
+            border: 2px dashed rgba(0,229,160,0.4);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            color: var(--accent);
+            pointer-events: none;
         }
-        #dropOverlay.visible { display:flex; }
+        #dropOverlay.visible { display: flex; }
 
-        footer { padding:10px 24px; text-align:center; font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--text3); border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
-        footer span { color:var(--accent); font-weight: bold; }
-
-        /* INDICATEUR DE CHARGEMENT IA */
-        .typing-bubble { background:var(--bg3); border:1px solid var(--border); border-radius:16px; border-bottom-left-radius:4px; padding:16px 22px; display:flex; gap:6px; align-items:center; }
-        .typing-bubble span { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:typingBlink 1.4s infinite; opacity: 0.3; }
+        /* ============================================================
+           TYPING INDICATOR
+           ============================================================ */
+        .typing-bubble {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            border-bottom-left-radius: 5px;
+            padding: 16px 22px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .typing-bubble span {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: typingBlink 1.4s infinite;
+            opacity: 0.3;
+        }
         .typing-bubble span:nth-child(2) { animation-delay: 0.2s; }
         .typing-bubble span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes typingBlink { 0%,100% { opacity:0.3; transform: scale(1); } 50% { opacity:1; transform: scale(1.3); } }
+        @keyframes typingBlink {
+            0%,100% { opacity:0.3; transform:scale(1); }
+            50%      { opacity:1; transform:scale(1.35); }
+        }
 
         /* ============================================================
-           MOBILE FIRST — RESPONSIVE
+           FOOTER
+           ============================================================ */
+        footer {
+            padding: 9px 22px;
+            text-align: center;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text3);
+            border-top: 1px solid var(--border);
+            background: var(--bg);
+            flex-shrink: 0;
+            letter-spacing: 0.06em;
+        }
+        footer em { color: var(--accent); font-style: normal; font-weight: 700; }
+
+        /* ============================================================
+           MOBILE
            ============================================================ */
         @media (max-width: 480px) {
+            .login-card { padding: 36px 22px 32px; }
             .msg { max-width: 92%; }
-            .bubble { padding: 12px 14px; font-size: 13.5px; }
+            .bubble { padding: 12px 15px; font-size: 13.5px; }
             .bubble pre { font-size: 10.5px; padding: 10px; }
             #inputArea { padding: 10px 12px; gap: 8px; }
             #sendBtn { padding: 12px 16px; font-size: 13px; }
-            #messages { padding: 16px 12px; }
-            header { padding: 12px 16px; }
+            #messages { padding: 16px 14px; }
+            header { padding: 11px 14px; }
             footer { display: none; }
+            #suggestions { padding: 0 14px 14px; }
         }
     </style>
 </head>
 <body>
 
-    <!-- ÉCRAN DE CONNEXION (CODE SEUL) -->
+    <!-- ============================================================
+         ÉCRAN DE CONNEXION SUPABASE
+         ============================================================ -->
     <div id="loginScreen">
         <div class="login-card">
-            <div class="logo-dot"></div>
-            <h2><span>Pensée</span> IA</h2>
-            <p>Veuillez entrer le code d'accès personnel pour déverrouiller la session.</p>
-            
-            <div class="login-group">
-                <label>CODE SECRET</label>
-                <input type="password" id="loginCode" class="login-input" placeholder="••••" autocomplete="off">
+            <div class="login-logo">
+                <div class="login-logo-dot"></div>
+                <span class="login-logo-name"><em>Pensée</em> IA</span>
             </div>
 
-            <button id="loginBtn">DÉVERROUILLER ›</button>
-            <div id="loginError">CODE D'ACCÈS INCORRECT</div>
+            <p>Connecte-toi pour accéder à ton espace personnel et retrouver tes conversations.</p>
+
+            <div class="login-group">
+                <label>Adresse email</label>
+                <input type="email" id="loginCode" class="login-input" placeholder="ton@email.com" autocomplete="email">
+            </div>
+
+            <div class="login-separator"></div>
+
+            <div class="login-group">
+                <label>Mot de passe</label>
+                <input type="password" id="loginPassword" class="login-input" placeholder="••••••••" autocomplete="current-password">
+            </div>
+
+            <button id="loginBtn">Accéder à Pensée ›</button>
+            <div id="loginError">Email ou mot de passe incorrect</div>
         </div>
     </div>
 
-    <!-- ZONE DE DÉPÔT DE FICHIER (DRAG & DROP) -->
-    <div id="dropOverlay">⬇ Dépose ton fichier de code ici</div>
+    <!-- DROP OVERLAY -->
+    <div id="dropOverlay">⬇ Dépose ton fichier ici</div>
 
-    <!-- HEADER DE L'APPLICATION -->
+    <!-- ============================================================
+         HEADER
+         ============================================================ -->
     <header>
-        <div class="logo-dot"></div>
-        <div>
-            <h1><span>Pensée</span> IA</h1>
-            <div class="creator-tag">by YAO BABA ANGE EMMANUEL</div>
+        <div class="logo-mark">
+            <div class="logo-dot"></div>
+            <div class="logo-text">
+                <h1><em>Pensée</em> IA</h1>
+                <div class="creator-tag">by Yao Baba Ange Emmanuel</div>
+            </div>
         </div>
-        <span id="statusBadge"></span>
-        <button id="logoutBtn">DÉCONNEXION</button>
+        <div class="header-right">
+            <span id="statusBadge"></span>
+            <button id="logoutBtn">Déconnexion</button>
+        </div>
     </header>
 
-    <!-- BARRE DE STATUT DES CRÉDITS -->
+    <!-- BARRE CRÉDITS -->
     <div id="creditBar">
-        <span class="credit-label">CRÉDITS QUOTIDIENS</span>
+        <span class="credit-label">Crédits</span>
         <div class="credit-track"><div id="creditFill"></div></div>
-        <span id="creditCount">15 / 15</span>
+        <span id="creditCount">20 / 20</span>
     </div>
 
-    <!-- BANNIÈRE D'ALERTE DYNAMIQUE -->
+    <!-- ALERTE -->
     <div id="alertBanner"></div>
 
-    <!-- ZONE DE DISCUSSION (MESSAGES) -->
+    <!-- ============================================================
+         MESSAGES
+         ============================================================ -->
     <div id="messages">
         <div class="msg bot">
             <span class="msg-label">Pensée</span>
             <div class="bubble">
-                Bonjour ! Je suis <strong>Pensée</strong>, ton IA de codage personnelle.<br><br>
-                Je suis une intelligence <strong>généraliste</strong> : programmation, culture, science, mathématiques, ou simples conseils... pose-moi n'importe quelle question !<br><br>
-                Tu peux également m'envoyer des fichiers de code pour une analyse approfondie.
+                Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>
+                Programmation, culture, science, storytelling, stratégie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.
             </div>
         </div>
     </div>
 
-    <!-- SUGGESTIONS DE QUESTIONS -->
+    <!-- SUGGESTIONS -->
     <div id="suggestions">
         <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
         <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
@@ -397,23 +824,26 @@
         <span class="suggestion" onclick="useSuggestion(this)">Déboguer mon code</span>
     </div>
 
-    <!-- APERÇU DES FICHIERS ATTACHÉS -->
+    <!-- FICHIERS ATTACHÉS -->
     <div id="uploadPreview"></div>
 
-    <!-- ZONE DE SAISIE DE L'UTILISATEUR -->
+    <!-- ============================================================
+         INPUT
+         ============================================================ -->
     <div id="inputArea">
-        <button id="uploadBtn" title="Joindre un fichier de code">📎</button>
-        <input type="file" id="fileInput" multiple accept="*/*" style="display:none;">
-        <textarea id="userInput" rows="1" placeholder="Explique ton problème ou dépose un fichier..."></textarea>
+        <button id="uploadBtn" title="Joindre un fichier">📎</button>
+        <input type="file" id="fileInput" multiple accept="*/*">
+        <textarea id="userInput" rows="1" placeholder="Pose ta question ou dépose un fichier…"></textarea>
         <button id="sendBtn">Envoyer ›</button>
     </div>
 
-    <!-- PIED DE PAGE -->
+    <!-- FOOTER -->
     <footer>
-        <span>Pensée IA</span> · Codage & Intelligence Artificielle · Créé par <span>Yao Baba Amge Emmanuel</span>
+        <em>Pensée IA</em> · Codage & Intelligence · Créé par <em>Yao Baba Ange Emmanuel</em>
     </footer>
 
-    <!-- LIAISON AVEC LE SCRIPT DE LOGIQUE -->
-    <script src="ia.js"></script>
+    <!-- SCRIPT MODULE (requis pour import Supabase) -->
+    <script type="module" src="ia.js"></script>
+
 </body>
 </html>
