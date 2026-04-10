@@ -146,74 +146,7 @@ function saveCredits(n) {
 
 // ============================================================
 //  GESTION DU RATE LIMIT
-// ============================================================
-
-function setRateLimit() {
-    try {
-        const until = Date.now() + CONFIG.rateLimitCooldownMinutes * 60 * 1000;
-        localStorage.setItem(RATE_KEY, String(until));
-    } catch(e) {}
-}
-
-function getRateLimitMs() {
-    try {
-        const raw = localStorage.getItem(RATE_KEY);
-        if (!raw) return 0;
-        const until = parseInt(raw, 10);
-        const remaining = until - Date.now();
-        return remaining > 0 ? remaining : 0;
-    } catch(e) { return 0; }
-}
-
-function clearRateLimit() {
-    try { localStorage.removeItem(RATE_KEY); } catch(e) {}
-}
-
-let rateLimitTimer = null;
-
-function startRateLimitCountdown() {
-    const remaining = getRateLimitMs();
-    if (remaining <= 0) {
-        clearRateLimit();
-        updateRateLimitUI(0);
-        return;
-    }
-    updateRateLimitUI(remaining);
-    rateLimitTimer = setInterval(function() {
-        const r = getRateLimitMs();
-        if (r <= 0) {
-            clearInterval(rateLimitTimer);
-            clearRateLimit();
-            updateRateLimitUI(0);
-            if (creditsLeft > 0) {
-                userInput.disabled = false;
-                sendBtn.disabled = false;
-                uploadBtn.disabled = false;
-                sendBtn.textContent = "Envoyer ›";
-                setStatus("ok");
-                addMessage("bot", "✅ Limite levée ! Tu peux de nouveau m'envoyer des messages.", false);
-            }
-        } else {
-            updateRateLimitUI(r);
-        }
-    }, 1000);
-}
-
-function updateRateLimitUI(ms) {
-    if (ms <= 0) {
-        alertBanner.className = "";
-        alertBanner.style.display = "none";
-        return;
-    }
-    const mins = Math.floor(ms / 60000);
-    const secs = Math.floor((ms % 60000) / 1000);
-    alertBanner.className = "low";
-    alertBanner.style.display = "block";
-    alertBanner.textContent = "🚦 Limite atteinte. Disponible dans " + mins + "m " + secs + "s.";
-    userInput.disabled = true;
-    sendBtn.disabled = true;
-    uploadBtn.disabled = true;
-}
+// ===========================================================
 
 // ============================================================
 //  ÉTAT
