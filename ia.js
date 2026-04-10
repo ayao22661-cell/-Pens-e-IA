@@ -8,7 +8,7 @@
 // ============================================================
 
 const CONFIG = {
-    maxCredits: 20,
+    maxCredits: 15,
     maxFileSizeMB: 1,
     rateLimitCooldownMinutes: 60,
     langMap: {
