@@ -1,4 +1,4 @@
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
     // 1. On n'accepte que les requêtes POST
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Méthode non autorisée" });
@@ -10,12 +10,12 @@ module.exports = async function handler(req, res) {
 
     // 3. Récupération de l'unique clé Google
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) return res.status(500).json({ error: "Clé API non configurée." });
+    if (!GEMINI_API_KEY) return res.status(401).json({ error: "Clé API non configurée sur Vercel." });
 
     try {
-        // 4. Appel à l'API Gemini 2.0 Flash
+        // 4. Appel à l'API Gemini (Utilisation de 1.5-flash, le modèle le plus stable)
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: {
@@ -35,9 +35,10 @@ module.exports = async function handler(req, res) {
 
         const data = await response.json();
 
-        // 5. Gestion des erreurs Google
+        // 5. Gestion des erreurs Google (On renvoie le VRAI statut, pas un 500 par défaut)
         if (!response.ok) {
-            return res.status(500).json({ error: "Gemini erreur " + response.status + " : " + (data.error?.message || response.statusText) });
+            const errorMessage = data.error?.message || response.statusText;
+            return res.status(response.status).json({ error: `Gemini ${response.status} : ${errorMessage}` });
         }
 
         // 6. Extraction du texte et renvoi à l'interface
@@ -45,6 +46,7 @@ module.exports = async function handler(req, res) {
         return res.status(200).json([{ generated_text: reply }]);
 
     } catch (error) {
-        return res.status(500).json({ error: "Catch : " + error.message });
+        // S'il y a un crash total du serveur (ex: fetch non supporté)
+        return res.status(500).json({ error: "Catch Node.js : " + error.message });
     }
 }
