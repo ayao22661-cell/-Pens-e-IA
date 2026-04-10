@@ -305,22 +305,19 @@ function addMessage(role, content, isHtml) {
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
+    if (isHtml) bubble.innerHTML = content;
+    else bubble.textContent = content;
 
     msgDiv.appendChild(label);
     msgDiv.appendChild(bubble);
-
-    let copyBtn = null;
 
     if (role === "bot") {
         const actionsDiv = document.createElement("div");
         actionsDiv.className = "msg-actions";
 
-        copyBtn = document.createElement("button");
+        const copyBtn = document.createElement("button");
         copyBtn.className = "copy-btn";
         copyBtn.innerHTML = "📋 Copier";
-        
-        // On masque le bouton de copie pendant l'écriture
-        copyBtn.style.display = "none"; 
         
         copyBtn.addEventListener("click", async function() {
             try {
@@ -342,51 +339,57 @@ function addMessage(role, content, isHtml) {
 
     messagesEl.appendChild(msgDiv);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+}
 
-    // --- EFFET MACHINE À ÉCRIRE ---
-    if (role === "bot" && isHtml) {
-        let i = 0;
-        let isTag = false;
-        let textBuffer = "";
-        const typingSpeed = 15; // Vitesse d'affichage en millisecondes (modifiable)
+function addUserMessageWithFiles(text, files) {
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg user";
 
-        function typeWriter() {
-            if (i < content.length) {
-                let char = content.charAt(i);
-                
-                // Si on rencontre un chevron ouvrant, on est dans une balise HTML
-                if (char === '<') isTag = true;
-                
-                textBuffer += char;
-                bubble.innerHTML = textBuffer;
-                i++;
+    const label = document.createElement("span");
+    label.className = "msg-label";
+    label.textContent = "Toi";
 
-                if (isTag) {
-                    // Si on ferme la balise, on sort du mode "balise"
-                    if (char === '>') isTag = false;
-                    // On ne met PAS de délai pour écrire les balises HTML (instantané)
-                    typeWriter(); 
-                } else {
-                    // Maintien du scroll vers le bas pendant la génération du texte
-                    messagesEl.scrollTop = messagesEl.scrollHeight; 
-                    setTimeout(typeWriter, typingSpeed);
-                }
-            } else {
-                // Fin de l'écriture
-                bubble.innerHTML = content; // Sécurité : on s'assure que le DOM est propre
-                if (copyBtn) {
-                    copyBtn.style.display = "inline-block"; // Affichage du bouton de copie
-                }
-            }
-        }
-        
-        typeWriter(); // Déclenche l'effet
-        
-    } else {
-        // Affichage instantané pour l'utilisateur ou le texte brut (erreurs, etc.)
-        if (isHtml) bubble.innerHTML = content;
-        else bubble.textContent = content;
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+
+    files.forEach(function(file) {
+        const chip = document.createElement("div");
+        chip.className = "file-chip";
+        chip.innerHTML = "<span class='file-chip-icon'>📄</span>" + escapeHtml(file.name) + " <span style='opacity:0.6'>(" + file.lang + ")</span>";
+        bubble.appendChild(chip);
+    });
+
+    if (text) {
+        const p = document.createElement("div");
+        p.textContent = text;
+        bubble.appendChild(p);
     }
+
+    msgDiv.appendChild(label);
+    msgDiv.appendChild(bubble);
+    messagesEl.appendChild(msgDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function showTyping() {
+    const div = document.createElement("div");
+    div.className = "msg bot";
+    div.id = "typing-indicator";
+    const label = document.createElement("span");
+    label.className = "msg-label";
+    label.textContent = "Pensée";
+    const bubble = document.createElement("div");
+    bubble.className = "typing-bubble";
+    bubble.innerHTML = "<span></span><span></span><span></span>";
+    div.appendChild(label);
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeTyping() {
+    const t = document.getElementById("typing-indicator");
+    if (t) t.remove();
 }
 
 // ============================================================
