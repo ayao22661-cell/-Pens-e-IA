@@ -7,26 +7,26 @@ export default async function handler(req, res) {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt manquant." });
 
-    const HF_API_KEY = process.env.HF_API_KEY;
-    if (!HF_API_KEY) return res.status(500).json({ error: "Clé API non configurée." });
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+if (!GROQ_API_KEY) return res.status(500).json({ error: "Clé API non configurée." });
 
-    try {
-        const response = await fetch(
-            "https://router.huggingface.co/v1/chat/completions",
-            {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${HF_API_KEY}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    model: "Qwen/Qwen2.5-Coder-7B-Instruct:fastest",
-                    messages: [{ role: "user", content: prompt }],
-                    max_tokens: 800,
-                    temperature: 0.3
-                })
-            }
-        );
+try {
+    const response = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${GROQ_API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [{ role: "user", content: prompt }],
+                max_tokens: 800,
+                temperature: 0.3
+            })
+        }
+    );
 
         const rawText = await response.text();
 
