@@ -31,7 +31,7 @@ export default async function handler(req, res) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
-                    tools: [{ google_search_retrieval: {} }],
+                    tools: [{ google_search: {} }],
                     generationConfig: {
                         maxOutputTokens: 65536,
                         temperature: 0.5,
