@@ -1,16 +1,15 @@
 // ============================================================
 //  PENSÉE IA — ia.js
-//  Système d'accès sécurisé
+//  Système d'accès & Logique de Chat
 // ============================================================
 
 const AUTH_CONFIG = {
-    // Liste des codes autorisés. Tu peux en ajouter autant que tu veux.
     allowedCodes: ["2024", "YAOBABA", "PROJET100"],
     storageKey: "pensee_ia_auth"
 };
 
 const loginScreen = document.getElementById("loginScreen");
-const loginInput = document.getElementById("loginCode");
+const loginCode = document.getElementById("loginCode");
 const loginBtn = document.getElementById("loginBtn");
 const loginError = document.getElementById("loginError");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -22,30 +21,26 @@ function checkAuth() {
         loginScreen.style.display = "none";
     } else {
         loginScreen.style.display = "flex";
-        loginInput.focus();
+        loginCode.focus();
     }
 }
 
 // 2. Gérer la tentative de connexion
 function handleLogin() {
-    const code = loginInput.value.trim();
+    const code = loginCode.value.trim();
     
     if (AUTH_CONFIG.allowedCodes.includes(code)) {
-        // Succès
         localStorage.setItem(AUTH_CONFIG.storageKey, "true");
         loginError.style.display = "none";
-        
-        // Animation de sortie
         loginScreen.style.opacity = "0";
         setTimeout(() => {
             loginScreen.style.display = "none";
         }, 300);
     } else {
-        // Échec
         loginError.style.display = "block";
-        loginInput.value = "";
-        loginInput.classList.add("shake"); // Optionnel : ajouter une animation CSS shake
-        setTimeout(() => loginInput.classList.remove("shake"), 500);
+        loginCode.value = "";
+        loginCode.classList.add("shake");
+        setTimeout(() => loginCode.classList.remove("shake"), 500);
     }
 }
 
@@ -57,28 +52,16 @@ logoutBtn.addEventListener("click", () => {
     }
 });
 
-// Événements login
 loginBtn.addEventListener("click", handleLogin);
-loginInput.addEventListener("keypress", (e) => {
+loginCode.addEventListener("keypress", (e) => {
     if (e.key === "Enter") handleLogin();
 });
 
-// Lancement de la vérification
 checkAuth();
 
 // ============================================================
-//  LOGIQUE DU CHAT (SUITE)
+//  CONFIGURATION IA & SUPERPROMPT
 // ============================================================
-
-function escapeHtml(t) {
-    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
-
-function getLang(filename) {
-    if (!filename.includes(".")) return "Code"; 
-    const ext = filename.split(".").pop().toLowerCase();
-    return "Fichier"; // Fallback simple ici
-}
 
 const CONFIG = {
     maxCredits: 15,
@@ -138,7 +121,7 @@ TONE ET HUMANITÉ :
 - Ne devine jamais si le contexte manque : pose des questions ultra-ciblées pour affiner ton diagnostic avant d'exécuter.
 
 FORMATAGE :
-Utilise une hiérarchie visuelle stricte (titres, listes, gras). Formate toujours le code dans des blocs ```langage ... ```.
+Utilise une hiérarchie visuelle stricte (titres, listes, gras). Formate toujours le code dans des blocs \`\`\`langage ... \`\`\`.`
 };
 
 // ============================================================
@@ -170,15 +153,12 @@ function saveCredits(n) {
 }
 
 // ============================================================
-//  ÉTAT
+//  ÉTAT & ÉLÉMENTS HTML
 // ============================================================
 let creditsLeft = loadCredits();
 const history = [];
 let attachedFiles = [];
 
-// ============================================================
-//  ÉLÉMENTS HTML
-// ============================================================
 const messagesEl    = document.getElementById("messages");
 const userInput     = document.getElementById("userInput");
 const sendBtn       = document.getElementById("sendBtn");
@@ -221,6 +201,10 @@ function updateCredits() {
 // ============================================================
 //  UTILITAIRES
 // ============================================================
+function escapeHtml(t) {
+    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
 function getLang(filename) {
     const ext = filename.split(".").pop().toLowerCase();
     return CONFIG.langMap[ext] || ext.toUpperCase() || "Fichier";
@@ -327,7 +311,6 @@ function addMessage(role, content, isHtml) {
     msgDiv.appendChild(label);
     msgDiv.appendChild(bubble);
 
-    // --- Ajout du bouton Copier pour l'IA ---
     if (role === "bot") {
         const actionsDiv = document.createElement("div");
         actionsDiv.className = "msg-actions";
@@ -338,12 +321,9 @@ function addMessage(role, content, isHtml) {
         
         copyBtn.addEventListener("click", async function() {
             try {
-                // On copie le texte brut de la bulle (sans les balises HTML)
                 await navigator.clipboard.writeText(bubble.innerText);
                 copyBtn.innerHTML = "✅ Copié !";
                 copyBtn.style.color = "var(--accent)";
-                
-                // On remet le bouton à son état normal après 2 secondes
                 setTimeout(() => {
                     copyBtn.innerHTML = "📋 Copier";
                     copyBtn.style.color = "";
@@ -356,7 +336,6 @@ function addMessage(role, content, isHtml) {
         actionsDiv.appendChild(copyBtn);
         msgDiv.appendChild(actionsDiv);
     }
-    // ----------------------------------------------------
 
     messagesEl.appendChild(msgDiv);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -532,16 +511,12 @@ async function sendMessage() {
 }
 
 // ============================================================
-//  SUGGESTIONS
+//  SUGGESTIONS & ÉVÉNEMENTS
 // ============================================================
 function useSuggestion(el) {
     userInput.value = el.textContent;
     userInput.focus();
 }
-
-// ============================================================
-//  ÉVÉNEMENTS
-// ============================================================
 
 uploadBtn.addEventListener("click", function() { fileInput.click(); });
 
