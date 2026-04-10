@@ -9,9 +9,10 @@ export default async function handler(req, res) {
 
     // 🏆 Liste des modèles en cascade (du plus généreux au plus coûteux en quota)
     const modelsToTry = [
-        "gemini-2.5-flash-lite",
-        "gemini-2.5-flash",
-        "gemini-1.5-pro"
+        "gemini-3.1-flash-lite", // Bouclier principal : 500 requêtes/jour
+        "gemini-3-flash",        // Back-up 1 : 20 requêtes/jour
+        "gemini-2.5-flash-lite", // Back-up 2 : 20 requêtes/jour
+        "gemini-2.5-flash"       // Actuellement épuisé (23/20), mais utile pour demain
     ];
 
     // Modification : la fonction prend maintenant le nom du modèle en paramètre
