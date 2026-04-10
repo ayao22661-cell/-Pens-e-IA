@@ -32,15 +32,15 @@
         }
 
         body {
-            font-family: 'Syne', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            position: relative;
-        }
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+     }
 
         /* ============================================================
            ÉCRAN DE CONNEXION (CODE SEUL)
@@ -212,15 +212,16 @@
            ZONE DE CHAT
            ============================================================ */
         #messages {
-            flex: 1;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            scroll-behavior: smooth;
-        }
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    scroll-behavior: smooth;
+    }
         #messages::-webkit-scrollbar { width:4px; }
         #messages::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
 
