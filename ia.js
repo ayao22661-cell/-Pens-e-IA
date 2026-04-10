@@ -463,14 +463,7 @@ if (files && files.length > 0) {
         fullPrompt += "CONTENU :\n" + file.content + "\n---\n\n";
     });
     
-    // Pour les fichiers, on limite l'historique aux 2 derniers messages max
-    // pour laisser de la place à la réponse détaillée.
-    const shortHistory = history.slice(-2); 
-    shortHistory.forEach(function(msg) {
-        fullPrompt += (msg.role === "user" ? "Q: " : "R: ") + msg.content + "\n\n";
-    });
-} else {
-    // Si pas de fichiers, on garde l'historique normal
+    // On envoie tout l'historique, même avec un fichier, car l'IA a un contexte suffisant
     history.forEach(function(msg) {
         fullPrompt += (msg.role === "user" ? "### Utilisateur:\n" : "### Pensée:\n") + msg.content + "\n\n";
     });
