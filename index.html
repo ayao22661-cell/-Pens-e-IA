@@ -221,12 +221,19 @@
     flex-direction: column;
     gap: 20px;
     scroll-behavior: smooth;
-    }
+}
+
+/* Ajout crucial : forcer le scroll jusqu'en bas sur mobile */
+#messages::after {
+    content: "";
+    display: block;
+    min-height: 10px;
+    flex-shrink: 0;
+}
         #messages::-webkit-scrollbar { width:4px; }
         #messages::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
 
-        .msg { display:flex; flex-direction:column; max-width:85%; min-width:0; overflow:hidden; animation:fadeIn 0.25s ease; }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        .msg { display:flex; flex-direction:column; max-width:85%; min-width:0; overflow:hidden; animation:fadeIn 0.25s ease; flex-shrink:0; }        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         
         .msg.user { align-self:flex-end; align-items:flex-end; }
         .msg.bot  { align-self:flex-start; align-items:flex-start; }
