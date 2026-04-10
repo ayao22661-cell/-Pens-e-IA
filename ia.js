@@ -10,7 +10,7 @@ const AUTH_CONFIG = {
 };
 
 const loginScreen = document.getElementById("loginScreen");
-const loginInput = document.getElementById("loginInput");
+const loginInput = document.getElementById("loginCode");
 const loginBtn = document.getElementById("loginBtn");
 const loginError = document.getElementById("loginError");
 const logoutBtn = document.getElementById("logoutBtn");
