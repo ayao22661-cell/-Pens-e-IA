@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pensée — IA de Codage</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Intégration des polices : Syne (corps), JetBrains Mono (code), Space Grotesk (Logo/Titres) -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
+        /* ============================================================
+           BASE & VARIABLES
+           ============================================================ */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
@@ -24,6 +28,7 @@
             --code-bg: #0a0c10;
             --red: #ff6b6b;
             --yellow: #f5c542;
+            --shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
         body {
@@ -34,9 +39,85 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
 
-        /* HEADER */
+        /* ============================================================
+           ÉCRAN DE CONNEXION (LOGIN)
+           ============================================================ */
+        #loginScreen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            padding: 20px;
+            transition: opacity 0.4s ease, visibility 0.4s;
+        }
+
+        .login-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            padding: 40px;
+            border-radius: 24px;
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+            animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-card h2 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; margin-bottom: 10px; letter-spacing: -0.02em; }
+        .login-card h2 span { color: var(--accent); }
+        .login-card p { color: var(--text2); font-size: 14px; margin-bottom: 30px; }
+
+        .login-group { margin-bottom: 20px; text-align: left; }
+        .login-group label { display: block; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text3); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .login-input {
+            width: 100%;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 15px;
+            color: white;
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .login-input:focus { border-color: var(--accent); background: rgba(0,229,160,0.03); }
+        .login-input.code { text-align: center; letter-spacing: 0.3em; font-family: 'JetBrains Mono', monospace; font-weight: bold; }
+
+        #loginBtn {
+            width: 100%;
+            background: var(--accent);
+            color: #0d0f14;
+            border: none;
+            padding: 16px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 10px;
+        }
+        #loginBtn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px var(--accent-dim); background: #00ffb3; }
+
+        #loginError { color: var(--red); font-size: 12px; margin-top: 15px; display: none; font-family: 'JetBrains Mono', monospace; }
+
+        /* ============================================================
+           HEADER & STATUS
+           ============================================================ */
         header {
             padding: 14px 24px;
             border-bottom: 1px solid var(--border);
@@ -45,6 +126,7 @@
             gap: 12px;
             background: var(--bg2);
             flex-shrink: 0;
+            z-index: 10;
         }
         .logo-dot {
             width: 10px; height: 10px;
@@ -55,17 +137,33 @@
         }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-        header h1 { font-size:16px; font-weight:700; letter-spacing:0.06em; }
+        header h1 { font-family: 'Space Grotesk', sans-serif; font-size:18px; font-weight:700; letter-spacing:0.02em; }
         header h1 span { color: var(--accent); }
-        .creator-tag { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); letter-spacing:0.04em; }
-        .model-badge { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text3); background:var(--bg3); border:1px solid var(--border); padding:4px 10px; border-radius:20px; }
+        .creator-tag { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); letter-spacing:0.04em; margin-left: 4px; }
 
-        #statusBadge { font-family:'JetBrains Mono',monospace; font-size:11px; padding:4px 10px; border-radius:20px; display:none; }
+        #logoutBtn {
+            margin-left: auto;
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text3);
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: 0.2s;
+            font-family: 'JetBrains Mono', monospace;
+            display: none;
+        }
+        #logoutBtn:hover { color: var(--red); border-color: var(--red); background: rgba(255,107,107,0.05); }
+
+        #statusBadge { font-family:'JetBrains Mono',monospace; font-size:11px; padding:4px 10px; border-radius:20px; display:none; margin-right: 10px; }
         #statusBadge.ok   { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.2); }
         #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,107,107,0.1); border:1px solid rgba(255,107,107,0.2); }
         #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(245,197,66,0.1); border:1px solid rgba(245,197,66,0.2); }
 
-        /* CREDIT BAR */
+        /* ============================================================
+           CREDIT BAR & ALERTS
+           ============================================================ */
         #creditBar {
             padding: 8px 24px;
             background: var(--bg2);
@@ -80,164 +178,115 @@
         #creditFill { height:100%; width:100%; background:var(--accent); border-radius:2px; transition:width 0.4s ease, background 0.4s ease; }
         #creditCount { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text2); white-space:nowrap; min-width:70px; text-align:right; }
 
-        /* ALERT BANNER */
         #alertBanner { display:none; padding:10px 24px; font-size:13px; font-family:'JetBrains Mono',monospace; text-align:center; flex-shrink:0; }
         #alertBanner.low   { display:block; background:rgba(245,197,66,0.08); color:var(--yellow); border-bottom:1px solid rgba(245,197,66,0.15); }
         #alertBanner.empty { display:block; background:rgba(255,107,107,0.08); color:var(--red); border-bottom:1px solid rgba(255,107,107,0.15); }
 
-        /* MESSAGES */
+        /* ============================================================
+           CHAT MESSAGES
+           ============================================================ */
         #messages {
             flex: 1;
             overflow-y: auto;
             padding: 24px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 18px;
             scroll-behavior: smooth;
         }
         #messages::-webkit-scrollbar { width:4px; }
         #messages::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
 
-        .msg { display:flex; flex-direction:column; max-width:82%; animation:fadeIn 0.25s ease; }
+        .msg { display:flex; flex-direction:column; max-width:85%; animation:fadeIn 0.25s ease; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         .msg.user { align-self:flex-end; align-items:flex-end; }
         .msg.bot  { align-self:flex-start; align-items:flex-start; }
 
-        .msg-label { font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text3); margin-bottom:5px; letter-spacing:0.08em; text-transform:uppercase; }
+        .msg-label { font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text3); margin-bottom:6px; letter-spacing:0.08em; text-transform:uppercase; }
 
-        .bubble { padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.7; word-break:break-word; }
-        .user .bubble { background:var(--user-bubble); border:1px solid var(--user-border); border-bottom-right-radius:3px; }
-        .bot  .bubble { background:var(--bg3); border:1px solid var(--border); border-bottom-left-radius:3px; }
+        .bubble { padding:14px 18px; border-radius:14px; font-size:14px; line-height:1.7; word-break:break-word; position: relative; }
+        .user .bubble { background:var(--user-bubble); border:1px solid var(--user-border); border-bottom-right-radius:4px; }
+        .bot  .bubble { background:var(--bg3); border:1px solid var(--border); border-bottom-left-radius:4px; }
 
-        .bubble pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:14px; margin:10px 0; overflow-x:auto; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; color:#a8d8a8; }
-        .bubble code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(0,229,160,0.08); color:var(--accent); padding:2px 6px; border-radius:4px; }
-        .bubble pre code { background:none; color:#a8d8a8; padding:0; }
+        .bubble pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:16px; margin:12px 0; overflow-x:auto; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; color:#a8d8a8; }
+        .bubble code { font-family:'JetBrains Mono',monospace; font-size:12.5px; background:rgba(0,229,160,0.08); color:var(--accent); padding:2px 6px; border-radius:4px; }
+        .bubble pre code { background:none; color:inherit; padding:0; }
 
-        /* FICHIER ATTACHÉ (aperçu dans le bubble utilisateur) */
-        .file-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(0,229,160,0.08);
-            border: 1px solid rgba(0,229,160,0.2);
-            border-radius: 6px;
-            padding: 4px 10px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
-            color: var(--accent);
-            margin-bottom: 8px;
-        }
-        .file-chip-icon { font-size:14px; }
+        .msg-actions { display: flex; gap: 12px; margin-top: 6px; align-self: flex-start; }
+        .copy-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 11px; font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 5px; transition: color 0.2s; }
+        .copy-btn:hover { color: var(--accent); }
 
-        /* TYPING */
-        .typing-bubble { background:var(--bg3); border:1px solid var(--border); border-radius:12px; border-bottom-left-radius:3px; padding:14px 18px; display:flex; gap:5px; align-items:center; }
-        .typing-bubble span { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:blink 1.3s infinite; }
-        .typing-bubble span:nth-child(2){animation-delay:0.2s}
-        .typing-bubble span:nth-child(3){animation-delay:0.4s}
-        @keyframes blink { 0%,60%,100%{opacity:0.2;transform:scale(0.8)} 30%{opacity:1;transform:scale(1)} }
+        /* ============================================================
+           SUGGESTIONS & INPUT
+           ============================================================ */
+        #suggestions { display:flex; gap:10px; padding:0 24px 16px; flex-wrap:wrap; flex-shrink:0; }
+        .suggestion { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text2); background:var(--bg3); border:1px solid var(--border); border-radius:20px; padding:6px 14px; cursor:pointer; transition:all 0.2s ease; white-space:nowrap; }
+        .suggestion:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); transform: translateY(-1px); }
 
-        /* SUGGESTIONS */
-        #suggestions { display:flex; gap:8px; padding:0 24px 12px; flex-wrap:wrap; flex-shrink:0; }
-        .suggestion { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text2); background:var(--bg3); border:1px solid var(--border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
-        .suggestion:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
-
-        /* ZONE UPLOAD — barre au-dessus de l'input */
-        #uploadPreview {
-            display: none;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 24px;
-            background: var(--bg2);
-            border-top: 1px solid var(--border);
-            flex-shrink: 0;
-            flex-wrap: wrap;
-        }
+        #uploadPreview { display: none; align-items: center; gap: 10px; padding: 10px 24px; background: var(--bg2); border-top: 1px solid var(--border); flex-wrap: wrap; flex-shrink: 0; }
         #uploadPreview.visible { display:flex; }
-
-        .attached-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: var(--bg3);
-            border: 1px solid rgba(0,229,160,0.25);
-            border-radius: 6px;
-            padding: 4px 10px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
-            color: var(--accent);
-        }
-        .attached-chip button {
-            background: none;
-            border: none;
-            color: var(--text3);
-            cursor: pointer;
-            font-size: 13px;
-            padding: 0;
-            line-height: 1;
-            transition: color 0.15s;
-        }
+        .attached-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--bg3); border: 1px solid rgba(0,229,160,0.25); border-radius: 8px; padding: 5px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); }
+        .attached-chip button { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; line-height: 1; transition: color 0.2s; }
         .attached-chip button:hover { color: var(--red); }
 
-        /* INPUT AREA */
-        #inputArea { padding:14px 24px; border-top:1px solid var(--border); background:var(--bg2); display:flex; gap:10px; align-items:flex-end; flex-shrink:0; }
-
-        /* Bouton upload */
-        #uploadBtn {
-            background: var(--bg3);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            width: 42px;
-            height: 42px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.15s;
-            flex-shrink: 0;
-            font-size: 18px;
-        }
+        #inputArea { padding:16px 24px; border-top:1px solid var(--border); background:var(--bg2); display:flex; gap:12px; align-items:flex-end; flex-shrink:0; }
+        #uploadBtn { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 20px; transition: all 0.2s; flex-shrink: 0; }
         #uploadBtn:hover { border-color:var(--accent); background:var(--accent-dim); }
         #fileInput { display:none; }
 
-        #userInput { flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:12px 16px; font-family:'Syne',sans-serif; font-size:14px; color:var(--text); outline:none; resize:none; max-height:120px; transition:border-color 0.2s; line-height:1.5; }
+        #userInput { flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:14px 18px; font-family:'Syne',sans-serif; font-size:14.5px; color:var(--text); outline:none; resize:none; max-height:150px; line-height:1.5; transition: border-color 0.2s; }
         #userInput:focus { border-color:rgba(0,229,160,0.4); }
-        #userInput::placeholder { color:var(--text3); }
-        #userInput:disabled { opacity:0.4; cursor:not-allowed; }
+        #userInput:disabled { opacity:0.5; cursor:not-allowed; }
 
-        #sendBtn { background:var(--accent); border:none; border-radius:10px; padding:12px 20px; font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:#0d0f14; cursor:pointer; transition:background 0.2s, transform 0.1s; white-space:nowrap; letter-spacing:0.03em; }
-        #sendBtn:hover  { background:#00ffb3; }
-        #sendBtn:active { transform:scale(0.97); }
-        #sendBtn:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+        #sendBtn { background:var(--accent); border:none; border-radius:12px; padding:14px 24px; font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:#0d0f14; cursor:pointer; transition:all 0.2s; white-space:nowrap; letter-spacing:0.02em; }
+        #sendBtn:hover { background:#00ffb3; transform: translateY(-1px); box-shadow: 0 4px 12px var(--accent-dim); }
+        #sendBtn:disabled { opacity:0.5; cursor:not-allowed; transform: none; }
 
-        /* DROP ZONE overlay */
-        #dropOverlay {
-            display: none;
-            position: absolute;
-            inset: 0;
-            background: rgba(0,229,160,0.06);
-            border: 2px dashed var(--accent);
-            border-radius: 8px;
-            z-index: 10;
-            align-items: center;
-            justify-content: center;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            color: var(--accent);
-            pointer-events: none;
-        }
+        /* ============================================================
+           OVERLAYS & FOOTER
+           ============================================================ */
+        #dropOverlay { display: none; position: absolute; inset: 0; background: rgba(0,229,160,0.06); border: 2px dashed var(--accent); border-radius: 0; z-index: 100; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--accent); pointer-events: none; }
         #dropOverlay.visible { display:flex; }
-        body { position:relative; }
 
-        /* FOOTER */
-        footer { padding:6px 24px; text-align:center; font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text3); border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
-        footer span { color:var(--accent); }
-        .model-badge { display:none; }
+        footer { padding:8px 24px; text-align:center; font-size:10.5px; font-family:'JetBrains Mono',monospace; color:var(--text3); border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
+        footer span { color:var(--accent); font-weight: bold; }
+
+        /* TYPING INDICATOR */
+        .typing-bubble { background:var(--bg3); border:1px solid var(--border); border-radius:14px; border-bottom-left-radius:4px; padding:15px 20px; display:flex; gap:6px; align-items:center; }
+        .typing-bubble span { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:typingBlink 1.4s infinite; opacity: 0.3; }
+        .typing-bubble span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-bubble span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBlink { 0%,100% { opacity:0.3; transform: scale(1); } 50% { opacity:1; transform: scale(1.2); } }
     </style>
 </head>
 <body>
 
+<!-- ÉCRAN DE CONNEXION -->
+<div id="loginScreen">
+    <div class="login-card">
+        <div class="logo-dot" style="margin: 0 auto 24px; width: 16px; height: 16px;"></div>
+        <h2><span>Pensée</span> IA</h2>
+        <p>Identifiez-vous pour accéder à votre session.</p>
+        
+        <div class="login-group">
+            <label>PSEUDO</label>
+            <input type="text" id="loginUsername" class="login-input" placeholder="Ex: Yao Baba" autocomplete="off">
+        </div>
+
+        <div class="login-group">
+            <label>CODE D'ACCÈS</label>
+            <input type="password" id="loginCode" class="login-input code" placeholder="••••">
+        </div>
+
+        <button id="loginBtn">DÉVERROUILLER ›</button>
+        <div id="loginError">IDENTIFIANTS INCORRECTS</div>
+    </div>
+</div>
+
+<!-- ZONE DE DROP FICHIER -->
 <div id="dropOverlay">⬇ Dépose ton fichier de code ici</div>
 
+<!-- HEADER -->
 <header>
     <div class="logo-dot"></div>
     <div>
@@ -245,28 +294,32 @@
         <div class="creator-tag">by Yao Baba Amge Emmanuel</div>
     </div>
     <span id="statusBadge"></span>
-    
+    <button id="logoutBtn">DÉCONNEXION</button>
 </header>
 
+<!-- BARRE DE CRÉDITS -->
 <div id="creditBar">
-    <span class="credit-label">Crédits</span>
+    <span class="credit-label">CRÉDITS</span>
     <div class="credit-track"><div id="creditFill"></div></div>
-    <span id="creditCount">20 / 20</span>
+    <span id="creditCount">15 / 15</span>
 </div>
 
+<!-- BANNIÈRE D'ALERTE -->
 <div id="alertBanner"></div>
 
+<!-- ZONE DES MESSAGES -->
 <div id="messages">
     <div class="msg bot">
         <span class="msg-label">Pensée</span>
         <div class="bubble">
-            Bonjour ! Je suis <strong>Pensée</strong>, ton IA de codage.<br><br>
-            Je réponds dans <strong>toutes les langues</strong> — écris-moi dans la tienne.<br><br>Je suis une IA <strong>généraliste</strong> : codage, culture générale, science, maths, conseils... pose-moi n'importe quelle question !<br><br>
-            Tu peux m'envoyer du texte <strong>ou uploader directement un fichier de code</strong> (clique sur 📎 ou glisse-dépose) pour que je l'analyse, le débogue ou l'améliore.
+            Bonjour <strong id="welcomeName">Utilisateur</strong> ! Je suis <strong>Pensée</strong>, ton IA de codage.<br><br>
+            Je suis une IA <strong>généraliste</strong> : codage, culture générale, science, maths, conseils... pose-moi n'importe quelle question !<br><br>
+            Tu peux m'envoyer du texte <strong>ou uploader directement un fichier de code</strong> pour que je l'analyse.
         </div>
     </div>
 </div>
 
+<!-- SUGGESTIONS -->
 <div id="suggestions">
     <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
     <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
@@ -274,20 +327,23 @@
     <span class="suggestion" onclick="useSuggestion(this)">Déboguer mon code</span>
 </div>
 
-<!-- Aperçu des fichiers attachés -->
+<!-- APERÇU FICHIERS UPLOADÉS -->
 <div id="uploadPreview"></div>
 
+<!-- ZONE DE SAISIE -->
 <div id="inputArea">
     <button id="uploadBtn" title="Joindre un fichier de code">📎</button>
     <input type="file" id="fileInput" multiple accept="*/*">
-    <textarea id="userInput" rows="1" placeholder="Écris ton problème ou joins un fichier... (Entrée pour envoyer)"></textarea>
+    <textarea id="userInput" rows="1" placeholder="Écris ton problème ici..."></textarea>
     <button id="sendBtn">Envoyer ›</button>
 </div>
 
+<!-- FOOTER -->
 <footer>
-    <span>Pensée IA</span> · Codage · Créé par <span>Yao Baba Amge Emmanuel</span> · by Yao Baba Amge Emmanuel
+    <span>Pensée IA</span> · Codage & Intelligence · Créé par <span>Yao Baba Amge Emmanuel</span>
 </footer>
 
+<!-- LOGIQUE JAVASCRIPT -->
 <script src="ia.js"></script>
 </body>
 </html>
