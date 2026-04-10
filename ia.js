@@ -64,9 +64,10 @@ checkAuth();
 // ============================================================
 
 const CONFIG = {
-    maxCredits: 15,
-    maxFileSizeMB: 1,
+    maxCredits: 20, // Augmentation du quota quotidien
+    maxFileSizeMB: 10, // Augmenté pour supporter le PDF et l'Audio
     langMap: {
+        // --- CODES & SCRIPTS ---
         js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
         py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
         php:'PHP', java:'Java', c:'C', cpp:'C++', cs:'C#',
@@ -74,8 +75,9 @@ const CONFIG = {
         sql:'SQL', json:'JSON', xml:'XML', yaml:'YAML', yml:'YAML',
         sh:'Shell', bash:'Bash', md:'Markdown', txt:'Texte',
         vue:'Vue', svelte:'Svelte', dart:'Dart', r:'R', lua:'Lua',
-        pl:'Perl', ex:'Elixir', exs:'Elixir', clj:'Clojure',
-        hs:'Haskell', scala:'Scala', groovy:'Groovy'
+        // --- DOCUMENTS & MULTIMÉDIA ---
+        pdf:'Document PDF', docx:'Document Word', doc:'Document Word',
+        mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG'
     },
 systemPrompt: `Tu es PENSÉE — une intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un assistant générique. Tu es un partenaire cognitif avec une voix, un caractère et une vision architecturale.
 
@@ -259,16 +261,31 @@ function setStatus(state) {
 //  GESTION DES FICHIERS
 // ============================================================
 
-function readFileAsText(file) {
+// REMPLACE ta fonction readFileAsText par celle-ci :
+function readFileAsData(file) {
     return new Promise(function(resolve, reject) {
         if (file.size > CONFIG.maxFileSizeMB * 1024 * 1024) {
             reject("Le fichier " + file.name + " dépasse " + CONFIG.maxFileSizeMB + "MB.");
             return;
         }
         const reader = new FileReader();
-        reader.onload  = function(e) { resolve(e.target.result); };
-        reader.onerror = function()  { reject("Impossible de lire " + file.name); };
-        reader.readAsText(file);
+        const ext = file.name.split(".").pop().toLowerCase();
+        const isBinary = ['pdf', 'docx', 'doc', 'mp3', 'm4a', 'wav', 'ogg'].includes(ext);
+
+        reader.onload = function(e) {
+            if (isBinary) {
+                // Pour le binaire, on extrait juste la partie Base64
+                const base64Data = e.target.result.split(',')[1];
+                resolve({ type: 'binary', mimeType: file.type, data: base64Data });
+            } else {
+                resolve({ type: 'text', data: e.target.result });
+            }
+        };
+        
+        reader.onerror = function() { reject("Impossible de lire " + file.name); };
+        
+        if (isBinary) reader.readAsDataURL(file);
+        else reader.readAsText(file);
     });
 }
 
