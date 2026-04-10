@@ -16,8 +16,8 @@ export default async function handler(req, res) {
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
-                        // AUGMENTATION : On passe à 4000 pour des réponses plus longues
-                        maxOutputTokens: 4000, 
+                        // AUGMENTATION : Capacité maximale de sortie de Gemini 2.5 Flash
+                        maxOutputTokens: 65536, 
                         // PRÉCISION : Une température basse évite que l'IA ne divague sur les gros fichiers
                         temperature: 0.2,
                         topP: 0.8,
