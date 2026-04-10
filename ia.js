@@ -405,19 +405,27 @@ async function callAPI(userMessage, files) {
 
     let fullPrompt = CONFIG.systemPrompt + "\n\n";
 
-    if (files && files.length > 0) {
-        fullPrompt += "### Fichiers fournis par l'utilisateur :\n\n";
-        files.forEach(function(file) {
-            fullPrompt += "**Fichier : " + file.name + " (" + file.lang + ")**\n";
-            fullPrompt += "```" + file.lang.toLowerCase() + "\n" + file.content + "\n```\n\n";
-        });
-    }
-
+if (files && files.length > 0) {
+    fullPrompt += "### ANALYSE DE FICHIERS (PRIORITÉ HAUTE) :\n\n";
+    files.forEach(function(file) {
+        fullPrompt += "DOCUMENT : " + file.name + "\n";
+        fullPrompt += "CONTENU :\n" + file.content + "\n---\n\n";
+    });
+    
+    // Pour les fichiers, on limite l'historique aux 2 derniers messages max
+    // pour laisser de la place à la réponse détaillée.
+    const shortHistory = history.slice(-2); 
+    shortHistory.forEach(function(msg) {
+        fullPrompt += (msg.role === "user" ? "Q: " : "R: ") + msg.content + "\n\n";
+    });
+} else {
+    // Si pas de fichiers, on garde l'historique normal
     history.forEach(function(msg) {
         fullPrompt += (msg.role === "user" ? "### Utilisateur:\n" : "### Pensée:\n") + msg.content + "\n\n";
     });
+}
 
-    fullPrompt += "### Utilisateur:\n" + userMessage + "\n\n### Pensée:\n";
+fullPrompt += "### ACTION REQUISE :\n" + userMessage + "\n\n### RÉPONSE DÉTAILLÉE :\n";
 
     try {
         const response = await fetch("/api/chat", {
