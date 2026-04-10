@@ -1,12 +1,40 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+);
+
 export default async function handler(req, res) {
     if (req.method !== "POST") return res.status(405).json({ error: "Méthode non autorisée" });
 
-    // On récupère désormais le prompt ET les fichiers binaires éventuels
-    const { prompt, files } = req.body;
+    const { prompt, files, userId } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt manquant." });
 
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return res.status(401).json({ error: "Clé API absente." });
+
+    // Vérification et décompte des crédits en base
+    if (userId) {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: credit } = await supabase
+            .from('credits')
+            .select('credits_used')
+            .eq('user_id', userId)
+            .eq('date', today)
+            .single();
+
+        const used = credit?.credits_used ?? 0;
+        if (used >= 15) {
+            return res.status(429).json({ error: "Crédits épuisés. Reviens demain !" });
+        }
+
+        await supabase.from('credits').upsert({
+            user_id: userId,
+            date: today,
+            credits_used: used + 1
+        }, { onConflict: 'user_id,date' });
+    }
 
     // 🏆 Liste complète des modèles exploitables (Capacité : +60 000 requêtes/jour)
     const modelsToTry = [
@@ -23,12 +51,9 @@ export default async function handler(req, res) {
         "gemini-robotics-er-1.5-preview"
     ];
 
-    // ✅ Fonction de génération multimodale avec recherche Google intégrée
     async function callGemini(modelName, attachedFiles) {
-        // Préparation des "parts" (Texte + Fichiers binaires)
         const parts = [{ text: prompt }];
 
-        // Si des fichiers binaires (PDF, Audio) sont présents, on les ajoute
         if (attachedFiles && attachedFiles.length > 0) {
             attachedFiles.forEach(file => {
                 if (file.base64) {
@@ -49,9 +74,8 @@ export default async function handler(req, res) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ parts: parts }],
-                    tools: [{ google_search: {} }], // Recherche Google temps réel activée
+                    tools: [{ google_search: {} }],
                     generationConfig: {
-                        // Limite de sécurité à 15k pour les modèles Gemma 3
                         maxOutputTokens: modelName.includes("gemma-3") ? 15000 : 65536,
                         temperature: 0.5,
                         topP: 0.95,
@@ -64,7 +88,6 @@ export default async function handler(req, res) {
         return { response, data };
     }
 
-    // Détection des surcharges serveur
     function isOverloaded(data, response) {
         if (response.status === 429) return true;
         const msg = (data.error?.message || "").toLowerCase();
@@ -74,25 +97,30 @@ export default async function handler(req, res) {
     try {
         let lastData, lastResponse;
 
-        // Boucle de cascade (Fallback)
         for (const model of modelsToTry) {
             const { response, data } = await callGemini(model, files);
             lastData = data;
             lastResponse = response;
 
-            // ✅ Succès
             if (response.ok && !data.error && data.candidates?.length > 0) {
                 const reply = data.candidates[0].content.parts[0].text || "Réponse vide.";
+
+                // Sauvegarde de la conversation en base
+                if (userId) {
+                    await supabase.from('conversations').insert([
+                        { user_id: userId, role: 'user', content: prompt },
+                        { user_id: userId, role: 'assistant', content: reply }
+                    ]);
+                }
+
                 return res.status(200).json([{ generated_text: reply, used_model: model }]);
             }
 
-            // ⚠️ Surcharge ou Modèle introuvable (404) → Passage au suivant
             if (isOverloaded(data, response) || response.status === 404) {
                 console.warn(`[INFO] Modèle ${model} indisponible. Essai du modèle suivant...`);
                 continue; 
             }
 
-            // ❌ Erreur fatale (Sécurité, Clé expirée...) → Arrêt immédiat
             break;
         }
 
