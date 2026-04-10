@@ -1,12 +1,84 @@
 // ============================================================
 //  PENSÉE IA — ia.js
-//  Créé par Yao Baba Amge Emmanuel
-//  ✅ Aucune clé API ici — tout passe par /api/chat (Vercel)
-//  ✅ Upload de fichiers de code (tous langages)
-//  ✅ Crédits persistants via localStorage (reset quotidien)
-//  ✅ Délai de recharge automatique si quota atteint
+//  Système d'accès sécurisé
 // ============================================================
 
+const AUTH_CONFIG = {
+    // Liste des codes autorisés. Tu peux en ajouter autant que tu veux.
+    allowedCodes: ["2024", "YAOBABA", "PROJET100"],
+    storageKey: "pensee_ia_auth"
+};
+
+const loginScreen = document.getElementById("loginScreen");
+const loginInput = document.getElementById("loginInput");
+const loginBtn = document.getElementById("loginBtn");
+const loginError = document.getElementById("loginError");
+const logoutBtn = document.getElementById("logoutBtn");
+
+// 1. Vérifier si l'utilisateur est déjà authentifié au chargement
+function checkAuth() {
+    const isAuth = localStorage.getItem(AUTH_CONFIG.storageKey);
+    if (isAuth === "true") {
+        loginScreen.style.display = "none";
+    } else {
+        loginScreen.style.display = "flex";
+        loginInput.focus();
+    }
+}
+
+// 2. Gérer la tentative de connexion
+function handleLogin() {
+    const code = loginInput.value.trim();
+    
+    if (AUTH_CONFIG.allowedCodes.includes(code)) {
+        // Succès
+        localStorage.setItem(AUTH_CONFIG.storageKey, "true");
+        loginError.style.display = "none";
+        
+        // Animation de sortie
+        loginScreen.style.opacity = "0";
+        setTimeout(() => {
+            loginScreen.style.display = "none";
+        }, 300);
+    } else {
+        // Échec
+        loginError.style.display = "block";
+        loginInput.value = "";
+        loginInput.classList.add("shake"); // Optionnel : ajouter une animation CSS shake
+        setTimeout(() => loginInput.classList.remove("shake"), 500);
+    }
+}
+
+// 3. Déconnexion
+logoutBtn.addEventListener("click", () => {
+    if(confirm("Voulez-vous verrouiller la session ?")) {
+        localStorage.removeItem(AUTH_CONFIG.storageKey);
+        location.reload();
+    }
+});
+
+// Événements login
+loginBtn.addEventListener("click", handleLogin);
+loginInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") handleLogin();
+});
+
+// Lancement de la vérification
+checkAuth();
+
+// ============================================================
+//  LOGIQUE DU CHAT (SUITE)
+// ============================================================
+
+function escapeHtml(t) {
+    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function getLang(filename) {
+    if (!filename.includes(".")) return "Code"; 
+    const ext = filename.split(".").pop().toLowerCase();
+    return "Fichier"; // Fallback simple ici
+}
 const CONFIG = {
     maxCredits: 15,
     maxFileSizeMB: 1,
