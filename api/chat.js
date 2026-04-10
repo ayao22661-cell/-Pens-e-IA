@@ -31,11 +31,12 @@ export default async function handler(req, res) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
+                    tools: [{ google_search_retrieval: {} }],
                     generationConfig: {
                         maxOutputTokens: 65536,
                         temperature: 0.5,
-                        topP: 0.8,
-                        topK: 40
+                        topP: 0.95,
+                        topK: 64
                     }
                 })
             }
