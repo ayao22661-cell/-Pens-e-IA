@@ -426,7 +426,16 @@ async function callAPI(userMessage, files) {
             body: JSON.stringify({ prompt: fullPrompt })
         });
 
-        const data = await response.json();
+        const text = await response.text();
+let data;
+try {
+    data = JSON.parse(text);
+} catch(e) {
+    addMessage("bot", "❌ Erreur serveur Vercel : " + text.slice(0, 150), false);
+    setStatus("err");
+    removeTyping();
+    return;
+}
 
         if (data.error) {
             const errLow = data.error.toLowerCase();
