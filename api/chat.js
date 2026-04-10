@@ -1,13 +1,5 @@
-// ============================================================
-//  PENSÉE IA — api/chat.js
-//  Fonction serverless Vercel
-//  ✅ La clé HF_API_KEY est lue depuis les variables Vercel
-//     Elle n'est JAMAIS visible dans le navigateur
-// ============================================================
-
 export default async function handler(req, res) {
 
-    // Autorise uniquement POST
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Méthode non autorisée" });
     }
@@ -18,7 +10,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Prompt manquant." });
     }
 
-    // ✅ Clé lue depuis l'environnement Vercel — jamais exposée
     const HF_API_KEY = process.env.HF_API_KEY;
 
     if (!HF_API_KEY) {
@@ -27,7 +18,7 @@ export default async function handler(req, res) {
 
     try {
         const response = await fetch(
-            "https://api-inference.huggingface.co/models/deepseek-ai/deepseek-coder-6.7b-instruct",
+            "https://router.huggingface.co/hf-inference/models/deepseek-ai/deepseek-coder-6.7b-instruct/v1/chat/completions",
             {
                 method: "POST",
                 headers: {
@@ -35,19 +26,24 @@ export default async function handler(req, res) {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    inputs: prompt,
-                    parameters: {
-                        max_new_tokens: 800,
-                        temperature: 0.3,
-                        return_full_text: false,
-                        stop: ["### Utilisateur:"]
-                    }
+                    model: "deepseek-ai/deepseek-coder-6.7b-instruct",
+                    messages: [
+                        { role: "user", content: prompt }
+                    ],
+                    max_tokens: 800,
+                    temperature: 0.3
                 })
             }
         );
 
         const data = await response.json();
-        return res.status(200).json(data);
+
+        if (data.error) {
+            return res.status(500).json({ error: data.error });
+        }
+
+        const reply = data.choices?.[0]?.message?.content || "Aucune réponse reçue.";
+        return res.status(200).json([{ generated_text: reply }]);
 
     } catch (error) {
         console.error("Erreur Pensée IA:", error);
