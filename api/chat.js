@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 
     try {
         const response = await fetch(
-            "https://router.huggingface.co/hf-inference/models/deepseek-ai/deepseek-coder-6.7b-instruct/v1/chat/completions",
+            "https://router.huggingface.co/v1/chat/completions",
             {
                 method: "POST",
                 headers: {
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    model: "deepseek-ai/deepseek-coder-6.7b-instruct",
+                    model: "Qwen/Qwen2.5-Coder-7B-Instruct:fastest",
                     messages: [{ role: "user", content: prompt }],
                     max_tokens: 800,
                     temperature: 0.3
@@ -28,7 +28,6 @@ export default async function handler(req, res) {
             }
         );
 
-        // ✅ On lit la réponse brute pour voir l'erreur exacte
         const rawText = await response.text();
 
         if (!response.ok) {
