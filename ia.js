@@ -426,26 +426,33 @@ async function callAPI(userMessage, files) {
             body: JSON.stringify({ prompt: fullPrompt })
         });
 
-        const text = await response.text();
-let data;
-try {
-    data = JSON.parse(text);
-} catch(e) {
-    addMessage("bot", "❌ Erreur serveur Vercel : " + text.slice(0, 150), false);
-    setStatus("err");
-    removeTyping();
-    return;
-}
+        // FIX : lecture sécurisée — Vercel peut retourner du texte brut au lieu de JSON
+        const rawText = await response.text();
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch(e) {
+            addMessage("bot", "❌ Erreur serveur Vercel : " + rawText.slice(0, 200), false);
+            setStatus("err");
+            return;
+        }
 
         if (data.error) {
-            const errLow = data.error.toLowerCase();
+            const errStr = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+            const errLow = errStr.toLowerCase();
 
             if (errLow.includes("loading")) {
                 addMessage("bot", "⏳ Le service est en cours de démarrage. Attends 30 secondes et réessaie.", false);
-            } else if (data.error.includes("429") || errLow.includes("rate") || errLow.includes("quota")) {
+            } else if (errLow.includes("404") || errLow.includes("not found")) {
+                addMessage("bot", "❌ Modèle IA introuvable (404). Vérifie la configuration dans chat.js.", false);
+                setStatus("err");
+            } else if (errLow.includes("429") || errLow.includes("rate") || errLow.includes("quota")) {
                 addMessage("bot", "🚦 L'API Google est temporairement surchargée. Patiente un petit instant et réessaie.", false);
+            } else if (errLow.includes("configurée") || errLow.includes("api key") || errLow.includes("api_key")) {
+                addMessage("bot", "🔑 Clé API manquante. Vérifie les variables d'environnement sur Vercel.", false);
+                setStatus("err");
             } else {
-                addMessage("bot", "Erreur serveur : " + data.error, false);
+                addMessage("bot", "Erreur serveur : " + errStr, false);
                 setStatus("err");
             }
             return;
@@ -474,7 +481,7 @@ try {
         if (creditsLeft > 0) setStatus("ok");
 
     } catch (error) {
-        addMessage("bot", "❌ Erreur réseau. Vérifie ta connexion.", false);
+        addMessage("bot", "❌ Erreur réseau : " + error.message, false);
         setStatus("err");
         console.error("Erreur Pensée IA:", error);
     }
@@ -566,3 +573,4 @@ userInput.addEventListener("input", function() {
 //  INITIALISATION
 // ============================================================
 updateCredits();
+setStatus("ok");
