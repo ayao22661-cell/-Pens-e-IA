@@ -524,6 +524,8 @@ async function sendMessage() {
     sendBtn.textContent = "...";
     showTyping();
 
+    await new Promise(resolve => setTimeout(resolve, 0));
+
     await callAPI(messageText, files);
 
     removeTyping();
