@@ -67,13 +67,13 @@ export default async function handler(req, res) {
                 return res.status(200).json([{ generated_text: reply, used_model: model }]);
             }
 
-            // ⚠️ Surcharge → on passe au modèle suivant instantanément
-            if (isOverloaded(data, response)) {
-                console.warn(`[INFO] Modèle ${model} surchargé. Passage au suivant...`);
-                continue; // Relance la boucle avec le modèle suivant
+            // ⚠️ Surcharge ou Modèle introuvable (404) → on passe au modèle suivant en silence
+            if (isOverloaded(data, response) || response.status === 404) {
+                console.warn(`[INFO] Modèle ${model} indisponible (429 ou 404). Passage au suivant...`);
+                continue;
             }
 
-            // ❌ Autre erreur (Clé invalide, Prompt bloqué par la sécurité, etc.) → on sort immédiatement
+            // ❌ Erreur fatale (Clé API bloquée 401/403) → on sort immédiatement
             break;
         }
 
