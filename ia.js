@@ -4,13 +4,13 @@
 // ============================================================
 
 const AUTH_CONFIG = {
-    // Liste des codes autorisés. Tu peux en ajouter autant que tu veux.
-    allowedCodes: ["2024", "YAOBABA", "PROJET100"],
+    // Un seul code autorisé : 2026
+    allowedCodes: ["2026"],
     storageKey: "pensee_ia_auth"
 };
 
 const loginScreen = document.getElementById("loginScreen");
-const loginInput = document.getElementById("loginInput");
+const loginCode = document.getElementById("loginCode");
 const loginBtn = document.getElementById("loginBtn");
 const loginError = document.getElementById("loginError");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -22,13 +22,13 @@ function checkAuth() {
         loginScreen.style.display = "none";
     } else {
         loginScreen.style.display = "flex";
-        loginInput.focus();
+        if (loginCode) loginCode.focus();
     }
 }
 
 // 2. Gérer la tentative de connexion
 function handleLogin() {
-    const code = loginInput.value.trim();
+    const code = loginCode.value.trim();
     
     if (AUTH_CONFIG.allowedCodes.includes(code)) {
         // Succès
@@ -43,25 +43,33 @@ function handleLogin() {
     } else {
         // Échec
         loginError.style.display = "block";
-        loginInput.value = "";
-        loginInput.classList.add("shake"); // Optionnel : ajouter une animation CSS shake
-        setTimeout(() => loginInput.classList.remove("shake"), 500);
+        loginCode.value = "";
+        loginCode.classList.add("shake"); 
+        setTimeout(() => loginCode.classList.remove("shake"), 500);
+        
+        // Feedback visuel bordure
+        loginCode.style.borderColor = "var(--red)";
+        setTimeout(() => { loginCode.style.borderColor = "var(--border)"; }, 1000);
     }
 }
 
 // 3. Déconnexion
-logoutBtn.addEventListener("click", () => {
-    if(confirm("Voulez-vous verrouiller la session ?")) {
-        localStorage.removeItem(AUTH_CONFIG.storageKey);
-        location.reload();
-    }
-});
+if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+        if(confirm("Voulez-vous verrouiller la session ?")) {
+            localStorage.removeItem(AUTH_CONFIG.storageKey);
+            location.reload();
+        }
+    });
+}
 
 // Événements login
-loginBtn.addEventListener("click", handleLogin);
-loginInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") handleLogin();
-});
+if (loginBtn) loginBtn.addEventListener("click", handleLogin);
+if (loginCode) {
+    loginCode.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") handleLogin();
+    });
+}
 
 // Lancement de la vérification
 checkAuth();
@@ -77,7 +85,7 @@ function escapeHtml(t) {
 function getLang(filename) {
     if (!filename.includes(".")) return "Code"; 
     const ext = filename.split(".").pop().toLowerCase();
-    return "Fichier"; // Fallback simple ici
+    return "Fichier"; // Fallback simple
 }
 const CONFIG = {
     maxCredits: 15,
