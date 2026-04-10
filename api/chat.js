@@ -33,7 +33,7 @@ export default async function handler(req, res) {
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
                         maxOutputTokens: 65536,
-                        temperature: 0.2,
+                        temperature: 0.5,
                         topP: 0.8,
                         topK: 40
                     }
