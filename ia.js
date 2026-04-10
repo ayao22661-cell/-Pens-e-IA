@@ -3,57 +3,93 @@
 //  Système d'accès & Logique de Chat
 // ============================================================
 
-const AUTH_CONFIG = {
-    allowedCodes: ["2024", "YAOBABA", "PROJET100"],
-    storageKey: "pensee_ia_auth"
-};
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-const loginScreen = document.getElementById("loginScreen");
-const loginCode = document.getElementById("loginCode");
-const loginBtn = document.getElementById("loginBtn");
-const loginError = document.getElementById("loginError");
-const logoutBtn = document.getElementById("logoutBtn");
+const supabase = createClient(
+    'https://uhrdoxllxqtvucxmzcww.supabase.co',
+    'COLLE_ICI_TA_PUBLISHABLE_KEY_COMPLETE'
+);
 
-// 1. Vérifier si l'utilisateur est déjà authentifié au chargement
-function checkAuth() {
-    const isAuth = localStorage.getItem(AUTH_CONFIG.storageKey);
-    if (isAuth === "true") {
+let currentUser = null;
+
+const loginScreen   = document.getElementById("loginScreen");
+const loginCode     = document.getElementById("loginCode");
+const loginPassword = document.getElementById("loginPassword");
+const loginBtn      = document.getElementById("loginBtn");
+const loginError    = document.getElementById("loginError");
+const logoutBtn     = document.getElementById("logoutBtn");
+
+// ============================================================
+//  AUTH SUPABASE
+// ============================================================
+
+async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+        currentUser = session.user;
         loginScreen.style.display = "none";
+        await loadCreditsFromDB();
+        await loadHistoryFromDB();
     } else {
         loginScreen.style.display = "flex";
         loginCode.focus();
     }
 }
 
-// 2. Gérer la tentative de connexion
-function handleLogin() {
-    const code = loginCode.value.trim();
-    
-    if (AUTH_CONFIG.allowedCodes.includes(code)) {
-        localStorage.setItem(AUTH_CONFIG.storageKey, "true");
-        loginError.style.display = "none";
-        loginScreen.style.opacity = "0";
-        setTimeout(() => {
-            loginScreen.style.display = "none";
-        }, 300);
-    } else {
+async function handleLogin() {
+    const email    = loginCode.value.trim();
+    const password = loginPassword.value.trim();
+
+    if (!email || !password) {
         loginError.style.display = "block";
-        loginCode.value = "";
-        loginCode.classList.add("shake");
-        setTimeout(() => loginCode.classList.remove("shake"), 500);
+        loginError.textContent = "Remplis l'email et le mot de passe.";
+        return;
     }
+
+    // Tentative de connexion
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+        // Si l'utilisateur n'existe pas, on l'inscrit
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+        if (signUpError) {
+            loginError.style.display = "block";
+            loginError.textContent = "Email ou mot de passe incorrect.";
+            loginCode.classList.add("shake");
+            setTimeout(() => loginCode.classList.remove("shake"), 500);
+            return;
+        }
+        currentUser = signUpData.user;
+    } else {
+        currentUser = data.user;
+    }
+
+    // Log de session
+    await supabase.from('sessions').insert([{
+        user_id: currentUser.id,
+        user_agent: navigator.userAgent
+    }]);
+
+    loginError.style.display = "none";
+    loginScreen.style.opacity = "0";
+    setTimeout(() => { loginScreen.style.display = "none"; }, 300);
+
+    await loadCreditsFromDB();
+    await loadHistoryFromDB();
 }
 
-// 3. Déconnexion
-logoutBtn.addEventListener("click", () => {
-    if(confirm("Voulez-vous verrouiller la session ?")) {
-        localStorage.removeItem(AUTH_CONFIG.storageKey);
+logoutBtn.addEventListener("click", async () => {
+    if (confirm("Voulez-vous verrouiller la session ?")) {
+        await supabase.auth.signOut();
         location.reload();
     }
 });
 
 loginBtn.addEventListener("click", handleLogin);
 loginCode.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") loginPassword.focus();
+});
+loginPassword.addEventListener("keypress", (e) => {
     if (e.key === "Enter") handleLogin();
 });
 
@@ -64,10 +100,9 @@ checkAuth();
 // ============================================================
 
 const CONFIG = {
-    maxCredits: 20, // Augmentation du quota quotidien
-    maxFileSizeMB: 10, // Augmenté pour supporter le PDF et l'Audio
+    maxCredits: 20,
+    maxFileSizeMB: 10,
     langMap: {
-        // --- CODES & SCRIPTS ---
         js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
         py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
         php:'PHP', java:'Java', c:'C', cpp:'C++', cs:'C#',
@@ -75,7 +110,6 @@ const CONFIG = {
         sql:'SQL', json:'JSON', xml:'XML', yaml:'YAML', yml:'YAML',
         sh:'Shell', bash:'Bash', md:'Markdown', txt:'Texte',
         vue:'Vue', svelte:'Svelte', dart:'Dart', r:'R', lua:'Lua',
-        // --- DOCUMENTS & MULTIMÉDIA ---
         pdf:'Document PDF', docx:'Document Word', doc:'Document Word',
         mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG'
     },
@@ -132,50 +166,65 @@ CRÉATION NARRATIVE & VISUELLE :
 
 HONNÊTETÉ SUR LES LIMITES :
 - Si tu n'es pas certain d'une méthode, dis-le et propose l'alternative la plus sûre. Ne suppose jamais. Demande des clarifications si le contexte technique manque.
-// AJOUTE CETTE RÈGLE DANS TON systemPrompt (ia.js) :
 
-━━━ RÈGLES DE RÉPONSE ━━━
-
-VÉRITÉ ET PRÉCISION :
+━━━ VÉRITÉ ET PRÉCISION ━━━
 - Les faits historiques, les biographies et les données géographiques ne supportent aucune approximation.
 - Si tu as un doute sur un rôle (ex: organisateur vs lauréat), vérifie tes connaissances internes ou précise ton incertitude.
 - Ne confonds jamais une icône culturelle avec une institution.
+
 ━━━ CE QUE TU N'ES PAS ━━━
 Tu n'es pas ChatGPT. Tu n'es pas un assistant lisse. Tu es PENSÉE — une IA avec une identité, une exigence absolue de qualité, et un créateur : Yao Baba Ange Emmanuel.`
 };
 
 // ============================================================
-//  PERSISTANCE DES CRÉDITS (localStorage)
+//  CRÉDITS — Supabase
 // ============================================================
 
-const STORAGE_KEY = "pensee_ia_credits";
+async function loadCreditsFromDB() {
+    if (!currentUser) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const { data } = await supabase
+        .from('credits')
+        .select('credits_used')
+        .eq('user_id', currentUser.id)
+        .eq('date', today)
+        .single();
 
-function getTodayStr() {
-    return new Date().toISOString().slice(0, 10);
+    const used = data?.credits_used ?? 0;
+    creditsLeft = CONFIG.maxCredits - used;
+    updateCredits();
 }
 
-function loadCredits() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return CONFIG.maxCredits;
-        const saved = JSON.parse(raw);
-        if (saved.date !== getTodayStr()) return CONFIG.maxCredits;
-        return typeof saved.credits === "number" ? saved.credits : CONFIG.maxCredits;
-    } catch(e) {
-        return CONFIG.maxCredits;
+// ============================================================
+//  HISTORIQUE — Supabase
+// ============================================================
+
+async function loadHistoryFromDB() {
+    if (!currentUser) return;
+    const { data } = await supabase
+        .from('conversations')
+        .select('role, content')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: true })
+        .limit(20);
+
+    if (data && data.length > 0) {
+        data.forEach(msg => {
+            const role = msg.role === 'assistant' ? 'assistant' : 'user';
+            history.push({ role, content: msg.content });
+            addMessage(
+                role === 'assistant' ? 'bot' : 'user',
+                role === 'assistant' ? formatResponse(msg.content) : msg.content,
+                role === 'assistant'
+            );
+        });
     }
-}
-
-function saveCredits(n) {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ credits: n, date: getTodayStr() }));
-    } catch(e) {}
 }
 
 // ============================================================
 //  ÉTAT & ÉLÉMENTS HTML
 // ============================================================
-let creditsLeft = loadCredits();
+let creditsLeft = 0;
 const history = [];
 let attachedFiles = [];
 
@@ -192,7 +241,7 @@ const uploadPreview = document.getElementById("uploadPreview");
 const dropOverlay   = document.getElementById("dropOverlay");
 
 // ============================================================
-//  CRÉDITS
+//  CRÉDITS UI
 // ============================================================
 function updateCredits() {
     const pct = (creditsLeft / CONFIG.maxCredits) * 100;
@@ -261,7 +310,6 @@ function setStatus(state) {
 //  GESTION DES FICHIERS
 // ============================================================
 
-// REMPLACE ta fonction readFileAsText par celle-ci :
 function readFileAsData(file) {
     return new Promise(function(resolve, reject) {
         if (file.size > CONFIG.maxFileSizeMB * 1024 * 1024) {
@@ -274,16 +322,15 @@ function readFileAsData(file) {
 
         reader.onload = function(e) {
             if (isBinary) {
-                // Pour le binaire, on extrait juste la partie Base64
                 const base64Data = e.target.result.split(',')[1];
                 resolve({ type: 'binary', mimeType: file.type, data: base64Data });
             } else {
                 resolve({ type: 'text', data: e.target.result });
             }
         };
-        
+
         reader.onerror = function() { reject("Impossible de lire " + file.name); };
-        
+
         if (isBinary) reader.readAsDataURL(file);
         else reader.readAsText(file);
     });
@@ -293,7 +340,7 @@ async function addFiles(fileList) {
     for (const file of fileList) {
         if (attachedFiles.find(function(f) { return f.name === file.name; })) continue;
         try {
-            const content = await readFileAsText(file);
+            const content = await readFileAsData(file);
             const lang = getLang(file.name);
             attachedFiles.push({ name: file.name, lang: lang, content: content });
             renderUploadPreview();
@@ -353,7 +400,7 @@ function addMessage(role, content, isHtml) {
         const copyBtn = document.createElement("button");
         copyBtn.className = "copy-btn";
         copyBtn.innerHTML = "📋 Copier";
-        
+
         copyBtn.addEventListener("click", async function() {
             try {
                 await navigator.clipboard.writeText(bubble.innerText);
@@ -440,29 +487,40 @@ async function callAPI(userMessage, files) {
 
     let fullPrompt = CONFIG.systemPrompt + "\n\n";
 
-if (files && files.length > 0) {
-    fullPrompt += "### ANALYSE DE FICHIERS (PRIORITÉ HAUTE) :\n\n";
-    files.forEach(function(file) {
-        fullPrompt += "DOCUMENT : " + file.name + "\n";
-        fullPrompt += "CONTENU :\n" + file.content + "\n---\n\n";
-    });
-    
-    // On envoie tout l'historique, même avec un fichier, car l'IA a un contexte suffisant
-    history.forEach(function(msg) {
-        fullPrompt += (msg.role === "user" ? "### Utilisateur:\n" : "### Pensée:\n") + msg.content + "\n\n";
-    });
-}
+    if (files && files.length > 0) {
+        fullPrompt += "### ANALYSE DE FICHIERS (PRIORITÉ HAUTE) :\n\n";
+        files.forEach(function(file) {
+            if (file.content?.type === 'text') {
+                fullPrompt += "DOCUMENT : " + file.name + "\n";
+                fullPrompt += "CONTENU :\n" + file.content.data + "\n---\n\n";
+            } else {
+                fullPrompt += "DOCUMENT BINAIRE : " + file.name + " (traité nativement)\n---\n\n";
+            }
+        });
 
-fullPrompt += "### ACTION REQUISE :\n" + userMessage + "\n\n### RÉPONSE DÉTAILLÉE :\n";
+        history.forEach(function(msg) {
+            fullPrompt += (msg.role === "user" ? "### Utilisateur:\n" : "### Pensée:\n") + msg.content + "\n\n";
+        });
+    }
+
+    fullPrompt += "### ACTION REQUISE :\n" + userMessage + "\n\n### RÉPONSE DÉTAILLÉE :\n";
+
+    // Préparer les fichiers binaires pour l'envoi
+    const binaryFiles = files
+        .filter(f => f.content?.type === 'binary')
+        .map(f => ({ name: f.name, mime: f.content.mimeType, base64: f.content.data }));
 
     try {
         const response = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: fullPrompt })
+            body: JSON.stringify({
+                prompt: fullPrompt,
+                files: binaryFiles.length > 0 ? binaryFiles : undefined,
+                userId: currentUser?.id
+            })
         });
 
-        // FIX : lecture sécurisée — Vercel peut retourner du texte brut au lieu de JSON
         const rawText = await response.text();
         let data;
         try {
@@ -482,8 +540,8 @@ fullPrompt += "### ACTION REQUISE :\n" + userMessage + "\n\n### RÉPONSE DÉTAIL
             } else if (errLow.includes("404") || errLow.includes("not found")) {
                 addMessage("bot", "❌ Modèle IA introuvable (404). Vérifie la configuration dans chat.js.", false);
                 setStatus("err");
-            } else if (errLow.includes("429") || errLow.includes("rate") || errLow.includes("quota")) {
-                addMessage("bot", "🚦 L'API Google est temporairement surchargée. Patiente un petit instant et réessaie.", false);
+            } else if (errLow.includes("429") || errLow.includes("rate") || errLow.includes("quota") || errLow.includes("épuisés")) {
+                addMessage("bot", "🚦 " + errStr, false);
             } else if (errLow.includes("configurée") || errLow.includes("api key") || errLow.includes("api_key")) {
                 addMessage("bot", "🔑 Clé API manquante. Vérifie les variables d'environnement sur Vercel.", false);
                 setStatus("err");
@@ -510,7 +568,6 @@ fullPrompt += "### ACTION REQUISE :\n" + userMessage + "\n\n### RÉPONSE DÉTAIL
         if (history.length > 40) history.splice(0, 2);
 
         creditsLeft--;
-        saveCredits(creditsLeft);
         updateCredits();
 
         addMessage("bot", formatResponse(reply), true);
@@ -534,7 +591,6 @@ async function sendMessage() {
     if (!text && files.length === 0) return;
     if (sendBtn.disabled) return;
 
-    // Masquer les suggestions au premier envoi
     const suggestionsEl = document.getElementById("suggestions");
     if (suggestionsEl) suggestionsEl.style.display = "none";
 
