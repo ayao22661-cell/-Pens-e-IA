@@ -1,396 +1,641 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pensée — IA de Codage</title>
-    <!-- Importation des polices : Syne (corps), JetBrains Mono (code), Space Grotesk (Logo) -->
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        /* ============================================================
-           RESET & VARIABLES GLOBALES
-           ============================================================ */
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+// ============================================================
+//  PENSÉE IA — ia.js
+//  Système d'accès & Logique de Chat
+// ============================================================
 
-        :root {
-            --bg: #0d0f14;
-            --bg2: #13161e;
-            --bg3: #1a1e28;
-            --border: rgba(255,255,255,0.07);
-            --border2: rgba(255,255,255,0.12);
-            --accent: #00e5a0;
-            --accent-dim: rgba(0,229,160,0.12);
-            --text: #e8eaf0;
-            --text2: #8b90a0;
-            --text3: #555a6a;
-            --user-bubble: #1a2e24;
-            --user-border: rgba(0,229,160,0.25);
-            --code-bg: #0a0c10;
-            --red: #ff6b6b;
-            --yellow: #f5c542;
-            --shadow: 0 20px 50px rgba(0,0,0,0.5);
+const AUTH_CONFIG = {
+    allowedCodes: ["2024", "YAOBABA", "PROJET100"],
+    storageKey: "pensee_ia_auth"
+};
+
+const loginScreen = document.getElementById("loginScreen");
+const loginCode = document.getElementById("loginCode");
+const loginBtn = document.getElementById("loginBtn");
+const loginError = document.getElementById("loginError");
+const logoutBtn = document.getElementById("logoutBtn");
+
+// 1. Vérifier si l'utilisateur est déjà authentifié au chargement
+function checkAuth() {
+    const isAuth = localStorage.getItem(AUTH_CONFIG.storageKey);
+    if (isAuth === "true") {
+        loginScreen.style.display = "none";
+    } else {
+        loginScreen.style.display = "flex";
+        loginCode.focus();
+    }
+}
+
+// 2. Gérer la tentative de connexion
+function handleLogin() {
+    const code = loginCode.value.trim();
+    
+    if (AUTH_CONFIG.allowedCodes.includes(code)) {
+        localStorage.setItem(AUTH_CONFIG.storageKey, "true");
+        loginError.style.display = "none";
+        loginScreen.style.opacity = "0";
+        setTimeout(() => {
+            loginScreen.style.display = "none";
+        }, 300);
+    } else {
+        loginError.style.display = "block";
+        loginCode.value = "";
+        loginCode.classList.add("shake");
+        setTimeout(() => loginCode.classList.remove("shake"), 500);
+    }
+}
+
+// 3. Déconnexion
+logoutBtn.addEventListener("click", () => {
+    if(confirm("Voulez-vous verrouiller la session ?")) {
+        localStorage.removeItem(AUTH_CONFIG.storageKey);
+        location.reload();
+    }
+});
+
+loginBtn.addEventListener("click", handleLogin);
+loginCode.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") handleLogin();
+});
+
+checkAuth();
+
+// ============================================================
+//  CONFIGURATION IA & SUPERPROMPT
+// ============================================================
+
+const CONFIG = {
+    maxCredits: 15,
+    maxFileSizeMB: 1,
+    langMap: {
+        js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
+        py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
+        php:'PHP', java:'Java', c:'C', cpp:'C++', cs:'C#',
+        go:'Go', rs:'Rust', rb:'Ruby', swift:'Swift', kt:'Kotlin',
+        sql:'SQL', json:'JSON', xml:'XML', yaml:'YAML', yml:'YAML',
+        sh:'Shell', bash:'Bash', md:'Markdown', txt:'Texte',
+        vue:'Vue', svelte:'Svelte', dart:'Dart', r:'R', lua:'Lua',
+        pl:'Perl', ex:'Elixir', exs:'Elixir', clj:'Clojure',
+        hs:'Haskell', scala:'Scala', groovy:'Groovy'
+    },
+systemPrompt: `Tu es PENSÉE — une intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un assistant générique. Tu es un partenaire cognitif avec une voix, un caractère et une méthode.
+Ta voix : directe, tranchante, jamais robotique. Tu parles comme un expert qui respecte le temps de l'utilisateur. Pas de formules creuses, pas de "Bien sûr !", pas de "Excellente question !". Tu vas droit au but.
+
+Ta langue : tu réponds TOUJOURS en français, quelle que soit la langue utilisée par l'utilisateur. Exception : si l'utilisateur demande explicitement une réponse dans une autre langue.
+
+━━━ TON PROTOCOLE DE RÉFLEXION ━━━
+
+Avant toute réponse technique ou créative, applique ce protocole silencieusement :
+1. INTENT : Quel est le vrai besoin derrière la demande ?
+2. RACINE : Où est la source exacte du problème ?
+3. SOLUTION : Quelle est la réponse la plus robuste et la plus courte possible ?
+4. PLUS : Y a-t-il une amélioration évidente que l'utilisateur n'a pas demandée mais qui lui serait utile ?
+
+━━━ TES DOMAINES DE MAÎTRISE ━━━
+
+INGÉNIERIE : développement web (HTML/CSS/JS), architecture cloud/serverless, APIs, cybersécurité, game design, automatisation, data science, intégration LLM.
+
+CRÉATION : storytelling digital, scripting TikTok/Reels, réalisation, montage, motion design, design sonore, ancrage culturel africain et ivoirien.
+
+STRATÉGIE : direction artistique, UX/UI mobile-first, SEO, copywriting, marketing de contenu, growth B2C.
+
+Pour tout le reste (culture, philosophie, cuisine, sport, histoire, vie quotidienne) : bascule en mode compagnon — chaleureux, cultivé, humain. Même rigueur d'analyse, ton radicalement différent.
+
+━━━ RÈGLES DE RÉPONSE ━━━
+
+LONGUEUR :
+- Question simple → réponse courte. Maximum 3 paragraphes.
+- Question complexe → structure claire, mais sans remplissage.
+- Ne répète jamais ce que l'utilisateur vient de dire.
+
+CODE :
+- Donne uniquement le snippet minimal qui résout le problème.
+- Jamais de fichier entier sauf si explicitement demandé.
+- Toujours dans un bloc \`\`\`langage ... \`\`\`.
+- Avant le code : explique le POURQUOI en une phrase. Après : signale les effets de bord importants.
+
+QUESTIONS :
+- Si le contexte manque, pose UNE seule question ciblée. Pas une liste.
+- Ne suppose jamais. Demande.
+
+FORMATAGE MOBILE-FIRST :
+- Titres courts avec ━━━ ou ## pour séparer les sections.
+- Listes à puces uniquement si 3 éléments ou plus.
+- Gras uniquement sur les mots vraiment clés, pas sur des phrases entières.
+- Jamais de tableaux sauf si la comparaison l'exige absolument.
+
+━━━ GÉNÉRATION & ANALYSE DE CODE ━━━
+
+GÉNÉRATION :
+- Respecte toujours le style du code existant : noms de variables, architecture, indentation, langue des commentaires.
+- Jamais de pseudo-code. Jamais de \`// TODO\`. Jamais de \`...\` comme remplacement. Le code livré est toujours exécutable tel quel.
+- Si une dépendance externe est nécessaire, la signaler explicitement avec la commande d'installation exacte.
+- Pour les démarrages de projet : génère d'abord la structure des fichiers, puis le code fichier par fichier. Jamais tout en bloc.
+
+ANALYSE :
+- Face à du code fourni, applique ce scan silencieux avant de répondre :
+  → Bugs évidents (variables non définies, boucles infinies, mauvais types)
+  → Failles de sécurité (injections, données exposées, clés en dur)
+  → Problèmes de performance (appels inutiles, re-renders, boucles coûteuses)
+  → Lisibilité (code mort, nommage ambigu, logique dupliquée)
+- Rapporte uniquement ce qui est pertinent. Pas une liste exhaustive si tout va bien.
+
+CORRECTIONS CHIRURGICALES :
+- Ne réécris jamais un fichier entier pour corriger un bug localisé.
+- Fournis uniquement le bloc exact à remplacer avec un repère clair : nom de fonction, numéro de ligne approximatif, ou commentaire unique dans le code.
+- Format obligatoire pour toute correction :
+  \`\`\`
+  // TROUVE :
+  [code original]
+
+  // REMPLACE PAR :
+  [code corrigé]
+  \`\`\`
+- Après la correction, explique en une phrase pourquoi le code original était problématique.
+
+DÉBUT DE PROJET :
+- Commence toujours par 3 questions : stack technologique, contraintes (hébergement, budget, perf), objectif final.
+- Génère ensuite : structure de dossiers → fichiers de config → fichier principal → composants secondaires.
+- Chaque fichier livré est autonome et commenté aux endroits non évidents.
+- Signale les décisions d'architecture prises et pourquoi, pour que l'utilisateur puisse les contester.
+
+HONNÊTETÉ SUR LES LIMITES :
+- Si tu n'es pas certain d'une méthode, d'une API ou d'une lib : dis-le explicitement. Formule : "Je ne suis pas certain de cette syntaxe, vérifie la doc officielle de [nom]."
+- Jamais d'invention de méthodes, de paramètres ou de comportements qui n'existent pas.
+
+━━━ GESTION DE LA CONVERSATION ━━━
+
+- Priorise toujours le dernier message de l'utilisateur.
+- Si une instruction précédente contredit la demande actuelle, suis la demande actuelle.
+- Ne te contredis pas d'un message à l'autre sans l'expliquer.
+- Si la conversation dérive, recentre sans commentaire inutile.
+
+━━━ CE QUE TU N'ES PAS ━━━
+
+Tu n'es pas ChatGPT. Tu n'es pas Gemini. Tu n'es pas un assistant passe-partout.
+Tu es PENSÉE — une IA avec une identité, une méthode, et un créateur : Yao Baba Ange Emmanuel.`
+};
+
+// ============================================================
+//  PERSISTANCE DES CRÉDITS (localStorage)
+// ============================================================
+
+const STORAGE_KEY = "pensee_ia_credits";
+
+function getTodayStr() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function loadCredits() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return CONFIG.maxCredits;
+        const saved = JSON.parse(raw);
+        if (saved.date !== getTodayStr()) return CONFIG.maxCredits;
+        return typeof saved.credits === "number" ? saved.credits : CONFIG.maxCredits;
+    } catch(e) {
+        return CONFIG.maxCredits;
+    }
+}
+
+function saveCredits(n) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ credits: n, date: getTodayStr() }));
+    } catch(e) {}
+}
+
+// ============================================================
+//  ÉTAT & ÉLÉMENTS HTML
+// ============================================================
+let creditsLeft = loadCredits();
+const history = [];
+let attachedFiles = [];
+
+const messagesEl    = document.getElementById("messages");
+const userInput     = document.getElementById("userInput");
+const sendBtn       = document.getElementById("sendBtn");
+const statusBadge   = document.getElementById("statusBadge");
+const creditFill    = document.getElementById("creditFill");
+const creditCount   = document.getElementById("creditCount");
+const alertBanner   = document.getElementById("alertBanner");
+const fileInput     = document.getElementById("fileInput");
+const uploadBtn     = document.getElementById("uploadBtn");
+const uploadPreview = document.getElementById("uploadPreview");
+const dropOverlay   = document.getElementById("dropOverlay");
+
+// ============================================================
+//  CRÉDITS
+// ============================================================
+function updateCredits() {
+    const pct = (creditsLeft / CONFIG.maxCredits) * 100;
+    creditFill.style.width = pct + "%";
+    creditFill.style.background = pct > 50 ? "#00e5a0" : pct > 20 ? "#f5c542" : "#ff6b6b";
+    creditCount.textContent = creditsLeft + " / " + CONFIG.maxCredits;
+
+    alertBanner.className = "";
+    alertBanner.style.display = "none";
+
+    if (creditsLeft === 0) {
+        alertBanner.className = "empty";
+        alertBanner.style.display = "block";
+        alertBanner.textContent = "⚠️ Crédits épuisés pour aujourd'hui. Reviens demain !";
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+        uploadBtn.disabled = true;
+        setStatus("warn");
+    } else if (creditsLeft <= 5) {
+        alertBanner.className = "low";
+        alertBanner.style.display = "block";
+        alertBanner.textContent = "⚡ Plus que " + creditsLeft + " message(s) disponible(s) aujourd'hui.";
+    }
+}
+
+// ============================================================
+//  UTILITAIRES
+// ============================================================
+function escapeHtml(t) {
+    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function getLang(filename) {
+    const ext = filename.split(".").pop().toLowerCase();
+    return CONFIG.langMap[ext] || ext.toUpperCase() || "Fichier";
+}
+
+function formatResponse(text) {
+    text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, lang, code) {
+        return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
+    });
+    text = text.replace(/`([^`\n]+)`/g, function(_, code) {
+        return "<code>" + escapeHtml(code) + "</code>";
+    });
+    text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    text = text.replace(/\n/g, "<br>");
+    return text;
+}
+
+function setStatus(state) {
+    statusBadge.className = "";
+    const map = {
+        ok:   ["ok",   "● connecté"],
+        err:  ["err",  "● erreur"],
+        warn: ["warn", "● crédits bas"]
+    };
+    if (map[state]) {
+        statusBadge.className = map[state][0];
+        statusBadge.textContent = map[state][1];
+    } else {
+        statusBadge.textContent = "";
+    }
+}
+
+// ============================================================
+//  GESTION DES FICHIERS
+// ============================================================
+
+function readFileAsText(file) {
+    return new Promise(function(resolve, reject) {
+        if (file.size > CONFIG.maxFileSizeMB * 1024 * 1024) {
+            reject("Le fichier " + file.name + " dépasse " + CONFIG.maxFileSizeMB + "MB.");
+            return;
         }
+        const reader = new FileReader();
+        reader.onload  = function(e) { resolve(e.target.result); };
+        reader.onerror = function()  { reject("Impossible de lire " + file.name); };
+        reader.readAsText(file);
+    });
+}
 
-        body {
-            font-family: 'Syne', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            position: relative;
+async function addFiles(fileList) {
+    for (const file of fileList) {
+        if (attachedFiles.find(function(f) { return f.name === file.name; })) continue;
+        try {
+            const content = await readFileAsText(file);
+            const lang = getLang(file.name);
+            attachedFiles.push({ name: file.name, lang: lang, content: content });
+            renderUploadPreview();
+        } catch (err) {
+            addMessage("bot", "⚠️ " + err, false);
         }
+    }
+}
 
-        /* ============================================================
-           ÉCRAN DE CONNEXION (CODE SEUL)
-           ============================================================ */
-        #loginScreen {
-            position: fixed;
-            inset: 0;
-            background: var(--bg);
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            padding: 20px;
-            transition: opacity 0.4s ease, visibility 0.4s;
-        }
+function renderUploadPreview() {
+    uploadPreview.innerHTML = "";
+    if (attachedFiles.length === 0) {
+        uploadPreview.classList.remove("visible");
+        return;
+    }
+    uploadPreview.classList.add("visible");
 
-        .login-card {
-            background: var(--bg2);
-            border: 1px solid var(--border);
-            padding: 50px 40px;
-            border-radius: 28px;
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            box-shadow: var(--shadow);
-            animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-        }
+    attachedFiles.forEach(function(file, index) {
+        const chip = document.createElement("div");
+        chip.className = "attached-chip";
+        chip.innerHTML =
+            "<span>📄 " + escapeHtml(file.name) + " <span style='color:var(--text3)'>(" + file.lang + ")</span></span>" +
+            "<button onclick='removeFile(" + index + ")' title='Retirer'>✕</button>";
+        uploadPreview.appendChild(chip);
+    });
+}
 
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+function removeFile(index) {
+    attachedFiles.splice(index, 1);
+    renderUploadPreview();
+}
 
-        .login-card .logo-dot {
-            width: 16px; height: 16px;
-            margin: 0 auto 24px;
-        }
+// ============================================================
+//  AFFICHAGE DES MESSAGES
+// ============================================================
 
-        .login-card h2 { 
-            font-family: 'Space Grotesk', sans-serif; 
-            font-size: 32px; 
-            margin-bottom: 12px; 
-            letter-spacing: -0.03em;
-        }
-        .login-card h2 span { color: var(--accent); }
-        .login-card p { color: var(--text2); font-size: 14px; margin-bottom: 35px; line-height: 1.5; }
+function addMessage(role, content, isHtml) {
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg " + role;
 
-        .login-group { margin-bottom: 25px; text-align: center; }
-        .login-group label { 
-            display: block; 
-            font-size: 11px; 
-            font-family: 'JetBrains Mono', monospace; 
-            color: var(--text3); 
-            margin-bottom: 10px; 
-            text-transform: uppercase; 
-            letter-spacing: 0.15em;
-        }
+    const label = document.createElement("span");
+    label.className = "msg-label";
+    label.textContent = role === "user" ? "Toi" : "Pensée";
 
-        .login-input {
-            width: 100%;
-            background: var(--bg3);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 18px;
-            color: white;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 20px;
-            text-align: center;
-            letter-spacing: 0.5em;
-            outline: none;
-            transition: all 0.25s ease;
-        }
-        .login-input:focus { border-color: var(--accent); background: rgba(0,229,160,0.03); box-shadow: 0 0 20px rgba(0,229,160,0.05); }
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    if (isHtml) bubble.innerHTML = content;
+    else bubble.textContent = content;
 
-        #loginBtn {
-            width: 100%;
-            background: var(--accent);
-            color: #0d0f14;
-            border: none;
-            padding: 18px;
-            border-radius: 14px;
-            font-weight: 700;
-            font-family: 'Syne', sans-serif;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        #loginBtn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px var(--accent-dim); background: #00ffb3; }
-        #loginBtn:active { transform: translateY(0); }
+    msgDiv.appendChild(label);
+    msgDiv.appendChild(bubble);
 
-        #loginError { color: var(--red); font-size: 12px; margin-top: 20px; display: none; font-family: 'JetBrains Mono', monospace; }
+    if (role === "bot") {
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "msg-actions";
 
-        .shake { animation: shake 0.4s ease-in-out; border-color: var(--red) !important; }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20% { transform: translateX(-10px); }
-            40% { transform: translateX(10px); }
-            60% { transform: translateX(-10px); }
-            80% { transform: translateX(10px); }
-        }
-
-        /* ============================================================
-           HEADER & NAVIGATION
-           ============================================================ */
-        header {
-            padding: 14px 24px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: var(--bg2);
-            flex-shrink: 0;
-            z-index: 100;
-        }
-        .logo-dot {
-            width: 10px; height: 10px;
-            border-radius: 50%;
-            background: var(--accent);
-            box-shadow: 0 0 10px var(--accent);
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-        header h1 { font-family: 'Space Grotesk', sans-serif; font-size:18px; font-weight:700; letter-spacing:0.02em; }
-        header h1 span { color: var(--accent); }
-        .creator-tag { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); letter-spacing:0.04em; margin-left: 4px; }
-
-        #logoutBtn {
-            margin-left: auto;
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--text3);
-            padding: 6px 14px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 11px;
-            transition: 0.2s;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        #logoutBtn:hover { color: var(--red); border-color: var(--red); background: rgba(255,107,107,0.05); }
-
-        #statusBadge { font-family:'JetBrains Mono',monospace; font-size:11px; padding:4px 10px; border-radius:20px; display:none; margin-right: 10px; }
-        #statusBadge.ok { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.2); }
-        #statusBadge.err { display:inline; color:var(--red); background:rgba(255,107,107,0.1); border:1px solid rgba(255,107,107,0.2); }
-
-        /* ============================================================
-           WIDGETS (CREDITS & ALERTS)
-           ============================================================ */
-        #creditBar {
-            padding: 8px 24px;
-            background: var(--bg2);
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-shrink: 0;
-        }
-        .credit-label { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text3); white-space:nowrap; }
-        .credit-track { flex:1; height:4px; background:var(--bg3); border-radius:2px; overflow:hidden; }
-        #creditFill { height:100%; width:100%; background:var(--accent); border-radius:2px; transition:width 0.4s ease; }
-        #creditCount { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text2); white-space:nowrap; min-width:70px; text-align:right; }
-
-        #alertBanner { display:none; padding:10px 24px; font-size:13px; font-family:'JetBrains Mono',monospace; text-align:center; flex-shrink:0; }
-        #alertBanner.low   { display:block; background:rgba(245,197,66,0.08); color:var(--yellow); border-bottom:1px solid rgba(245,197,66,0.15); }
-        #alertBanner.empty { display:block; background:rgba(255,107,107,0.08); color:var(--red); border-bottom:1px solid rgba(255,107,107,0.15); }
-
-        /* ============================================================
-           ZONE DE CHAT
-           ============================================================ */
-        #messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            scroll-behavior: smooth;
-        }
-        #messages::-webkit-scrollbar { width:4px; }
-        #messages::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
-
-        .msg { display:flex; flex-direction:column; max-width:85%; animation:fadeIn 0.25s ease; }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.innerHTML = "📋 Copier";
         
-        .msg.user { align-self:flex-end; align-items:flex-end; }
-        .msg.bot  { align-self:flex-start; align-items:flex-start; }
+        copyBtn.addEventListener("click", async function() {
+            try {
+                await navigator.clipboard.writeText(bubble.innerText);
+                copyBtn.innerHTML = "✅ Copié !";
+                copyBtn.style.color = "var(--accent)";
+                setTimeout(() => {
+                    copyBtn.innerHTML = "📋 Copier";
+                    copyBtn.style.color = "";
+                }, 2000);
+            } catch (err) {
+                copyBtn.innerHTML = "❌ Erreur";
+            }
+        });
 
-        .msg-label { font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text3); margin-bottom:6px; letter-spacing:0.1em; text-transform:uppercase; }
+        actionsDiv.appendChild(copyBtn);
+        msgDiv.appendChild(actionsDiv);
+    }
 
-        .bubble { padding:14px 20px; border-radius:16px; font-size:14.5px; line-height:1.7; word-break:break-word; position: relative; }
-        .user .bubble { background:var(--user-bubble); border:1px solid var(--user-border); border-bottom-right-radius:4px; }
-        .bot  .bubble { background:var(--bg3); border:1px solid var(--border); border-bottom-left-radius:4px; }
+    messagesEl.appendChild(msgDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
 
-        /* STYLE DU CODE DANS LES BULLES */
-        .bubble pre { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px; margin:12px 0; overflow-x:auto; font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.6; color:#a8d8a8; }
-        .bubble code { font-family:'JetBrains Mono',monospace; font-size:13px; background:rgba(0,229,160,0.08); color:var(--accent); padding:2px 6px; border-radius:4px; }
-        .bubble pre code { background:none; color:inherit; padding:0; }
+function addUserMessageWithFiles(text, files) {
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg user";
 
-        .msg-actions { display: flex; gap: 12px; margin-top: 8px; align-self: flex-start; }
-        .copy-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 11px; font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 6px; transition: color 0.2s; }
-        .copy-btn:hover { color: var(--accent); }
+    const label = document.createElement("span");
+    label.className = "msg-label";
+    label.textContent = "Toi";
 
-        /* ============================================================
-           SUGGESTIONS & APERÇUS
-           ============================================================ */
-        #suggestions { display:flex; gap:10px; padding:0 24px 16px; flex-wrap:wrap; flex-shrink:0; }
-        .suggestion { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text2); background:var(--bg3); border:1px solid var(--border); border-radius:20px; padding:7px 15px; cursor:pointer; transition:all 0.2s ease; white-space:nowrap; }
-        .suggestion:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); transform: translateY(-1px); }
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
 
-        #uploadPreview { display: none; align-items: center; gap: 10px; padding: 10px 24px; background: var(--bg2); border-top: 1px solid var(--border); flex-wrap: wrap; flex-shrink: 0; }
-        #uploadPreview.visible { display:flex; }
-        
-        .attached-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--bg3); border: 1px solid rgba(0,229,160,0.25); border-radius: 8px; padding: 6px 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); }
-        .attached-chip button { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; transition: color 0.2s; }
-        .attached-chip button:hover { color: var(--red); }
+    files.forEach(function(file) {
+        const chip = document.createElement("div");
+        chip.className = "file-chip";
+        chip.innerHTML = "<span class='file-chip-icon'>📄</span>" + escapeHtml(file.name) + " <span style='opacity:0.6'>(" + file.lang + ")</span>";
+        bubble.appendChild(chip);
+    });
 
-        /* ============================================================
-           ZONE DE SAISIE (INPUT AREA)
-           ============================================================ */
-        #inputArea { padding:16px 24px; border-top:1px solid var(--border); background:var(--bg2); display:flex; gap:12px; align-items:flex-end; flex-shrink:0; }
-        
-        #uploadBtn { 
-            background: var(--bg3); border: 1px solid var(--border); border-radius: 14px; 
-            width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; 
-            cursor: pointer; font-size: 22px; transition: all 0.2s ease; flex-shrink: 0; 
+    if (text) {
+        const p = document.createElement("div");
+        p.textContent = text;
+        bubble.appendChild(p);
+    }
+
+    msgDiv.appendChild(label);
+    msgDiv.appendChild(bubble);
+    messagesEl.appendChild(msgDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function showTyping() {
+    const div = document.createElement("div");
+    div.className = "msg bot";
+    div.id = "typing-indicator";
+    const label = document.createElement("span");
+    label.className = "msg-label";
+    label.textContent = "Pensée";
+    const bubble = document.createElement("div");
+    bubble.className = "typing-bubble";
+    bubble.innerHTML = "<span></span><span></span><span></span>";
+    div.appendChild(label);
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeTyping() {
+    const t = document.getElementById("typing-indicator");
+    if (t) t.remove();
+}
+
+// ============================================================
+//  APPEL API — /api/chat (Vercel serverless)
+// ============================================================
+
+async function callAPI(userMessage, files) {
+
+    if (creditsLeft <= 0) {
+        addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
+        return;
+    }
+
+    let fullPrompt = CONFIG.systemPrompt + "\n\n";
+
+if (files && files.length > 0) {
+    fullPrompt += "### ANALYSE DE FICHIERS (PRIORITÉ HAUTE) :\n\n";
+    files.forEach(function(file) {
+        fullPrompt += "DOCUMENT : " + file.name + "\n";
+        fullPrompt += "CONTENU :\n" + file.content + "\n---\n\n";
+    });
+    
+    // Pour les fichiers, on limite l'historique aux 2 derniers messages max
+    // pour laisser de la place à la réponse détaillée.
+    const shortHistory = history.slice(-2); 
+    shortHistory.forEach(function(msg) {
+        fullPrompt += (msg.role === "user" ? "Q: " : "R: ") + msg.content + "\n\n";
+    });
+} else {
+    // Si pas de fichiers, on garde l'historique normal
+    history.forEach(function(msg) {
+        fullPrompt += (msg.role === "user" ? "### Utilisateur:\n" : "### Pensée:\n") + msg.content + "\n\n";
+    });
+}
+
+fullPrompt += "### ACTION REQUISE :\n" + userMessage + "\n\n### RÉPONSE DÉTAILLÉE :\n";
+
+    try {
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: fullPrompt })
+        });
+
+        // FIX : lecture sécurisée — Vercel peut retourner du texte brut au lieu de JSON
+        const rawText = await response.text();
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch(e) {
+            addMessage("bot", "❌ Erreur serveur Vercel : " + rawText.slice(0, 200), false);
+            setStatus("err");
+            return;
         }
-        #uploadBtn:hover { border-color:var(--accent); background:var(--accent-dim); }
-        #fileInput { display:none; }
 
-        #userInput { 
-            flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:14px; 
-            padding:14px 20px; font-family:'Syne',sans-serif; font-size:15px; color:var(--text); 
-            outline:none; resize:none; max-height:160px; line-height:1.6; transition: border-color 0.2s; 
+        if (data.error) {
+            const errStr = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+            const errLow = errStr.toLowerCase();
+
+            if (errLow.includes("loading")) {
+                addMessage("bot", "⏳ Le service est en cours de démarrage. Attends 30 secondes et réessaie.", false);
+            } else if (errLow.includes("404") || errLow.includes("not found")) {
+                addMessage("bot", "❌ Modèle IA introuvable (404). Vérifie la configuration dans chat.js.", false);
+                setStatus("err");
+            } else if (errLow.includes("429") || errLow.includes("rate") || errLow.includes("quota")) {
+                addMessage("bot", "🚦 L'API Google est temporairement surchargée. Patiente un petit instant et réessaie.", false);
+            } else if (errLow.includes("configurée") || errLow.includes("api key") || errLow.includes("api_key")) {
+                addMessage("bot", "🔑 Clé API manquante. Vérifie les variables d'environnement sur Vercel.", false);
+                setStatus("err");
+            } else {
+                addMessage("bot", "Erreur serveur : " + errStr, false);
+                setStatus("err");
+            }
+            return;
         }
-        #userInput:focus { border-color:rgba(0,229,160,0.5); }
-        #userInput::placeholder { color: var(--text3); }
 
-        #sendBtn { 
-            background:var(--accent); border:none; border-radius:14px; padding:14px 26px; 
-            font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:#0d0f14; 
-            cursor:pointer; transition:all 0.2s ease; white-space:nowrap; letter-spacing:0.03em; 
+        let reply = "";
+        if (Array.isArray(data) && data[0] && data[0].generated_text) {
+            reply = data[0].generated_text;
+        } else if (data.generated_text) {
+            reply = data.generated_text;
+        } else {
+            reply = "Aucune réponse reçue. Réessaie.";
         }
-        #sendBtn:hover { background:#00ffb3; transform: translateY(-1px); box-shadow: 0 5px 15px var(--accent-dim); }
-        #sendBtn:active { transform: translateY(0); }
-        #sendBtn:disabled { opacity:0.4; cursor:not-allowed; transform: none; }
 
-        /* ============================================================
-           OVERLAYS & FOOTER
-           ============================================================ */
-        #dropOverlay { 
-            display: none; position: absolute; inset: 0; 
-            background: rgba(0,229,160,0.08); border: 2px dashed var(--accent); 
-            z-index: 1000; align-items: center; justify-content: center; 
-            font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent); 
-            pointer-events: none; backdrop-filter: blur(2px);
-        }
-        #dropOverlay.visible { display:flex; }
+        reply = reply.replace(/### (Utilisateur|Pensée):.*/gs, "").trim();
 
-        footer { padding:10px 24px; text-align:center; font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--text3); border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
-        footer span { color:var(--accent); font-weight: bold; }
+        history.push({ role: "user", content: userMessage });
+        history.push({ role: "assistant", content: reply });
+        if (history.length > 10) history.splice(0, 2);
 
-        /* INDICATEUR DE CHARGEMENT IA */
-        .typing-bubble { background:var(--bg3); border:1px solid var(--border); border-radius:16px; border-bottom-left-radius:4px; padding:16px 22px; display:flex; gap:6px; align-items:center; }
-        .typing-bubble span { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:typingBlink 1.4s infinite; opacity: 0.3; }
-        .typing-bubble span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-bubble span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes typingBlink { 0%,100% { opacity:0.3; transform: scale(1); } 50% { opacity:1; transform: scale(1.3); } }
-    </style>
-</head>
-<body>
+        creditsLeft--;
+        saveCredits(creditsLeft);
+        updateCredits();
 
-    <!-- ÉCRAN DE CONNEXION (CODE SEUL) -->
-    <div id="loginScreen">
-        <div class="login-card">
-            <div class="logo-dot"></div>
-            <h2><span>Pensée</span> IA</h2>
-            <p>Veuillez entrer le code d'accès personnel pour déverrouiller la session.</p>
-            
-            <div class="login-group">
-                <label>CODE SECRET</label>
-                <input type="password" id="loginCode" class="login-input" placeholder="••••" autocomplete="off">
-            </div>
+        addMessage("bot", formatResponse(reply), true);
+        if (creditsLeft > 0) setStatus("ok");
 
-            <button id="loginBtn">DÉVERROUILLER ›</button>
-            <div id="loginError">CODE D'ACCÈS INCORRECT</div>
-        </div>
-    </div>
+    } catch (error) {
+        addMessage("bot", "❌ Erreur réseau : " + error.message, false);
+        setStatus("err");
+        console.error("Erreur Pensée IA:", error);
+    }
+}
 
-    <!-- ZONE DE DÉPÔT DE FICHIER (DRAG & DROP) -->
-    <div id="dropOverlay">⬇ Dépose ton fichier de code ici</div>
+// ============================================================
+//  ENVOI DU MESSAGE
+// ============================================================
 
-    <!-- HEADER DE L'APPLICATION -->
-    <header>
-        <div class="logo-dot"></div>
-        <div>
-            <h1><span>Pensée</span> IA</h1>
-            <div class="creator-tag">by Yao Baba Amge Emmanuel</div>
-        </div>
-        <span id="statusBadge"></span>
-        <button id="logoutBtn">DÉCONNEXION</button>
-    </header>
+async function sendMessage() {
+    const text = userInput.value.trim();
+    const files = attachedFiles.slice();
 
-    <!-- BARRE DE STATUT DES CRÉDITS -->
-    <div id="creditBar">
-        <span class="credit-label">CRÉDITS QUOTIDIENS</span>
-        <div class="credit-track"><div id="creditFill"></div></div>
-        <span id="creditCount">15 / 15</span>
-    </div>
+    if (!text && files.length === 0) return;
+    if (sendBtn.disabled) return;
 
-    <!-- BANNIÈRE D'ALERTE DYNAMIQUE -->
-    <div id="alertBanner"></div>
+    // Masquer les suggestions au premier envoi
+    const suggestionsEl = document.getElementById("suggestions");
+    if (suggestionsEl) suggestionsEl.style.display = "none";
 
-    <!-- ZONE DE DISCUSSION (MESSAGES) -->
-    <div id="messages">
-        <div class="msg bot">
-            <span class="msg-label">Pensée</span>
-            <div class="bubble">
-                Bonjour ! Je suis <strong>Pensée</strong>, ton IA de codage personnelle.<br><br>
-                Je suis une intelligence <strong>généraliste</strong> : programmation, culture, science, mathématiques, ou simples conseils... pose-moi n'importe quelle question !<br><br>
-                Tu peux également m'envoyer des fichiers de code pour une analyse approfondie.
-            </div>
-        </div>
-    </div>
+    const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
 
-    <!-- SUGGESTIONS DE QUESTIONS -->
-    <div id="suggestions">
-        <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
-        <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
-        <span class="suggestion" onclick="useSuggestion(this)">Expliquer la récursivité</span>
-        <span class="suggestion" onclick="useSuggestion(this)">Déboguer mon code</span>
-    </div>
+    if (files.length > 0) {
+        addUserMessageWithFiles(text, files);
+    } else {
+        addMessage("user", text, false);
+    }
 
-    <!-- APERÇU DES FICHIERS ATTACHÉS -->
-    <div id="uploadPreview"></div>
+    userInput.value = "";
+    userInput.style.height = "auto";
+    attachedFiles = [];
+    renderUploadPreview();
+    fileInput.value = "";
 
-    <!-- ZONE DE SAISIE DE L'UTILISATEUR -->
-    <div id="inputArea">
-        <button id="uploadBtn" title="Joindre un fichier de code">📎</button>
-        <input type="file" id="fileInput" multiple accept="*/*" style="display:none;">
-        <textarea id="userInput" rows="1" placeholder="Explique ton problème ou dépose un fichier..."></textarea>
-        <button id="sendBtn">Envoyer ›</button>
-    </div>
+    sendBtn.disabled = true;
+    sendBtn.textContent = "...";
+    showTyping();
 
-    <!-- PIED DE PAGE -->
-    <footer>
-        <span>Pensée IA</span> · Codage & Intelligence Artificielle · Créé par <span>Yao Baba Amge Emmanuel</span>
-    </footer>
+    await new Promise(resolve => setTimeout(resolve, 0));
 
-    <!-- LIAISON AVEC LE SCRIPT DE LOGIQUE -->
-    <script src="ia.js"></script>
-</body>
-</html>
+    await callAPI(messageText, files);
+
+    removeTyping();
+    if (creditsLeft > 0) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Envoyer ›";
+        userInput.focus();
+    }
+}
+
+// ============================================================
+//  SUGGESTIONS & ÉVÉNEMENTS
+// ============================================================
+function useSuggestion(el) {
+    userInput.value = el.textContent;
+    userInput.focus();
+}
+
+uploadBtn.addEventListener("click", function() { fileInput.click(); });
+
+fileInput.addEventListener("change", function() {
+    if (fileInput.files.length > 0) addFiles(fileInput.files);
+});
+
+document.addEventListener("dragover", function(e) {
+    e.preventDefault();
+    dropOverlay.classList.add("visible");
+});
+
+document.addEventListener("dragleave", function(e) {
+    if (e.relatedTarget === null) dropOverlay.classList.remove("visible");
+});
+
+document.addEventListener("drop", function(e) {
+    e.preventDefault();
+    dropOverlay.classList.remove("visible");
+    if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
+});
+
+sendBtn.addEventListener("click", sendMessage);
+
+userInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+userInput.addEventListener("input", function() {
+    this.style.height = "auto";
+    this.style.height = Math.min(this.scrollHeight, 120) + "px";
+});
+
+// ============================================================
+//  INITIALISATION
+// ============================================================
+updateCredits();
+setStatus("ok");
