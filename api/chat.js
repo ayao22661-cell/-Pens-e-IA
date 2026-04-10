@@ -20,7 +20,7 @@ export default async function handler(req, res) {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    model: "Qwen/Qwen2.5-Coder-7B-Instruct:fastest",
+                    model: "Qwen/Qwen2.5-7B-Instruct",
                     messages: [{ role: "user", content: prompt }],
                     max_tokens: 800,
                     temperature: 0.3
