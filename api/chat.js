@@ -9,18 +9,24 @@ export default async function handler(req, res) {
 
     // 🏆 Liste des modèles en cascade (Priorité au ratio Qualité / Quota)
     const modelsToTry = [
-        // ━━━ LIGNE DE FRONT
-        "gemini-3.1-flash-lite", // Bouclier principal : 500 requêtes/jour
-        
-        // ━━━ SECONDE LIGNE GEMINI
-        "gemini-3-flash",        // Back-up 1 : 20 requêtes/jour
-        "gemini-2.5-flash",      // Back-up 2 : 20 requêtes/jour (utile dès demain)
-        "gemini-2.5-flash-lite", // Back-up 3 : 20 requêtes/jour
+    // ━━ LIGNE DE FRONT (500 requêtes/jour)
+    "gemini-3.1-flash-lite", 
 
-        // ━━━ ULTIMES RECOURS GEMMA (Versions "Instruction Tuned" pour le chat)
-        "gemma-4-31b-it",        // Filet de sécurité 1 : 1 500 requêtes/jour
-        "gemma-3-27b-it"         // Filet de sécurité 2 : 14 400 requêtes/jour
-    ];
+    // ━━ LE RÉSERVOIR MASSIF GEMMA (Plus de 15 000 requêtes/jour)
+    // Ces modèles sont parfaits pour le storytelling et les longs scripts.
+    "gemma-3-27b-it",  // 14 400 RPD
+    "gemma-3-12b-it",  // 14 400 RPD
+    "gemma-4-31b-it",  // 1 500 RPD
+    "gemma-4-26b-it",  // 1 500 RPD
+    "gemma-3-4b-it",   // 14 400 RPD
+    "gemma-3-2b-it",   // 14 400 RPD
+
+    // ━━ L'ÉLITE GEMINI (Précision et Code / 20 requêtes/jour chacun)
+    "gemini-3-flash", 
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash", 
+    "gemini-robotics-er-1.5-preview"
+];
 
     // Modification : la fonction prend maintenant le nom du modèle en paramètre
     async function callGemini(modelName) {
