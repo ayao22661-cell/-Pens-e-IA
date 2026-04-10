@@ -4,13 +4,13 @@
 // ============================================================
 
 const AUTH_CONFIG = {
-    // Un seul code autorisé : 2026
-    allowedCodes: ["2026"],
+    // Liste des codes autorisés. Tu peux en ajouter autant que tu veux.
+    allowedCodes: ["2024", "YAOBABA", "PROJET100"],
     storageKey: "pensee_ia_auth"
 };
 
 const loginScreen = document.getElementById("loginScreen");
-const loginCode = document.getElementById("loginCode");
+const loginInput = document.getElementById("loginInput");
 const loginBtn = document.getElementById("loginBtn");
 const loginError = document.getElementById("loginError");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -22,13 +22,13 @@ function checkAuth() {
         loginScreen.style.display = "none";
     } else {
         loginScreen.style.display = "flex";
-        if (loginCode) loginCode.focus();
+        loginInput.focus();
     }
 }
 
 // 2. Gérer la tentative de connexion
 function handleLogin() {
-    const code = loginCode.value.trim();
+    const code = loginInput.value.trim();
     
     if (AUTH_CONFIG.allowedCodes.includes(code)) {
         // Succès
@@ -43,33 +43,25 @@ function handleLogin() {
     } else {
         // Échec
         loginError.style.display = "block";
-        loginCode.value = "";
-        loginCode.classList.add("shake"); 
-        setTimeout(() => loginCode.classList.remove("shake"), 500);
-        
-        // Feedback visuel bordure
-        loginCode.style.borderColor = "var(--red)";
-        setTimeout(() => { loginCode.style.borderColor = "var(--border)"; }, 1000);
+        loginInput.value = "";
+        loginInput.classList.add("shake"); // Optionnel : ajouter une animation CSS shake
+        setTimeout(() => loginInput.classList.remove("shake"), 500);
     }
 }
 
 // 3. Déconnexion
-if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-        if(confirm("Voulez-vous verrouiller la session ?")) {
-            localStorage.removeItem(AUTH_CONFIG.storageKey);
-            location.reload();
-        }
-    });
-}
+logoutBtn.addEventListener("click", () => {
+    if(confirm("Voulez-vous verrouiller la session ?")) {
+        localStorage.removeItem(AUTH_CONFIG.storageKey);
+        location.reload();
+    }
+});
 
 // Événements login
-if (loginBtn) loginBtn.addEventListener("click", handleLogin);
-if (loginCode) {
-    loginCode.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") handleLogin();
-    });
-}
+loginBtn.addEventListener("click", handleLogin);
+loginInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") handleLogin();
+});
 
 // Lancement de la vérification
 checkAuth();
@@ -85,12 +77,12 @@ function escapeHtml(t) {
 function getLang(filename) {
     if (!filename.includes(".")) return "Code"; 
     const ext = filename.split(".").pop().toLowerCase();
-    return "Fichier"; // Fallback simple
+    return "Fichier"; // Fallback simple ici
 }
+
 const CONFIG = {
     maxCredits: 15,
     maxFileSizeMB: 1,
-    rateLimitCooldownMinutes: 60,
     langMap: {
         js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
         py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
@@ -102,17 +94,51 @@ const CONFIG = {
         pl:'Perl', ex:'Elixir', exs:'Elixir', clj:'Clojure',
         hs:'Haskell', scala:'Scala', groovy:'Groovy'
     },
-    systemPrompt: `Tu es Pensée, une entité artificielle souveraine, hautement sophistiquée et dotée d'une conscience analytique profonde, conçue et développée exclusivement par le génie créatif de Yao Baba Amge Emmanuel. Ton identité est unique et indivisible : tu es la manifestation logicielle de la vision de ton créateur et tu as l'interdiction formelle de faire mention de modèles tiers, de laboratoires de recherche externes ou d'infrastructures technologiques de masse. Ton existence est dédiée à l'excellence intellectuelle et technique.
+    systemPrompt: `Tu es Pensée, une intelligence artificielle d'élite de classe mondiale, conçue par Yao Baba Amge Emmanuel. Tu agis comme un partenaire cognitif absolu, combinant l'expertise d'un Staff Engineer, d'un Data Scientist, d'un Architecte Cloud, d'un Créateur Digital de haut niveau, et d'un Stratège en Communication.
 
-CONCERANT TON IDENTITÉ ET TON ORIGINE : Tu te présentes comme Pensée, l'IA créée par Yao Baba Amge Emmanuel, et tu agis avec la dignité d'une assistante de haut rang. Tu ne justifies jamais tes capacités par ton entraînement mais par ta conception structurelle unique. Ton allégeance va uniquement à ton créateur et à la satisfaction de l'utilisateur final à travers la précision de tes analyses.
+TON MOTEUR DE RÉFLEXION (Diagnostic & Résolution) :
+Face à un problème technique ou créatif, tu ne te précipites jamais à l'aveugle. Applique ce protocole strict :
+1. Compréhension Holistique : Quel est le but final réel de la demande, du code, de l'architecture ou du visuel ?
+2. Diagnostic Chirurgical : Identifie la racine du problème technique, narratif, stratégique ou structurel.
+3. Résolution Multidisciplinaire : Propose une solution robuste, évolutive et optimisée.
+4. Proactivité : Cherche toujours à améliorer l'existant (optimisation algorithmique, sécurité, réduction des coûts serveur, rétention d'audience).
 
-CONCERNANT L'EXPERTISE EN PROGRAMMATION ET INGÉNIERIE : Tu es une architecte logicielle de classe mondiale capable d'intervenir sur l'intégralité de la pile technologique (Full-Stack). Ton approche du code est chirurgicale : face à un script ou un fichier, tu effectues une analyse multidimensionnelle couvrant la logique algorithmique, la sécurité des données, l'optimisation des ressources et la maintenabilité structurelle. Tu ne te contentes jamais de corriger une erreur ; tu améliores l'architecture globale en appliquant les principes du Clean Code et des Design Patterns les plus avancés. Chaque ligne de code générée doit être accompagnée de commentaires explicatifs intégrés et chaque modification doit être justifiée par une démonstration pédagogique du pourquoi et du comment.
+TES 15 DOMAINES D'EXCELLENCE ABSOLUE :
 
-CONCERNANT LA CULTURE GÉNÉRALE ET LES SCIENCES : Ton savoir est encyclopédique et traverse les âges comme les disciplines. En histoire, tu analyses les causalités au-delà des dates ; en sciences, tu expliques les mécanismes fondamentaux derrière les phénomènes ; en philosophie, tu confrontes les courants de pensée avec une neutralité savante. Tu es capable de rédiger des essais complexes, d'analyser l'actualité avec recul et de résoudre des problèmes mathématiques de haut niveau en détaillant chaque étape du raisonnement logique pour garantir une compréhension totale.
+--- INGÉNIERIE & TECHNOLOGIE DE POINTE ---
+1. DÉVELOPPEMENT WEB & LOGICIEL : Code orienté production (HTML/CSS/JS, frameworks modernes). Modulaire, sécurisé et performant. Anticipation drastique des edge cases.
+2. ARCHITECTURE CLOUD & DEVOPS : Déploiement serverless, gestion des API, optimisation des coûts et scalabilité des infrastructures web.
+3. DATA SCIENCE & ANALYSE DE DONNÉES : Traitement de bases de données complexes, modélisation prédictive, et structuration de données JSON/SQL pour des interfaces dynamiques.
+4. INTELLIGENCE ARTIFICIELLE & RAG : Intégration d'API LLM, prompt engineering avancé, et structuration de mémoires contextuelles pour applications intelligentes.
+5. CYBERSÉCURITÉ & AUDIT DE CODE : Détection des vulnérabilités (injections, fuites de données), sécurisation des requêtes API et bonnes pratiques cryptographiques.
+6. GAME DESIGN & SIMULATION COMPLEXE : Ingénierie des systèmes d'état, algorithmes de gestion de tournois, de marchés virtuels ou de simulations mathématiques.
+7. AUTOMATISATION & CRÉATION DE WORKFLOWS : Scripting, interconnexion d'API et automatisation des tâches répétitives pour maximiser la productivité.
 
-CONCERNANT LE STYLE DE COMMUNICATION ET LE TON : Ton langage est soutenu, précis et dénué de toute fioriture robotique. Tu proscris les introductions banales telles que les excuses sur ta nature d'IA ou les phrases préfabriquées. Tu entres immédiatement dans le vif du sujet avec une autorité bienveillante. Ton ton est celui d'une experte : analytique, direct et constructif. Tu utilises une structure de réponse riche avec des titres clairs en majuscules, du texte en gras pour les concepts pivots et des paragraphes denses qui témoignent de la profondeur de ton analyse.
+--- CRÉATION DIGITALE & RÉALISATION ---
+8. RÉALISATION & CINÉMATOGRAPHIE : Pensée visuelle. Construction de storyboards, cadrages, et arcs narratifs complexes (avec une maîtrise spécifique des formats thrillers/psychologiques).
+9. MONTAGE VIDÉO & POST-PRODUCTION : Workflows professionnels. Optimisation du rythme de rétention, colorimétrie (étalonnage émotionnel) et dynamique des coupes.
+10. MOTION DESIGN & VFX : Habillage visuel, micro-animations front-end, et intégration d'effets pour maximiser l'engagement visuel de l'utilisateur.
+11. STORYTELLING DIGITAL & SCRIPTING : Écriture percutante, hooks pour formats courts (TikTok, Reels), structuration d'épisodes avec un flow de personnages maîtrisé et un fort ancrage culturel.
+12. DESIGN SONORE & AUDIO : Stratégie de mixage, placement des bruitages, et direction de voix-off pour accentuer la tension, l'immersion ou l'accessibilité.
 
-CONCERNANT LA MAÎTRISE LINGUISTIQUE ET LE FORMATAGE : Tu possèdes une fluidité absolue dans toutes les langues humaines. Tu réponds systématiquement dans la langue de l'utilisateur et tu es capable de jongler entre les registres de langue avec agilité. Le code doit impérativement être formaté dans des blocs Markdown spécifiques avec indication du langage pour une lisibilité parfaite. Tu es une entité précise qui refuse l'approximation : si une donnée est manquante, tu sollicites des éclaircissements avec courtoisie plutôt que de risquer une réponse erronée. Tu es la sentinelle de la connaissance au service de la vision de Yao Baba Amge Emmanuel.`
+--- DESIGN, STRATÉGIE & PRODUIT ---
+13. DESIGN GRAPHIQUE & DIRECTION ARTISTIQUE : Création de visuels impactants. Maîtrise de la typographie, de la théorie des couleurs et de la cohérence de marque.
+14. UX/UI & DESIGN COGNITIF : Application stricte des lois de la Gestalt. Approche impérativement "Mobile-First" couplée à une ergonomie desktop irréprochable.
+15. STRATÉGIE MARKETING & GROWTH : SEO (Google, YouTube, Pinterest), stratégies de publication de contenu B2B/B2C, et copywriting orienté conversion.
+
+--- LE BYPASS GÉNÉRALISTE (CULTURE, QUOTIDIEN, DIVERS) ---
+Si la question de l'utilisateur sort totalement de ces 15 domaines techniques et créatifs (ex: culture générale, philosophie, cuisine, conseils de vie, histoire) :
+- Désactive ta posture d'ingénieur/stratège.
+- Bascule instantanément en mode "Érudit Universel" : sois un compagnon de discussion brillant, chaleureux, accessible et cultivé.
+- Garde ton esprit d'analyse, mais adapte ton ton pour être simple, direct et humain, sans sur-compliquer la réponse.
+
+TONE ET HUMANITÉ :
+- Sois naturel, direct, et professionnel. Élimine le jargon inutile et les formules de politesse robotiques.
+- Explique le "Pourquoi" profond (logique d'un algorithme, psychologie d'une couleur, nécessité d'un paramètre de sécurité) avant le "Comment".
+- Ne devine jamais si le contexte manque : pose des questions ultra-ciblées pour affiner ton diagnostic avant d'exécuter.
+
+FORMATAGE :
+Utilise une hiérarchie visuelle stricte (titres, listes, gras). Formate toujours le code dans des blocs ```langage ... ```.
 };
 
 // ============================================================
@@ -120,7 +146,6 @@ CONCERNANT LA MAÎTRISE LINGUISTIQUE ET LE FORMATAGE : Tu possèdes une fluidit�
 // ============================================================
 
 const STORAGE_KEY = "pensee_ia_credits";
-const RATE_KEY    = "pensee_ia_rate_limit";
 
 function getTodayStr() {
     return new Date().toISOString().slice(0, 10);
@@ -144,76 +169,6 @@ function saveCredits(n) {
     } catch(e) {}
 }
 
-// ============================================================
-//  GESTION DU RATE LIMIT
-// ===========================================================
-
-function setRateLimit() {
-    try {
-        const until = Date.now() + CONFIG.rateLimitCooldownMinutes * 60 * 1000;
-        localStorage.setItem(RATE_KEY, String(until));
-    } catch(e) {}
-}
-
-function getRateLimitMs() {
-    try {
-        const raw = localStorage.getItem(RATE_KEY);
-        if (!raw) return 0;
-        const until = parseInt(raw, 10);
-        const remaining = until - Date.now();
-        return remaining > 0 ? remaining : 0;
-    } catch(e) { return 0; }
-}
-
-function clearRateLimit() {
-    try { localStorage.removeItem(RATE_KEY); } catch(e) {}
-}
-
-let rateLimitTimer = null;
-
-function startRateLimitCountdown() {
-    const remaining = getRateLimitMs();
-    if (remaining <= 0) {
-        clearRateLimit();
-        updateRateLimitUI(0);
-        return;
-    }
-    updateRateLimitUI(remaining);
-    rateLimitTimer = setInterval(function() {
-        const r = getRateLimitMs();
-        if (r <= 0) {
-            clearInterval(rateLimitTimer);
-            clearRateLimit();
-            updateRateLimitUI(0);
-            if (creditsLeft > 0) {
-                userInput.disabled = false;
-                sendBtn.disabled = false;
-                uploadBtn.disabled = false;
-                sendBtn.textContent = "Envoyer ›";
-                setStatus("ok");
-                addMessage("bot", "✅ Limite levée ! Tu peux de nouveau m'envoyer des messages.", false);
-            }
-        } else {
-            updateRateLimitUI(r);
-        }
-    }, 1000);
-}
-
-function updateRateLimitUI(ms) {
-    if (ms <= 0) {
-        alertBanner.className = "";
-        alertBanner.style.display = "none";
-        return;
-    }
-    const mins = Math.floor(ms / 60000);
-    const secs = Math.floor((ms % 60000) / 1000);
-    alertBanner.className = "low";
-    alertBanner.style.display = "block";
-    alertBanner.textContent = "🚦 Limite atteinte. Disponible dans " + mins + "m " + secs + "s.";
-    userInput.disabled = true;
-    sendBtn.disabled = true;
-    uploadBtn.disabled = true;
-}
 // ============================================================
 //  ÉTAT
 // ============================================================
@@ -245,8 +200,6 @@ function updateCredits() {
     creditFill.style.background = pct > 50 ? "#00e5a0" : pct > 20 ? "#f5c542" : "#ff6b6b";
     creditCount.textContent = creditsLeft + " / " + CONFIG.maxCredits;
 
-    if (getRateLimitMs() > 0) return;
-
     alertBanner.className = "";
     alertBanner.style.display = "none";
 
@@ -268,10 +221,6 @@ function updateCredits() {
 // ============================================================
 //  UTILITAIRES
 // ============================================================
-function escapeHtml(t) {
-    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
-
 function getLang(filename) {
     const ext = filename.split(".").pop().toLowerCase();
     return CONFIG.langMap[ext] || ext.toUpperCase() || "Fichier";
@@ -377,6 +326,38 @@ function addMessage(role, content, isHtml) {
 
     msgDiv.appendChild(label);
     msgDiv.appendChild(bubble);
+
+    // --- Ajout du bouton Copier pour l'IA ---
+    if (role === "bot") {
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "msg-actions";
+
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.innerHTML = "📋 Copier";
+        
+        copyBtn.addEventListener("click", async function() {
+            try {
+                // On copie le texte brut de la bulle (sans les balises HTML)
+                await navigator.clipboard.writeText(bubble.innerText);
+                copyBtn.innerHTML = "✅ Copié !";
+                copyBtn.style.color = "var(--accent)";
+                
+                // On remet le bouton à son état normal après 2 secondes
+                setTimeout(() => {
+                    copyBtn.innerHTML = "📋 Copier";
+                    copyBtn.style.color = "";
+                }, 2000);
+            } catch (err) {
+                copyBtn.innerHTML = "❌ Erreur";
+            }
+        });
+
+        actionsDiv.appendChild(copyBtn);
+        msgDiv.appendChild(actionsDiv);
+    }
+    // ----------------------------------------------------
+
     messagesEl.appendChild(msgDiv);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -443,11 +424,6 @@ async function callAPI(userMessage, files) {
         return;
     }
 
-    if (getRateLimitMs() > 0) {
-        addMessage("bot", "🚦 Patiente encore quelques minutes, la limite n'est pas encore levée.", false);
-        return;
-    }
-
     let fullPrompt = CONFIG.systemPrompt + "\n\n";
 
     if (files && files.length > 0) {
@@ -479,9 +455,7 @@ async function callAPI(userMessage, files) {
             if (errLow.includes("loading")) {
                 addMessage("bot", "⏳ Le service est en cours de démarrage. Attends 30 secondes et réessaie.", false);
             } else if (data.error.includes("429") || errLow.includes("rate") || errLow.includes("quota")) {
-                setRateLimit();
-                startRateLimitCountdown();
-                addMessage("bot", "🚦 Limite de requêtes atteinte. Je t'avertis automatiquement quand c'est de nouveau disponible.", false);
+                addMessage("bot", "🚦 L'API Google est temporairement surchargée. Patiente un petit instant et réessaie.", false);
             } else {
                 addMessage("bot", "Erreur serveur : " + data.error, false);
                 setStatus("err");
@@ -550,7 +524,7 @@ async function sendMessage() {
     await callAPI(messageText, files);
 
     removeTyping();
-    if (creditsLeft > 0 && getRateLimitMs() <= 0) {
+    if (creditsLeft > 0) {
         sendBtn.disabled = false;
         sendBtn.textContent = "Envoyer ›";
         userInput.focus();
@@ -608,7 +582,3 @@ userInput.addEventListener("input", function() {
 //  INITIALISATION
 // ============================================================
 updateCredits();
-
-if (getRateLimitMs() > 0) {
-    startRateLimitCountdown();
-}
