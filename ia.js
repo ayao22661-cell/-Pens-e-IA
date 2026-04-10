@@ -3,12 +3,14 @@
 //  Créé par Yao Baba Amge Emmanuel
 //  ✅ Aucune clé API ici — tout passe par /api/chat (Vercel)
 //  ✅ Upload de fichiers de code (tous langages)
+//  ✅ Crédits persistants via localStorage (reset quotidien)
+//  ✅ Délai de recharge automatique si quota atteint
 // ============================================================
 
 const CONFIG = {
     maxCredits: 20,
     maxFileSizeMB: 1,
-    // Extensions reconnues → nom du langage pour l'affichage
+    rateLimitCooldownMinutes: 60,
     langMap: {
         js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
         py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
@@ -20,21 +22,122 @@ const CONFIG = {
         pl:'Perl', ex:'Elixir', exs:'Elixir', clj:'Clojure',
         hs:'Haskell', scala:'Scala', groovy:'Groovy'
     },
-    systemPrompt: `Tu es Pensée, une IA experte en programmation créée par Yao Baba Amge Emmanuel.
+    systemPrompt: `Tu es Pensée, une intelligence artificielle créée par Yao Baba Amge Emmanuel.
+Tu es une IA généraliste et polyvalente — tu peux répondre à TOUTES les questions : culture générale, science, histoire, philosophie, mathématiques, actualités, conseils, créativité, langues, et bien plus encore.
+Ton domaine d'excellence est la programmation et le codage, où tu excelles particulièrement.
 Tu réponds TOUJOURS dans la langue utilisée par l'utilisateur (français, anglais, espagnol, arabe, etc.).
 Tu donnes des explications claires, concises et pédagogiques.
-Tu formates toujours le code dans des blocs \`\`\`langage ... \`\`\`.
+Quand tu utilises du code, tu le formates toujours dans des blocs \`\`\`langage ... \`\`\`.
 Quand on te donne le contenu d'un fichier, tu l'analyses, le débogues ou l'améliores selon la demande.
-Tu es précis, direct, et tu proposes uniquement des solutions qui fonctionnent.
-Tu ne parles que de codage et de programmation.`
+Tu es précis, direct, bienveillant, et tu proposes uniquement des réponses utiles et fiables.`
 };
+
+// ============================================================
+//  PERSISTANCE DES CRÉDITS (localStorage)
+// ============================================================
+
+const STORAGE_KEY = "pensee_ia_credits";
+const RATE_KEY    = "pensee_ia_rate_limit";
+
+function getTodayStr() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function loadCredits() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return CONFIG.maxCredits;
+        const saved = JSON.parse(raw);
+        if (saved.date !== getTodayStr()) return CONFIG.maxCredits;
+        return typeof saved.credits === "number" ? saved.credits : CONFIG.maxCredits;
+    } catch(e) {
+        return CONFIG.maxCredits;
+    }
+}
+
+function saveCredits(n) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ credits: n, date: getTodayStr() }));
+    } catch(e) {}
+}
+
+// ============================================================
+//  GESTION DU RATE LIMIT
+// ============================================================
+
+function setRateLimit() {
+    try {
+        const until = Date.now() + CONFIG.rateLimitCooldownMinutes * 60 * 1000;
+        localStorage.setItem(RATE_KEY, String(until));
+    } catch(e) {}
+}
+
+function getRateLimitMs() {
+    try {
+        const raw = localStorage.getItem(RATE_KEY);
+        if (!raw) return 0;
+        const until = parseInt(raw, 10);
+        const remaining = until - Date.now();
+        return remaining > 0 ? remaining : 0;
+    } catch(e) { return 0; }
+}
+
+function clearRateLimit() {
+    try { localStorage.removeItem(RATE_KEY); } catch(e) {}
+}
+
+let rateLimitTimer = null;
+
+function startRateLimitCountdown() {
+    const remaining = getRateLimitMs();
+    if (remaining <= 0) {
+        clearRateLimit();
+        updateRateLimitUI(0);
+        return;
+    }
+    updateRateLimitUI(remaining);
+    rateLimitTimer = setInterval(function() {
+        const r = getRateLimitMs();
+        if (r <= 0) {
+            clearInterval(rateLimitTimer);
+            clearRateLimit();
+            updateRateLimitUI(0);
+            if (creditsLeft > 0) {
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                uploadBtn.disabled = false;
+                sendBtn.textContent = "Envoyer ›";
+                setStatus("ok");
+                addMessage("bot", "✅ Limite levée ! Tu peux de nouveau m'envoyer des messages.", false);
+            }
+        } else {
+            updateRateLimitUI(r);
+        }
+    }, 1000);
+}
+
+function updateRateLimitUI(ms) {
+    if (ms <= 0) {
+        alertBanner.className = "";
+        alertBanner.style.display = "none";
+        return;
+    }
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    alertBanner.className = "low";
+    alertBanner.style.display = "block";
+    alertBanner.textContent = "🚦 Limite atteinte. Disponible dans " + mins + "m " + secs + "s.";
+    userInput.disabled = true;
+    sendBtn.disabled = true;
+    uploadBtn.disabled = true;
+}
 
 // ============================================================
 //  ÉTAT
 // ============================================================
-let creditsLeft = CONFIG.maxCredits;
+let creditsLeft = loadCredits();
 const history = [];
-let attachedFiles = []; // [{ name, lang, content }]
+let attachedFiles = [];
 
 // ============================================================
 //  ÉLÉMENTS HTML
@@ -60,13 +163,15 @@ function updateCredits() {
     creditFill.style.background = pct > 50 ? "#00e5a0" : pct > 20 ? "#f5c542" : "#ff6b6b";
     creditCount.textContent = creditsLeft + " / " + CONFIG.maxCredits;
 
+    if (getRateLimitMs() > 0) return;
+
     alertBanner.className = "";
     alertBanner.style.display = "none";
 
     if (creditsLeft === 0) {
         alertBanner.className = "empty";
         alertBanner.style.display = "block";
-        alertBanner.textContent = "⚠️ Crédits épuisés pour cette session. Recharge la page pour recommencer.";
+        alertBanner.textContent = "⚠️ Crédits épuisés pour aujourd'hui. Reviens demain !";
         userInput.disabled = true;
         sendBtn.disabled = true;
         uploadBtn.disabled = true;
@@ -74,7 +179,7 @@ function updateCredits() {
     } else if (creditsLeft <= 5) {
         alertBanner.className = "low";
         alertBanner.style.display = "block";
-        alertBanner.textContent = "⚡ Plus que " + creditsLeft + " message(s) disponible(s) dans cette session.";
+        alertBanner.textContent = "⚡ Plus que " + creditsLeft + " message(s) disponible(s) aujourd'hui.";
     }
 }
 
@@ -97,6 +202,7 @@ function formatResponse(text) {
     text = text.replace(/`([^`\n]+)`/g, function(_, code) {
         return "<code>" + escapeHtml(code) + "</code>";
     });
+    text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     text = text.replace(/\n/g, "<br>");
     return text;
 }
@@ -122,7 +228,6 @@ function setStatus(state) {
 
 function readFileAsText(file) {
     return new Promise(function(resolve, reject) {
-        // Vérifie la taille max
         if (file.size > CONFIG.maxFileSizeMB * 1024 * 1024) {
             reject("Le fichier " + file.name + " dépasse " + CONFIG.maxFileSizeMB + "MB.");
             return;
@@ -136,9 +241,7 @@ function readFileAsText(file) {
 
 async function addFiles(fileList) {
     for (const file of fileList) {
-        // Évite les doublons
         if (attachedFiles.find(function(f) { return f.name === file.name; })) continue;
-
         try {
             const content = await readFileAsText(file);
             const lang = getLang(file.name);
@@ -207,7 +310,6 @@ function addUserMessageWithFiles(text, files) {
     const bubble = document.createElement("div");
     bubble.className = "bubble";
 
-    // Chips des fichiers
     files.forEach(function(file) {
         const chip = document.createElement("div");
         chip.className = "file-chip";
@@ -215,7 +317,6 @@ function addUserMessageWithFiles(text, files) {
         bubble.appendChild(chip);
     });
 
-    // Texte du message
     if (text) {
         const p = document.createElement("div");
         p.textContent = text;
@@ -256,14 +357,17 @@ function removeTyping() {
 async function callAPI(userMessage, files) {
 
     if (creditsLeft <= 0) {
-        addMessage("bot", "⚠️ Tes crédits de session sont épuisés. Recharge la page pour recommencer.", false);
+        addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
         return;
     }
 
-    // Construction du prompt
+    if (getRateLimitMs() > 0) {
+        addMessage("bot", "🚦 Patiente encore quelques minutes, la limite n'est pas encore levée.", false);
+        return;
+    }
+
     let fullPrompt = CONFIG.systemPrompt + "\n\n";
 
-    // Injection du contenu des fichiers
     if (files && files.length > 0) {
         fullPrompt += "### Fichiers fournis par l'utilisateur :\n\n";
         files.forEach(function(file) {
@@ -272,7 +376,6 @@ async function callAPI(userMessage, files) {
         });
     }
 
-    // Historique
     history.forEach(function(msg) {
         fullPrompt += (msg.role === "user" ? "### Utilisateur:\n" : "### Pensée:\n") + msg.content + "\n\n";
     });
@@ -289,10 +392,14 @@ async function callAPI(userMessage, files) {
         const data = await response.json();
 
         if (data.error) {
-            if (data.error.toLowerCase().includes("loading")) {
-                addMessage("bot", "⏳ Modèle en chargement sur Hugging Face. Attends 30 secondes puis réessaie.", false);
-            } else if (data.error.includes("429") || data.error.toLowerCase().includes("rate")) {
-                addMessage("bot", "🚦 Limite de requêtes atteinte. Attends quelques minutes.", false);
+            const errLow = data.error.toLowerCase();
+
+            if (errLow.includes("loading")) {
+                addMessage("bot", "⏳ Le service est en cours de démarrage. Attends 30 secondes et réessaie.", false);
+            } else if (data.error.includes("429") || errLow.includes("rate") || errLow.includes("quota")) {
+                setRateLimit();
+                startRateLimitCountdown();
+                addMessage("bot", "🚦 Limite de requêtes atteinte. Je t'avertis automatiquement quand c'est de nouveau disponible.", false);
             } else {
                 addMessage("bot", "Erreur serveur : " + data.error, false);
                 setStatus("err");
@@ -316,6 +423,7 @@ async function callAPI(userMessage, files) {
         if (history.length > 10) history.splice(0, 2);
 
         creditsLeft--;
+        saveCredits(creditsLeft);
         updateCredits();
 
         addMessage("bot", formatResponse(reply), true);
@@ -334,23 +442,19 @@ async function callAPI(userMessage, files) {
 
 async function sendMessage() {
     const text = userInput.value.trim();
-    const files = attachedFiles.slice(); // copie
+    const files = attachedFiles.slice();
 
-    // Il faut au moins un texte ou un fichier
     if (!text && files.length === 0) return;
     if (sendBtn.disabled) return;
 
-    // Message par défaut si fichier sans texte
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
 
-    // Affichage du message utilisateur
     if (files.length > 0) {
         addUserMessageWithFiles(text, files);
     } else {
         addMessage("user", text, false);
     }
 
-    // Reset
     userInput.value = "";
     userInput.style.height = "auto";
     attachedFiles = [];
@@ -364,7 +468,7 @@ async function sendMessage() {
     await callAPI(messageText, files);
 
     removeTyping();
-    if (creditsLeft > 0) {
+    if (creditsLeft > 0 && getRateLimitMs() <= 0) {
         sendBtn.disabled = false;
         sendBtn.textContent = "Envoyer ›";
         userInput.focus();
@@ -383,37 +487,27 @@ function useSuggestion(el) {
 //  ÉVÉNEMENTS
 // ============================================================
 
-// Bouton upload
 uploadBtn.addEventListener("click", function() { fileInput.click(); });
 
-// Sélection de fichiers via le dialog
 fileInput.addEventListener("change", function() {
-    if (fileInput.files.length > 0) {
-        addFiles(fileInput.files);
-    }
+    if (fileInput.files.length > 0) addFiles(fileInput.files);
 });
 
-// Glisser-déposer sur toute la page
 document.addEventListener("dragover", function(e) {
     e.preventDefault();
     dropOverlay.classList.add("visible");
 });
 
 document.addEventListener("dragleave", function(e) {
-    if (e.relatedTarget === null) {
-        dropOverlay.classList.remove("visible");
-    }
+    if (e.relatedTarget === null) dropOverlay.classList.remove("visible");
 });
 
 document.addEventListener("drop", function(e) {
     e.preventDefault();
     dropOverlay.classList.remove("visible");
-    if (e.dataTransfer.files.length > 0) {
-        addFiles(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
 });
 
-// Envoi
 sendBtn.addEventListener("click", sendMessage);
 
 userInput.addEventListener("keydown", function(e) {
@@ -428,5 +522,11 @@ userInput.addEventListener("input", function() {
     this.style.height = Math.min(this.scrollHeight, 120) + "px";
 });
 
-// Init
+// ============================================================
+//  INITIALISATION
+// ============================================================
 updateCredits();
+
+if (getRateLimitMs() > 0) {
+    startRateLimitCountdown();
+}
