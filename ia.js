@@ -506,6 +506,10 @@ async function sendMessage() {
     if (!text && files.length === 0) return;
     if (sendBtn.disabled) return;
 
+    // Masquer les suggestions au premier envoi
+    const suggestionsEl = document.getElementById("suggestions");
+    if (suggestionsEl) suggestionsEl.style.display = "none";
+
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
 
     if (files.length > 0) {
