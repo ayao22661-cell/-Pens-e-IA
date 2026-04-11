@@ -9,32 +9,29 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg:         #080a0f;
-            --bg2:        #0e1118;
-            --bg3:        #151a24;
-            --bg4:        #1c2230;
-            --border:     rgba(255,255,255,0.06);
-            --border2:    rgba(255,255,255,0.11);
-            --accent:     #00e5a0;
-            --accent2:    #00b87d;
-            --accent-dim: rgba(0,229,160,0.10);
-            --accent-glow:rgba(0,229,160,0.18);
-            --text:       #dde2ee;
-            --text2:      #7a8099;
-            --text3:      #44495a;
-            --user-bg:    #0f2019;
-            --user-border:rgba(0,229,160,0.20);
-            --code-bg:    #060810;
-            --red:        #ff5f5f;
-            --yellow:     #f0c040;
-            --shadow:     0 32px 80px rgba(0,0,0,0.7);
-            --radius:     20px;
-            --radius-sm:  12px;
+            --bg:          #080a0f;
+            --bg2:         #0e1118;
+            --bg3:         #151a24;
+            --bg4:         #1c2230;
+            --border:      rgba(255,255,255,0.06);
+            --border2:     rgba(255,255,255,0.11);
+            --accent:      #00e5a0;
+            --accent2:     #00b87d;
+            --accent-dim:  rgba(0,229,160,0.10);
+            --accent-glow: rgba(0,229,160,0.18);
+            --text:        #dde2ee;
+            --text2:       #7a8099;
+            --text3:       #44495a;
+            --user-bg:     #0f2019;
+            --user-border: rgba(0,229,160,0.20);
+            --code-bg:     #060810;
+            --red:         #ff5f5f;
+            --yellow:      #f0c040;
+            --shadow:      0 32px 80px rgba(0,0,0,0.7);
+            --radius:      20px;
+            --radius-sm:   12px;
         }
 
-        /* ============================================================
-           BASE
-           ============================================================ */
         body {
             font-family: 'Syne', sans-serif;
             background: var(--bg);
@@ -46,7 +43,6 @@
             position: relative;
         }
 
-        /* Grain texture subtil */
         body::before {
             content: '';
             position: fixed;
@@ -58,7 +54,7 @@
         }
 
         /* ============================================================
-           ÉCRAN DE CONNEXION
+           ÉCRAN DE CONNEXION — mot de passe uniquement
            ============================================================ */
         #loginScreen {
             position: fixed;
@@ -73,24 +69,21 @@
             transition: opacity 0.5s ease;
         }
 
-        /* Fond animé login */
         #loginScreen::before {
             content: '';
             position: absolute;
-            width: 600px;
-            height: 600px;
+            width: 600px; height: 600px;
             background: radial-gradient(circle, rgba(0,229,160,0.06) 0%, transparent 70%);
             border-radius: 50%;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             animation: breathe 6s ease-in-out infinite;
             pointer-events: none;
         }
 
         @keyframes breathe {
-            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
-            50% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+            0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.6; }
+            50%      { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
         }
 
         .login-card {
@@ -99,7 +92,7 @@
             padding: 52px 44px 44px;
             border-radius: 28px;
             width: 100%;
-            max-width: 420px;
+            max-width: 380px;
             text-align: center;
             box-shadow: var(--shadow), 0 0 0 1px rgba(0,229,160,0.04) inset;
             animation: slideUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -107,14 +100,12 @@
             z-index: 1;
         }
 
-        /* Ligne accent en haut de la card */
         .login-card::before {
             content: '';
             position: absolute;
             top: 0; left: 10%; right: 10%;
             height: 1px;
             background: linear-gradient(90deg, transparent, var(--accent), transparent);
-            border-radius: 1px;
         }
 
         @keyframes slideUp {
@@ -127,7 +118,7 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
-            margin-bottom: 28px;
+            margin-bottom: 24px;
         }
 
         .login-logo-dot {
@@ -145,18 +136,14 @@
             letter-spacing: 0.02em;
             color: var(--text);
         }
-        .login-logo-name em {
-            color: var(--accent);
-            font-style: italic;
-        }
+        .login-logo-name em { color: var(--accent); font-style: italic; }
 
         .login-card p {
             color: var(--text2);
-            font-size: 13.5px;
-            line-height: 1.65;
-            margin-bottom: 36px;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 32px;
             font-family: 'Syne', sans-serif;
-            font-weight: 400;
         }
 
         .login-group {
@@ -182,19 +169,18 @@
             padding: 15px 18px;
             color: var(--text);
             font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            letter-spacing: 0.04em;
+            font-size: 15px;
+            letter-spacing: 0.12em;
             outline: none;
             transition: all 0.25s ease;
+            text-align: center;
         }
-        .login-input::placeholder { color: var(--text3); letter-spacing: 0.04em; }
+        .login-input::placeholder { color: var(--text3); letter-spacing: 0.08em; }
         .login-input:focus {
             border-color: rgba(0,229,160,0.5);
             background: rgba(0,229,160,0.03);
             box-shadow: 0 0 0 3px rgba(0,229,160,0.07);
         }
-
-        .login-separator { height: 8px; }
 
         #loginBtn {
             width: 100%;
@@ -208,7 +194,7 @@
             font-size: 14px;
             cursor: pointer;
             transition: all 0.25s ease;
-            margin-top: 24px;
+            margin-top: 20px;
             letter-spacing: 0.06em;
             text-transform: uppercase;
         }
@@ -222,10 +208,10 @@
         #loginError {
             color: var(--red);
             font-size: 11px;
-            margin-top: 16px;
+            margin-top: 14px;
             display: none;
             font-family: 'JetBrains Mono', monospace;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
         }
 
         .shake { animation: shake 0.4s ease-in-out; }
@@ -253,11 +239,7 @@
             position: relative;
         }
 
-        .logo-mark {
-            display: flex;
-            align-items: center;
-            gap: 9px;
-        }
+        .logo-mark { display: flex; align-items: center; gap: 9px; }
 
         .logo-dot {
             width: 9px; height: 9px;
@@ -267,13 +249,12 @@
             animation: pulse 2s infinite;
             flex-shrink: 0;
         }
-        @keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 10px var(--accent)} 50%{opacity:0.5;box-shadow:0 0 4px var(--accent)} }
-
-        .logo-text {
-            display: flex;
-            flex-direction: column;
+        @keyframes pulse {
+            0%,100% { opacity:1; box-shadow: 0 0 10px var(--accent); }
+            50%      { opacity:0.5; box-shadow: 0 0 4px var(--accent); }
         }
 
+        .logo-text { display: flex; flex-direction: column; }
         .logo-text h1 {
             font-family: 'Fraunces', serif;
             font-size: 17px;
@@ -295,7 +276,7 @@
             margin-left: auto;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         #statusBadge {
@@ -305,8 +286,24 @@
             border-radius: 20px;
             display: none;
         }
-        #statusBadge.ok  { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.15); }
-        #statusBadge.err { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
+        #statusBadge.ok   { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.15); }
+        #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
+        #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.2); }
+
+        #clearBtn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text3);
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 10px;
+            transition: 0.2s;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        #clearBtn:hover { color: var(--yellow); border-color: rgba(240,192,64,0.4); background: rgba(240,192,64,0.05); }
 
         #logoutBtn {
             background: none;
@@ -355,7 +352,7 @@
             width: 100%;
             background: var(--accent);
             border-radius: 2px;
-            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease;
+            transition: width 0.5s cubic-bezier(0.4,0,0.2,1), background 0.4s ease;
         }
         #creditCount {
             font-family: 'JetBrains Mono', monospace;
@@ -395,12 +392,7 @@
             gap: 22px;
             scroll-behavior: smooth;
         }
-        #messages::after {
-            content: "";
-            display: block;
-            min-height: 12px;
-            flex-shrink: 0;
-        }
+        #messages::after { content: ""; display: block; min-height: 12px; flex-shrink: 0; }
         #messages::-webkit-scrollbar { width: 3px; }
         #messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
         #messages::-webkit-scrollbar-track { background: transparent; }
@@ -411,7 +403,7 @@
             max-width: 82%;
             min-width: 0;
             overflow: hidden;
-            animation: msgIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            animation: msgIn 0.3s cubic-bezier(0.2,0.8,0.2,1);
             flex-shrink: 0;
         }
         @keyframes msgIn {
@@ -455,7 +447,6 @@
             border-bottom-left-radius: 5px;
         }
 
-        /* Accent line gauche sur les bulles bot */
         .bot .bubble::before {
             content: '';
             position: absolute;
@@ -466,7 +457,6 @@
             opacity: 0.3;
         }
 
-        /* Code dans les bulles */
         .bubble pre {
             background: var(--code-bg);
             border: 1px solid var(--border);
@@ -739,13 +729,14 @@
             header { padding: 11px 14px; }
             footer { display: none; }
             #suggestions { padding: 0 14px 14px; }
+            #clearBtn { display: none; }
         }
     </style>
 </head>
 <body>
 
     <!-- ============================================================
-         ÉCRAN DE CONNEXION SUPABASE
+         ÉCRAN DE CONNEXION — mot de passe uniquement
          ============================================================ -->
     <div id="loginScreen">
         <div class="login-card">
@@ -754,22 +745,21 @@
                 <span class="login-logo-name"><em>Pensée</em> IA</span>
             </div>
 
-            <p>Connecte-toi pour accéder à ton espace personnel et retrouver tes conversations.</p>
-
-            <div class="login-group">
-                <label>Adresse email</label>
-                <input type="email" id="loginCode" class="login-input" placeholder="ton@email.com" autocomplete="email">
-            </div>
-
-            <div class="login-separator"></div>
+            <p>Entre le mot de passe pour accéder à ton espace.</p>
 
             <div class="login-group">
                 <label>Mot de passe</label>
-                <input type="password" id="loginPassword" class="login-input" placeholder="••••••••" autocomplete="current-password">
+                <input
+                    type="password"
+                    id="loginPassword"
+                    class="login-input"
+                    placeholder="••••"
+                    autocomplete="current-password"
+                >
             </div>
 
             <button id="loginBtn">Accéder à Pensée ›</button>
-            <div id="loginError">Email ou mot de passe incorrect</div>
+            <div id="loginError">Mot de passe incorrect.</div>
         </div>
     </div>
 
@@ -789,6 +779,7 @@
         </div>
         <div class="header-right">
             <span id="statusBadge"></span>
+            <button id="clearBtn" title="Effacer la conversation">Effacer</button>
             <button id="logoutBtn">Déconnexion</button>
         </div>
     </header>
@@ -842,7 +833,6 @@
         <em>Pensée IA</em> · Codage & Intelligence · Créé par <em>Yao Baba Ange Emmanuel</em>
     </footer>
 
-    <!-- SCRIPT MODULE (requis pour import Supabase) -->
     <script type="module" src="ia.js"></script>
 
 </body>
