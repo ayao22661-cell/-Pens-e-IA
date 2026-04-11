@@ -184,23 +184,21 @@ function saveCreditsToStorage() {
 //  HISTORIQUE — localStorage, persistant entre rechargements
 // ============================================================
 
+function showWelcome() {
+    messagesEl.innerHTML = "";
+    addMessage('bot', 'Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>Programmation, culture, science, storytelling, stratégie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.', true);
+    const sug = document.getElementById("suggestions");
+    if (sug) sug.style.display = "flex";
+}
+
 function loadHistoryFromStorage() {
-    // Vider le DOM d'abord (le message de bienvenue HTML statique est retiré ici)
     messagesEl.innerHTML = "";
     try {
         const stored = localStorage.getItem(CONFIG.storageKey);
-        if (!stored) {
-            // Pas d'historique : afficher le message de bienvenue
-            showWelcome();
-            return;
-        }
+        if (!stored) { showWelcome(); return; }
         const parsed = JSON.parse(stored);
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-            showWelcome();
-            return;
-        }
+        if (!Array.isArray(parsed) || parsed.length === 0) { showWelcome(); return; }
         history = parsed;
-        // Réafficher tous les messages dans l'UI
         parsed.forEach(msg => {
             addMessage(
                 msg.role === 'assistant' ? 'bot' : 'user',
@@ -208,7 +206,6 @@ function loadHistoryFromStorage() {
                 msg.role === 'assistant'
             );
         });
-        // Masquer les suggestions si une conversation existe déjà
         const sug = document.getElementById("suggestions");
         if (sug) sug.style.display = "none";
     } catch(e) {
@@ -218,25 +215,16 @@ function loadHistoryFromStorage() {
     }
 }
 
-function showWelcome() {
-    addMessage('bot', 'Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>Programmation, culture, science, storytelling, stratégie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.', true);
-    const sug = document.getElementById("suggestions");
-    if (sug) sug.style.display = "flex";
-}
-
 function saveHistoryToStorage() {
     // Garder les 100 derniers messages max
     localStorage.setItem(CONFIG.storageKey, JSON.stringify(history.slice(-100)));
 }
 
 function clearHistory() {
-    if (!confirm("Effacer toute la conversation ?")) return;
+    if (!confirm("Nouvelle conversation ?")) return;
     history = [];
     localStorage.removeItem(CONFIG.storageKey);
-    messagesEl.innerHTML = "";
-    addMessage('bot', 'Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>Programmation, culture, science, storytelling, stratégie... pose-moi n\'importe quelle question. Tu peux aussi m\'envoyer des fichiers pour une analyse approfondie.', true);
-    const sug = document.getElementById("suggestions");
-    if (sug) sug.style.display = "flex";
+    showWelcome();
 }
 
 const clearBtn = document.getElementById("clearBtn");
@@ -248,17 +236,20 @@ if (clearBtn) clearBtn.addEventListener("click", clearHistory);
 
 function updateCredits() {
     const pct = (creditsLeft / CONFIG.maxCredits) * 100;
-    creditFill.style.width      = pct + "%";
+    creditFill.style.width     = pct + "%";
     creditFill.style.background = pct > 50 ? "#00e5a0" : pct > 20 ? "#f5c542" : "#ff6b6b";
-    creditCount.textContent     = creditsLeft + " / " + CONFIG.maxCredits;
+    creditCount.textContent    = creditsLeft + " / " + CONFIG.maxCredits;
 
     alertBanner.className     = "";
     alertBanner.style.display = "none";
 
-    // Toujours réinitialiser l'état des contrôles avant de les conditionner
-    userInput.disabled  = false;
-    sendBtn.disabled    = false;
-    uploadBtn.disabled  = false;
+    userInput.disabled = false;
+    sendBtn.disabled   = false;
+    uploadBtn.disabled = false;
+
+    userInput.disabled = false;
+    sendBtn.disabled   = false;
+    uploadBtn.disabled = false;
 
     if (creditsLeft === 0) {
         alertBanner.className     = "empty";
@@ -628,6 +619,4 @@ userInput.addEventListener("input", function() {
 // ============================================================
 updateCredits();
 setStatus("ok");
-
-// Init — appelé en dernier pour que tous les éléments DOM soient disponibles
-checkLocalAuth();
+checkLocalAuth(); // Appelé en dernier — après tous les éléments DOM et fonctions
