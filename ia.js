@@ -137,7 +137,8 @@ logoutBtn.addEventListener("click", () => {
 });
 
 // ============================================================
-//  ÉTAT & ÉLÉMENTS
+//  ÉTAT & ÉLÉMENTS DOM
+//  ⚠️  Déclarés AVANT tout appel qui les utilise
 // ============================================================
 
 let creditsLeft   = CONFIG.maxCredits;
@@ -162,7 +163,7 @@ const dropOverlay   = document.getElementById("dropOverlay");
 
 function loadCreditsFromStorage() {
     const today  = new Date().toISOString().slice(0, 10);
-    const stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || '{}');
+    const stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
     if (stored.date === today) {
         creditsLeft = CONFIG.maxCredits - (stored.used || 0);
     } else {
@@ -186,7 +187,7 @@ function saveCreditsToStorage() {
 
 function showWelcome() {
     messagesEl.innerHTML = "";
-    addMessage('bot', 'Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>Programmation, culture, science, storytelling, stratégie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.', true);
+    addMessage("bot", "Bonjour. Je suis <strong>Pens\u00e9e</strong> \u2014 ton IA personnelle.<br><br>Programmation, culture, science, storytelling, strat\u00e9gie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.", true);
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "flex";
 }
@@ -199,11 +200,11 @@ function loadHistoryFromStorage() {
         const parsed = JSON.parse(stored);
         if (!Array.isArray(parsed) || parsed.length === 0) { showWelcome(); return; }
         history = parsed;
-        parsed.forEach(msg => {
+        parsed.forEach(function(msg) {
             addMessage(
-                msg.role === 'assistant' ? 'bot' : 'user',
-                msg.role === 'assistant' ? formatResponse(msg.content) : msg.content,
-                msg.role === 'assistant'
+                msg.role === "assistant" ? "bot" : "user",
+                msg.role === "assistant" ? formatResponse(msg.content) : msg.content,
+                msg.role === "assistant"
             );
         });
         const sug = document.getElementById("suggestions");
@@ -216,7 +217,6 @@ function loadHistoryFromStorage() {
 }
 
 function saveHistoryToStorage() {
-    // Garder les 100 derniers messages max
     localStorage.setItem(CONFIG.storageKey, JSON.stringify(history.slice(-100)));
 }
 
@@ -236,17 +236,14 @@ if (clearBtn) clearBtn.addEventListener("click", clearHistory);
 
 function updateCredits() {
     const pct = (creditsLeft / CONFIG.maxCredits) * 100;
-    creditFill.style.width     = pct + "%";
+    creditFill.style.width      = pct + "%";
     creditFill.style.background = pct > 50 ? "#00e5a0" : pct > 20 ? "#f5c542" : "#ff6b6b";
-    creditCount.textContent    = creditsLeft + " / " + CONFIG.maxCredits;
+    creditCount.textContent     = creditsLeft + " / " + CONFIG.maxCredits;
 
     alertBanner.className     = "";
     alertBanner.style.display = "none";
 
-    userInput.disabled = false;
-    sendBtn.disabled   = false;
-    uploadBtn.disabled = false;
-
+    // Réinitialiser les contrôles avant de les bloquer conditionnellement
     userInput.disabled = false;
     sendBtn.disabled   = false;
     uploadBtn.disabled = false;
@@ -254,7 +251,7 @@ function updateCredits() {
     if (creditsLeft === 0) {
         alertBanner.className     = "empty";
         alertBanner.style.display = "block";
-        alertBanner.textContent   = "⚠️ Crédits épuisés pour aujourd'hui. Reviens demain !";
+        alertBanner.textContent   = "\u26a0\ufe0f Cr\u00e9dits \u00e9puis\u00e9s pour aujourd'hui. Reviens demain !";
         userInput.disabled  = true;
         sendBtn.disabled    = true;
         uploadBtn.disabled  = true;
@@ -262,7 +259,7 @@ function updateCredits() {
     } else if (creditsLeft <= 5) {
         alertBanner.className     = "low";
         alertBanner.style.display = "block";
-        alertBanner.textContent   = "⚡ Plus que " + creditsLeft + " message(s) disponible(s) aujourd'hui.";
+        alertBanner.textContent   = "\u26a1 Plus que " + creditsLeft + " message(s) disponible(s) aujourd'hui.";
     }
 }
 
@@ -271,7 +268,7 @@ function updateCredits() {
 // ============================================================
 
 function escapeHtml(t) {
-    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function getLang(filename) {
@@ -280,17 +277,17 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, (_, _lang, code) =>
-        "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>"
-    );
-    text = text.replace(/`([^`\n]+)`/g, (_, code) => "<code>" + escapeHtml(code) + "</code>");
+    text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
+        return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
+    });
+    text = text.replace(/`([^`\n]+)`/g, function(_, code) { return "<code>" + escapeHtml(code) + "</code>"; });
     text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     text = text.replace(/\n/g, "<br>");
     return text;
 }
 
 function setStatus(state) {
-    const map = { ok: ["ok","● connecté"], err: ["err","● erreur"], warn: ["warn","● crédits bas"] };
+    const map = { ok: ["ok", "\u25cf connect\u00e9"], err: ["err", "\u25cf erreur"], warn: ["warn", "\u25cf cr\u00e9dits bas"] };
     statusBadge.className = "";
     if (map[state]) { statusBadge.className = map[state][0]; statusBadge.textContent = map[state][1]; }
 }
@@ -300,18 +297,18 @@ function setStatus(state) {
 // ============================================================
 
 function readFileAsData(file) {
-    return new Promise((resolve, reject) => {
+    return new Promise(function(resolve, reject) {
         if (file.size > CONFIG.maxFileSizeMB * 1024 * 1024) {
-            reject("Le fichier " + file.name + " dépasse " + CONFIG.maxFileSizeMB + "MB."); return;
+            reject("Le fichier " + file.name + " d\u00e9passe " + CONFIG.maxFileSizeMB + "MB."); return;
         }
-        const reader  = new FileReader();
-        const ext     = file.name.split(".").pop().toLowerCase();
-        const isBinary = ['pdf','docx','doc','mp3','m4a','wav','ogg'].includes(ext);
-        reader.onload  = (e) => {
-            if (isBinary) resolve({ type:'binary', mimeType:file.type, data:e.target.result.split(',')[1] });
-            else          resolve({ type:'text', data:e.target.result });
+        const reader   = new FileReader();
+        const ext      = file.name.split(".").pop().toLowerCase();
+        const isBinary = ["pdf", "docx", "doc", "mp3", "m4a", "wav", "ogg"].includes(ext);
+        reader.onload  = function(e) {
+            if (isBinary) resolve({ type: "binary", mimeType: file.type, data: e.target.result.split(",")[1] });
+            else          resolve({ type: "text", data: e.target.result });
         };
-        reader.onerror = () => reject("Impossible de lire " + file.name);
+        reader.onerror = function() { reject("Impossible de lire " + file.name); };
         if (isBinary) reader.readAsDataURL(file);
         else          reader.readAsText(file);
     });
@@ -319,12 +316,12 @@ function readFileAsData(file) {
 
 async function addFiles(fileList) {
     for (const file of fileList) {
-        if (attachedFiles.find(f => f.name === file.name)) continue;
+        if (attachedFiles.find(function(f) { return f.name === file.name; })) continue;
         try {
             const content = await readFileAsData(file);
-            attachedFiles.push({ name:file.name, lang:getLang(file.name), content });
+            attachedFiles.push({ name: file.name, lang: getLang(file.name), content: content });
             renderUploadPreview();
-        } catch(err) { addMessage("bot", "⚠️ " + err, false); }
+        } catch(err) { addMessage("bot", "\u26a0\ufe0f " + err, false); }
     }
 }
 
@@ -332,29 +329,29 @@ function renderUploadPreview() {
     uploadPreview.innerHTML = "";
     if (!attachedFiles.length) { uploadPreview.classList.remove("visible"); return; }
     uploadPreview.classList.add("visible");
-    attachedFiles.forEach((file, i) => {
+    attachedFiles.forEach(function(file, i) {
         const chip = document.createElement("div");
         chip.className = "attached-chip";
-        chip.innerHTML = `<span>📄 ${escapeHtml(file.name)} <span style='color:var(--text3)'>(${file.lang})</span></span><button onclick="removeFile(${i})" title="Retirer">✕</button>`;
+        chip.innerHTML = "<span>\ud83d\udcc4 " + escapeHtml(file.name) + " <span style='color:var(--text3)'>(" + file.lang + ")</span></span><button onclick=\"removeFile(" + i + ")\" title=\"Retirer\">\u2715</button>";
         uploadPreview.appendChild(chip);
     });
 }
 
-window.removeFile = (i) => { attachedFiles.splice(i, 1); renderUploadPreview(); };
+window.removeFile = function(i) { attachedFiles.splice(i, 1); renderUploadPreview(); };
 
 // ============================================================
 //  AFFICHAGE MESSAGES
 // ============================================================
 
 function addMessage(role, content, isHtml) {
-    const msgDiv  = document.createElement("div");
+    const msgDiv = document.createElement("div");
     msgDiv.className = "msg " + role;
-    const label   = document.createElement("span");
-    label.className = "msg-label";
-    label.textContent = role === "user" ? "Toi" : "Pensée";
-    const bubble  = document.createElement("div");
-    bubble.className = "bubble";
-    if (isHtml) bubble.innerHTML = content;
+    const label  = document.createElement("span");
+    label.className   = "msg-label";
+    label.textContent = role === "user" ? "Toi" : "Pens\u00e9e";
+    const bubble = document.createElement("div");
+    bubble.className  = "bubble";
+    if (isHtml) bubble.innerHTML   = content;
     else        bubble.textContent = content;
     msgDiv.appendChild(label);
     msgDiv.appendChild(bubble);
@@ -364,14 +361,14 @@ function addMessage(role, content, isHtml) {
         actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
         copyBtn.className = "copy-btn";
-        copyBtn.innerHTML = "📋 Copier";
-        copyBtn.addEventListener("click", async () => {
+        copyBtn.innerHTML = "\ud83d\udccb Copier";
+        copyBtn.addEventListener("click", async function() {
             try {
                 await navigator.clipboard.writeText(bubble.innerText);
-                copyBtn.innerHTML = "✅ Copié !";
+                copyBtn.innerHTML  = "\u2705 Copi\u00e9 !";
                 copyBtn.style.color = "var(--accent)";
-                setTimeout(() => { copyBtn.innerHTML = "📋 Copier"; copyBtn.style.color = ""; }, 2000);
-            } catch { copyBtn.innerHTML = "❌ Erreur"; }
+                setTimeout(function() { copyBtn.innerHTML = "\ud83d\udccb Copier"; copyBtn.style.color = ""; }, 2000);
+            } catch(e) { copyBtn.innerHTML = "\u274c Erreur"; }
         });
         actions.appendChild(copyBtn);
         msgDiv.appendChild(actions);
@@ -383,16 +380,16 @@ function addMessage(role, content, isHtml) {
 
 function addUserMessageWithFiles(text, files) {
     const msgDiv = document.createElement("div");
-    msgDiv.className = "msg user";
+    msgDiv.className  = "msg user";
     const label  = document.createElement("span");
-    label.className = "msg-label";
+    label.className   = "msg-label";
     label.textContent = "Toi";
     const bubble = document.createElement("div");
-    bubble.className = "bubble";
-    files.forEach(file => {
+    bubble.className  = "bubble";
+    files.forEach(function(file) {
         const chip = document.createElement("div");
         chip.className = "file-chip";
-        chip.innerHTML = `<span>📄</span>${escapeHtml(file.name)} <span style='opacity:0.6'>(${file.lang})</span>`;
+        chip.innerHTML = "<span>\ud83d\udcc4</span>" + escapeHtml(file.name) + " <span style='opacity:0.6'>(" + file.lang + ")</span>";
         bubble.appendChild(chip);
     });
     if (text) { const p = document.createElement("div"); p.textContent = text; bubble.appendChild(p); }
@@ -405,13 +402,13 @@ function addUserMessageWithFiles(text, files) {
 function showTyping() {
     const div   = document.createElement("div");
     div.className = "msg bot";
-    div.id = "typing-indicator";
-    const label = document.createElement("span");
-    label.className = "msg-label";
-    label.textContent = "Pensée";
-    const bubble = document.createElement("div");
-    bubble.className = "typing-bubble";
-    bubble.innerHTML = "<span></span><span></span><span></span>";
+    div.id        = "typing-indicator";
+    const label   = document.createElement("span");
+    label.className   = "msg-label";
+    label.textContent = "Pens\u00e9e";
+    const bubble  = document.createElement("div");
+    bubble.className  = "typing-bubble";
+    bubble.innerHTML  = "<span></span><span></span><span></span>";
     div.appendChild(label);
     div.appendChild(bubble);
     messagesEl.appendChild(div);
@@ -428,48 +425,44 @@ function removeTyping() {
 // ============================================================
 
 function buildPrompt(userMessage, files) {
-    const CONTEXT_WINDOW = 20; // 10 paires user/assistant
+    const CONTEXT_WINDOW = 20;
     const recent = history.slice(-CONTEXT_WINDOW);
 
-    // FIX #1 — Injection date + instruction de recherche web explicite
-    const today = new Date().toLocaleDateString('fr-FR', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    const today = new Date().toLocaleDateString("fr-FR", {
+        weekday: "long", year: "numeric", month: "long", day: "numeric"
     });
-    // Détecter si la question contient des mots temporels pour forcer la recherche
     const temporalKeywords = [
-        "aujourd'hui", "ce mois", "cette semaine", "cette année", "récent", "récente",
-        "dernière", "dernier", "maintenant", "actuellement", "actuel", "actuelle",
+        "aujourd'hui", "ce mois", "cette semaine", "cette ann\u00e9e", "r\u00e9cent", "r\u00e9cente",
+        "derni\u00e8re", "dernier", "maintenant", "actuellement", "actuel", "actuelle",
         "nouveau", "nouvelle", "nouveaux", "nouvelles", "2025", "2026", "vient de",
-        "dernières nouvelles", "quoi de neuf", "tendance", "tendances"
+        "derni\u00e8res nouvelles", "quoi de neuf", "tendance", "tendances"
     ];
-    const needsSearch = temporalKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+    const needsSearch = temporalKeywords.some(function(kw) { return userMessage.toLowerCase().includes(kw); });
     const searchInstruction = needsSearch
-        ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualité récente. Tu DOIS utiliser google_search pour répondre. Ne réponds JAMAIS depuis ta mémoire d'entraînement sur ce sujet.]\n"
+        ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualit\u00e9 r\u00e9cente. Tu DOIS utiliser google_search pour r\u00e9pondre. Ne r\u00e9ponds JAMAIS depuis ta m\u00e9moire d'entra\u00eenement sur ce sujet.]\n"
         : "";
-    let prompt = `[DATE ACTUELLE : ${today}]${searchInstruction}\n\n` + CONFIG.systemPrompt + "\n\n";
+    let prompt = "[DATE ACTUELLE : " + today + "]" + searchInstruction + "\n\n" + CONFIG.systemPrompt + "\n\n";
 
-    // Fichiers texte injectés dans le prompt
     if (files && files.length > 0) {
-        prompt += "### FICHIERS JOINTS (PRIORITÉ HAUTE) :\n\n";
-        files.forEach(file => {
-            if (file.content?.type === 'text') {
-                prompt += `DOCUMENT : ${file.name}\nCONTENU :\n${file.content.data}\n---\n\n`;
+        prompt += "### FICHIERS JOINTS (PRIORIT\u00c9 HAUTE) :\n\n";
+        files.forEach(function(file) {
+            if (file.content && file.content.type === "text") {
+                prompt += "DOCUMENT : " + file.name + "\nCONTENU :\n" + file.content.data + "\n---\n\n";
             } else {
-                prompt += `DOCUMENT BINAIRE : ${file.name} (traité via inline_data)\n---\n\n`;
+                prompt += "DOCUMENT BINAIRE : " + file.name + " (trait\u00e9 via inline_data)\n---\n\n";
             }
         });
     }
 
-    // Historique récent = contexte explicite pour l'IA
     if (recent.length > 0) {
         prompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
-        recent.forEach(msg => {
-            const role = msg.role === 'user' ? 'Utilisateur' : 'Pensée';
-            prompt += `[${role}]: ${msg.content}\n\n`;
+        recent.forEach(function(msg) {
+            const role = msg.role === "user" ? "Utilisateur" : "Pens\u00e9e";
+            prompt += "[" + role + "]: " + msg.content + "\n\n";
         });
     }
 
-    prompt += `### NOUVEAU MESSAGE :\n${userMessage}\n\n### RÉPONSE :\n`;
+    prompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### R\u00c9PONSE :\n";
     return prompt;
 }
 
@@ -479,22 +472,22 @@ function buildPrompt(userMessage, files) {
 
 async function callAPI(userMessage, files) {
     if (creditsLeft <= 0) {
-        addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
+        addMessage("bot", "\u26a0\ufe0f Tes cr\u00e9dits du jour sont \u00e9puis\u00e9s. Reviens demain !", false);
         return;
     }
 
     const prompt = buildPrompt(userMessage, files);
     const binaryFiles = files
-        .filter(f => f.content?.type === 'binary')
-        .map(f => ({ name:f.name, mime:f.content.mimeType, base64:f.content.data }));
+        .filter(function(f) { return f.content && f.content.type === "binary"; })
+        .map(function(f) { return { name: f.name, mime: f.content.mimeType, base64: f.content.data }; });
 
     try {
         const response = await fetch("/api/chat", {
-            method: "POST",
+            method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                prompt,
-                files: binaryFiles.length > 0 ? binaryFiles : undefined
+            body:    JSON.stringify({
+                prompt: prompt,
+                files:  binaryFiles.length > 0 ? binaryFiles : undefined
             })
         });
 
@@ -502,7 +495,7 @@ async function callAPI(userMessage, files) {
         let data;
         try { data = JSON.parse(rawText); }
         catch(e) {
-            addMessage("bot", "❌ Erreur serveur : " + rawText.slice(0, 200), false);
+            addMessage("bot", "\u274c Erreur serveur : " + rawText.slice(0, 200), false);
             setStatus("err"); return;
         }
 
@@ -510,13 +503,13 @@ async function callAPI(userMessage, files) {
             const errStr = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
             const errLow = errStr.toLowerCase();
             if (errLow.includes("loading"))
-                addMessage("bot", "⏳ Service en démarrage. Réessaie dans 30 secondes.", false);
+                addMessage("bot", "\u23f3 Service en d\u00e9marrage. R\u00e9essaie dans 30 secondes.", false);
             else if (errLow.includes("404") || errLow.includes("not found")) {
-                addMessage("bot", "❌ Modèle introuvable. Vérifie la config Vercel.", false); setStatus("err");
+                addMessage("bot", "\u274c Mod\u00e8le introuvable. V\u00e9rifie la config Vercel.", false); setStatus("err");
             } else if (errLow.includes("429") || errLow.includes("quota"))
-                addMessage("bot", "🚦 " + errStr, false);
+                addMessage("bot", "\ud83d\udea6 " + errStr, false);
             else if (errLow.includes("api key") || errLow.includes("absente")) {
-                addMessage("bot", "🔑 Clé API manquante sur Vercel.", false); setStatus("err");
+                addMessage("bot", "\ud83d\udd11 Cl\u00e9 API manquante sur Vercel.", false); setStatus("err");
             } else {
                 addMessage("bot", "Erreur : " + errStr, false); setStatus("err");
             }
@@ -524,14 +517,12 @@ async function callAPI(userMessage, files) {
         }
 
         let reply = "";
-        if (Array.isArray(data) && data[0]?.generated_text) reply = data[0].generated_text;
+        if (Array.isArray(data) && data[0] && data[0].generated_text) reply = data[0].generated_text;
         else if (data.generated_text) reply = data.generated_text;
-        else reply = "Aucune réponse reçue. Réessaie.";
+        else reply = "Aucune r\u00e9ponse re\u00e7ue. R\u00e9essaie.";
 
-        // Nettoyer les artefacts de prompt éventuels
-        reply = reply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
+        reply = reply.replace(/\[(Utilisateur|Pens\u00e9e)\]:[\s\S]*$/gm, "").trim();
 
-        // Persister dans l'historique localStorage
         history.push({ role: "user",      content: userMessage });
         history.push({ role: "assistant", content: reply });
         saveHistoryToStorage();
@@ -543,8 +534,8 @@ async function callAPI(userMessage, files) {
         addMessage("bot", formatResponse(reply), true);
         if (creditsLeft > 0) setStatus("ok");
 
-    } catch (error) {
-        addMessage("bot", "❌ Erreur réseau : " + error.message, false);
+    } catch(error) {
+        addMessage("bot", "\u274c Erreur r\u00e9seau : " + error.message, false);
         setStatus("err");
     }
 }
@@ -567,23 +558,23 @@ async function sendMessage() {
     if (files.length > 0) addUserMessageWithFiles(text, files);
     else addMessage("user", text, false);
 
-    userInput.value = "";
+    userInput.value        = "";
     userInput.style.height = "auto";
-    attachedFiles = [];
+    attachedFiles          = [];
     renderUploadPreview();
     fileInput.value = "";
 
-    sendBtn.disabled = true;
+    sendBtn.disabled    = true;
     sendBtn.textContent = "...";
     showTyping();
 
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise(function(r) { setTimeout(r, 0); });
     await callAPI(messageText, files);
 
     removeTyping();
     if (creditsLeft > 0) {
-        sendBtn.disabled = false;
-        sendBtn.textContent = "Envoyer ›";
+        sendBtn.disabled    = false;
+        sendBtn.textContent = "Envoyer \u203a";
         userInput.focus();
     }
 }
@@ -592,21 +583,21 @@ async function sendMessage() {
 //  ÉVÉNEMENTS
 // ============================================================
 
-window.useSuggestion = (el) => { userInput.value = el.textContent; userInput.focus(); };
+window.useSuggestion = function(el) { userInput.value = el.textContent; userInput.focus(); };
 
-uploadBtn.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => { if (fileInput.files.length) addFiles(fileInput.files); });
+uploadBtn.addEventListener("click", function() { fileInput.click(); });
+fileInput.addEventListener("change", function() { if (fileInput.files.length) addFiles(fileInput.files); });
 
-document.addEventListener("dragover",  (e) => { e.preventDefault(); dropOverlay.classList.add("visible"); });
-document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) dropOverlay.classList.remove("visible"); });
-document.addEventListener("drop", (e) => {
+document.addEventListener("dragover",  function(e) { e.preventDefault(); dropOverlay.classList.add("visible"); });
+document.addEventListener("dragleave", function(e) { if (!e.relatedTarget) dropOverlay.classList.remove("visible"); });
+document.addEventListener("drop", function(e) {
     e.preventDefault();
     dropOverlay.classList.remove("visible");
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 });
 
 sendBtn.addEventListener("click", sendMessage);
-userInput.addEventListener("keydown", (e) => {
+userInput.addEventListener("keydown", function(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 userInput.addEventListener("input", function() {
@@ -615,8 +606,10 @@ userInput.addEventListener("input", function() {
 });
 
 // ============================================================
-//  INIT
+//  INIT — ordre impératif :
+//  1. updateCredits / setStatus (pas besoin d'auth)
+//  2. checkLocalAuth EN DERNIER (utilise messagesEl + toutes les fonctions)
 // ============================================================
 updateCredits();
 setStatus("ok");
-checkLocalAuth(); // Appelé en dernier — après tous les éléments DOM et fonctions
+checkLocalAuth();
