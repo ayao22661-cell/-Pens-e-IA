@@ -163,8 +163,14 @@ const dropOverlay   = document.getElementById("dropOverlay");
 
 function loadCreditsFromStorage() {
     const today  = new Date().toISOString().slice(0, 10);
-    const stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
-    if (stored.date === today) {
+    let stored = {};
+try {
+    stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
+    if (!stored) stored = {};
+} catch(e) {
+    stored = {};
+}
+if (stored.date === today) {
         creditsLeft = CONFIG.maxCredits - (stored.used || 0);
     } else {
         creditsLeft = CONFIG.maxCredits;
