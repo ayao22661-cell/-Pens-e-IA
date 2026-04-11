@@ -423,11 +423,22 @@ function buildPrompt(userMessage, files) {
     const CONTEXT_WINDOW = 20; // 10 paires user/assistant
     const recent = history.slice(-CONTEXT_WINDOW);
 
-    // FIX #1 — Injection de la date actuelle pour que Gemini ne réponde pas depuis sa mémoire figée
+    // FIX #1 — Injection date + instruction de recherche web explicite
     const today = new Date().toLocaleDateString('fr-FR', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
-    let prompt = `[DATE ACTUELLE : ${today}]\n\n` + CONFIG.systemPrompt + "\n\n";
+    // Détecter si la question contient des mots temporels pour forcer la recherche
+    const temporalKeywords = [
+        "aujourd'hui", "ce mois", "cette semaine", "cette année", "récent", "récente",
+        "dernière", "dernier", "maintenant", "actuellement", "actuel", "actuelle",
+        "nouveau", "nouvelle", "nouveaux", "nouvelles", "2025", "2026", "vient de",
+        "dernières nouvelles", "quoi de neuf", "tendance", "tendances"
+    ];
+    const needsSearch = temporalKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+    const searchInstruction = needsSearch
+        ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualité récente. Tu DOIS utiliser google_search pour répondre. Ne réponds JAMAIS depuis ta mémoire d'entraînement sur ce sujet.]\n"
+        : "";
+    let prompt = `[DATE ACTUELLE : ${today}]${searchInstruction}\n\n` + CONFIG.systemPrompt + "\n\n";
 
     // Fichiers texte injectés dans le prompt
     if (files && files.length > 0) {
