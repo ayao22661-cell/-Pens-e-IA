@@ -187,11 +187,20 @@ function saveCreditsToStorage() {
 // ============================================================
 
 function loadHistoryFromStorage() {
+    // Vider le DOM d'abord (le message de bienvenue HTML statique est retiré ici)
+    messagesEl.innerHTML = "";
     try {
         const stored = localStorage.getItem(CONFIG.storageKey);
-        if (!stored) return;
+        if (!stored) {
+            // Pas d'historique : afficher le message de bienvenue
+            showWelcome();
+            return;
+        }
         const parsed = JSON.parse(stored);
-        if (!Array.isArray(parsed)) return;
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+            showWelcome();
+            return;
+        }
         history = parsed;
         // Réafficher tous les messages dans l'UI
         parsed.forEach(msg => {
@@ -202,14 +211,19 @@ function loadHistoryFromStorage() {
             );
         });
         // Masquer les suggestions si une conversation existe déjà
-        if (parsed.length > 0) {
-            const sug = document.getElementById("suggestions");
-            if (sug) sug.style.display = "none";
-        }
+        const sug = document.getElementById("suggestions");
+        if (sug) sug.style.display = "none";
     } catch(e) {
         console.warn("Historique corrompu, reset.", e);
         localStorage.removeItem(CONFIG.storageKey);
+        showWelcome();
     }
+}
+
+function showWelcome() {
+    addMessage('bot', 'Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>Programmation, culture, science, storytelling, stratégie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.', true);
+    const sug = document.getElementById("suggestions");
+    if (sug) sug.style.display = "flex";
 }
 
 function saveHistoryToStorage() {
@@ -236,12 +250,17 @@ if (clearBtn) clearBtn.addEventListener("click", clearHistory);
 
 function updateCredits() {
     const pct = (creditsLeft / CONFIG.maxCredits) * 100;
-    creditFill.style.width     = pct + "%";
+    creditFill.style.width      = pct + "%";
     creditFill.style.background = pct > 50 ? "#00e5a0" : pct > 20 ? "#f5c542" : "#ff6b6b";
-    creditCount.textContent    = creditsLeft + " / " + CONFIG.maxCredits;
+    creditCount.textContent     = creditsLeft + " / " + CONFIG.maxCredits;
 
     alertBanner.className     = "";
     alertBanner.style.display = "none";
+
+    // Toujours réinitialiser l'état des contrôles avant de les conditionner
+    userInput.disabled  = false;
+    sendBtn.disabled    = false;
+    uploadBtn.disabled  = false;
 
     if (creditsLeft === 0) {
         alertBanner.className     = "empty";
