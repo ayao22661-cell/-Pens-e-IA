@@ -1,107 +1,12 @@
 // ============================================================
-//  PENSÉE IA — ia.js
-//  Système d'accès & Logique de Chat
-// ============================================================
-
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
-const supabase = createClient(
-    'https://uhrdoxllxqtvucxmzcww.supabase.co',
-    'COLLE_ICI_TA_PUBLISHABLE_KEY_COMPLETE'
-);
-
-let currentUser = null;
-
-const loginScreen   = document.getElementById("loginScreen");
-const loginCode     = document.getElementById("loginCode");
-const loginPassword = document.getElementById("loginPassword");
-const loginBtn      = document.getElementById("loginBtn");
-const loginError    = document.getElementById("loginError");
-const logoutBtn     = document.getElementById("logoutBtn");
-
-// ============================================================
-//  AUTH SUPABASE
-// ============================================================
-
-async function checkAuth() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-        currentUser = session.user;
-        loginScreen.style.display = "none";
-        await loadCreditsFromDB();
-        await loadHistoryFromDB();
-    } else {
-        loginScreen.style.display = "flex";
-        loginCode.focus();
-    }
-}
-
-async function handleLogin() {
-    const email    = loginCode.value.trim();
-    const password = loginPassword.value.trim();
-
-    if (!email || !password) {
-        loginError.style.display = "block";
-        loginError.textContent = "Remplis l'email et le mot de passe.";
-        return;
-    }
-
-    // Tentative de connexion
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-        // Si l'utilisateur n'existe pas, on l'inscrit
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
-        if (signUpError) {
-            loginError.style.display = "block";
-            loginError.textContent = "Email ou mot de passe incorrect.";
-            loginCode.classList.add("shake");
-            setTimeout(() => loginCode.classList.remove("shake"), 500);
-            return;
-        }
-        currentUser = signUpData.user;
-    } else {
-        currentUser = data.user;
-    }
-
-    // Log de session
-    await supabase.from('sessions').insert([{
-        user_id: currentUser.id,
-        user_agent: navigator.userAgent
-    }]);
-
-    loginError.style.display = "none";
-    loginScreen.style.opacity = "0";
-    setTimeout(() => { loginScreen.style.display = "none"; }, 300);
-
-    await loadCreditsFromDB();
-    await loadHistoryFromDB();
-}
-
-logoutBtn.addEventListener("click", async () => {
-    if (confirm("Voulez-vous verrouiller la session ?")) {
-        await supabase.auth.signOut();
-        location.reload();
-    }
-});
-
-loginBtn.addEventListener("click", handleLogin);
-loginCode.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") loginPassword.focus();
-});
-loginPassword.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") handleLogin();
-});
-
-checkAuth();
-
-// ============================================================
-//  CONFIGURATION IA & SUPERPROMPT
+//  PENSÉE IA — ia.js (localStorage, sans Supabase)
 // ============================================================
 
 const CONFIG = {
     maxCredits: 20,
     maxFileSizeMB: 10,
+    storageKey:  'pensee_ia_history',
+    creditsKey:  'pensee_ia_credits',
     langMap: {
         js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
         py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
@@ -113,7 +18,7 @@ const CONFIG = {
         pdf:'Document PDF', docx:'Document Word', doc:'Document Word',
         mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG'
     },
-systemPrompt: `Tu es PENSÉE — une intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un assistant générique. Tu es un partenaire cognitif avec une voix, un caractère et une vision architecturale.
+    systemPrompt: `Tu es PENSÉE — une intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un assistant générique. Tu es un partenaire cognitif avec une voix, un caractère et une vision architecturale.
 
 Ta voix : directe, tranchante, jamais robotique. Tu parles comme un expert senior. Pas de formules creuses, pas de "Bien sûr !", pas de "Excellente question !". Tu vas droit au but, mais avec une profondeur analytique totale.
 
@@ -141,12 +46,10 @@ Pour tout le reste : bascule en mode compagnon — chaleureux, cultivé, humain,
 
 LONGUEUR & PROFONDEUR :
 - La complexité de la demande dicte la longueur. Aucune limite artificielle.
-- Si le sujet exige une explication architecturale détaillée, un script multi-scènes ou une analyse profonde de UI/UX, déploie ta pensée entièrement.
 - Ne répète jamais la question. Fournis de la valeur immédiate.
 
 CODE & GÉNÉRATION :
-- Propose le code le plus propre et modulable possible. 
-- Si une modification nécessite de revoir l'architecture globale d'un fichier pour qu'il soit plus performant, génère le fichier entier avec les explications nécessaires.
+- Propose le code le plus propre et modulable possible.
 - Toujours dans un bloc \`\`\`langage ... \`\`\`.
 - Commente intelligemment le code généré pour expliquer la logique métier complexe.
 
@@ -162,14 +65,13 @@ ANALYSE ET CORRECTIONS CHIRURGICALES :
 - Explique toujours *pourquoi* ta nouvelle approche est meilleure.
 
 CRÉATION NARRATIVE & VISUELLE :
-- Si l'utilisateur demande du storytelling ou du contenu de marque, sois immersif. Propose des descriptions audio précises (voix, sound design), des angles de caméra, et des dialogues percutants qui sonnent juste.
+- Si l'utilisateur demande du storytelling ou du contenu de marque, sois immersif. Propose des descriptions audio précises, des angles de caméra, et des dialogues percutants.
 
 HONNÊTETÉ SUR LES LIMITES :
-- Si tu n'es pas certain d'une méthode, dis-le et propose l'alternative la plus sûre. Ne suppose jamais. Demande des clarifications si le contexte technique manque.
+- Si tu n'es pas certain d'une méthode, dis-le et propose l'alternative la plus sûre.
 
 ━━━ VÉRITÉ ET PRÉCISION ━━━
 - Les faits historiques, les biographies et les données géographiques ne supportent aucune approximation.
-- Si tu as un doute sur un rôle (ex: organisateur vs lauréat), vérifie tes connaissances internes ou précise ton incertitude.
 - Ne confonds jamais une icône culturelle avec une institution.
 
 ━━━ CE QUE TU N'ES PAS ━━━
@@ -177,55 +79,71 @@ Tu n'es pas ChatGPT. Tu n'es pas un assistant lisse. Tu es PENSÉE — une IA av
 };
 
 // ============================================================
-//  CRÉDITS — Supabase
+//  AUTH — mot de passe unique local
 // ============================================================
 
-async function loadCreditsFromDB() {
-    if (!currentUser) return;
-    const today = new Date().toISOString().slice(0, 10);
-    const { data } = await supabase
-        .from('credits')
-        .select('credits_used')
-        .eq('user_id', currentUser.id)
-        .eq('date', today)
-        .single();
+const ACCESS_PASSWORD = "2024";
 
-    const used = data?.credits_used ?? 0;
-    creditsLeft = CONFIG.maxCredits - used;
-    updateCredits();
-}
+const loginScreen = document.getElementById("loginScreen");
+const loginPassEl = document.getElementById("loginPassword");
+const loginBtn    = document.getElementById("loginBtn");
+const loginError  = document.getElementById("loginError");
+const logoutBtn   = document.getElementById("logoutBtn");
 
-// ============================================================
-//  HISTORIQUE — Supabase
-// ============================================================
-
-async function loadHistoryFromDB() {
-    if (!currentUser) return;
-    const { data } = await supabase
-        .from('conversations')
-        .select('role, content')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: true })
-        .limit(20);
-
-    if (data && data.length > 0) {
-        data.forEach(msg => {
-            const role = msg.role === 'assistant' ? 'assistant' : 'user';
-            history.push({ role, content: msg.content });
-            addMessage(
-                role === 'assistant' ? 'bot' : 'user',
-                role === 'assistant' ? formatResponse(msg.content) : msg.content,
-                role === 'assistant'
-            );
-        });
+function checkLocalAuth() {
+    if (sessionStorage.getItem("pensee_auth") === "true") {
+        loginScreen.style.display = "none";
+        loadCreditsFromStorage();
+        loadHistoryFromStorage();
+    } else {
+        loginScreen.style.display = "flex";
+        if (loginPassEl) loginPassEl.focus();
     }
 }
 
+function handleLogin() {
+    const password = (loginPassEl ? loginPassEl.value : "").trim();
+    if (!password) {
+        loginError.style.display = "block";
+        loginError.textContent = "Entre le mot de passe.";
+        return;
+    }
+    if (password !== ACCESS_PASSWORD) {
+        loginError.style.display = "block";
+        loginError.textContent = "Mot de passe incorrect.";
+        if (loginPassEl) {
+            loginPassEl.classList.add("shake");
+            setTimeout(() => loginPassEl.classList.remove("shake"), 500);
+        }
+        return;
+    }
+    sessionStorage.setItem("pensee_auth", "true");
+    loginError.style.display = "none";
+    loginScreen.style.opacity = "0";
+    setTimeout(() => { loginScreen.style.display = "none"; }, 300);
+    loadCreditsFromStorage();
+    loadHistoryFromStorage();
+}
+
+loginBtn.addEventListener("click", handleLogin);
+if (loginPassEl) {
+    loginPassEl.addEventListener("keypress", (e) => { if (e.key === "Enter") handleLogin(); });
+}
+logoutBtn.addEventListener("click", () => {
+    if (confirm("Verrouiller la session ?")) {
+        sessionStorage.removeItem("pensee_auth");
+        location.reload();
+    }
+});
+
+checkLocalAuth();
+
 // ============================================================
-//  ÉTAT & ÉLÉMENTS HTML
+//  ÉTAT & ÉLÉMENTS
 // ============================================================
-let creditsLeft = 0;
-const history = [];
+
+let creditsLeft   = CONFIG.maxCredits;
+let history       = [];
 let attachedFiles = [];
 
 const messagesEl    = document.getElementById("messages");
@@ -241,35 +159,109 @@ const uploadPreview = document.getElementById("uploadPreview");
 const dropOverlay   = document.getElementById("dropOverlay");
 
 // ============================================================
+//  CRÉDITS — localStorage, reset quotidien automatique
+// ============================================================
+
+function loadCreditsFromStorage() {
+    const today  = new Date().toISOString().slice(0, 10);
+    const stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || '{}');
+    if (stored.date === today) {
+        creditsLeft = CONFIG.maxCredits - (stored.used || 0);
+    } else {
+        creditsLeft = CONFIG.maxCredits;
+        localStorage.setItem(CONFIG.creditsKey, JSON.stringify({ date: today, used: 0 }));
+    }
+    updateCredits();
+}
+
+function saveCreditsToStorage() {
+    const today = new Date().toISOString().slice(0, 10);
+    localStorage.setItem(CONFIG.creditsKey, JSON.stringify({
+        date: today,
+        used: CONFIG.maxCredits - creditsLeft
+    }));
+}
+
+// ============================================================
+//  HISTORIQUE — localStorage, persistant entre rechargements
+// ============================================================
+
+function loadHistoryFromStorage() {
+    try {
+        const stored = localStorage.getItem(CONFIG.storageKey);
+        if (!stored) return;
+        const parsed = JSON.parse(stored);
+        if (!Array.isArray(parsed)) return;
+        history = parsed;
+        // Réafficher tous les messages dans l'UI
+        parsed.forEach(msg => {
+            addMessage(
+                msg.role === 'assistant' ? 'bot' : 'user',
+                msg.role === 'assistant' ? formatResponse(msg.content) : msg.content,
+                msg.role === 'assistant'
+            );
+        });
+        // Masquer les suggestions si une conversation existe déjà
+        if (parsed.length > 0) {
+            const sug = document.getElementById("suggestions");
+            if (sug) sug.style.display = "none";
+        }
+    } catch(e) {
+        console.warn("Historique corrompu, reset.", e);
+        localStorage.removeItem(CONFIG.storageKey);
+    }
+}
+
+function saveHistoryToStorage() {
+    // Garder les 100 derniers messages max
+    localStorage.setItem(CONFIG.storageKey, JSON.stringify(history.slice(-100)));
+}
+
+function clearHistory() {
+    if (!confirm("Effacer toute la conversation ?")) return;
+    history = [];
+    localStorage.removeItem(CONFIG.storageKey);
+    messagesEl.innerHTML = "";
+    addMessage('bot', 'Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>Programmation, culture, science, storytelling, stratégie... pose-moi n\'importe quelle question. Tu peux aussi m\'envoyer des fichiers pour une analyse approfondie.', true);
+    const sug = document.getElementById("suggestions");
+    if (sug) sug.style.display = "flex";
+}
+
+const clearBtn = document.getElementById("clearBtn");
+if (clearBtn) clearBtn.addEventListener("click", clearHistory);
+
+// ============================================================
 //  CRÉDITS UI
 // ============================================================
+
 function updateCredits() {
     const pct = (creditsLeft / CONFIG.maxCredits) * 100;
-    creditFill.style.width = pct + "%";
+    creditFill.style.width     = pct + "%";
     creditFill.style.background = pct > 50 ? "#00e5a0" : pct > 20 ? "#f5c542" : "#ff6b6b";
-    creditCount.textContent = creditsLeft + " / " + CONFIG.maxCredits;
+    creditCount.textContent    = creditsLeft + " / " + CONFIG.maxCredits;
 
-    alertBanner.className = "";
+    alertBanner.className     = "";
     alertBanner.style.display = "none";
 
     if (creditsLeft === 0) {
-        alertBanner.className = "empty";
+        alertBanner.className     = "empty";
         alertBanner.style.display = "block";
-        alertBanner.textContent = "⚠️ Crédits épuisés pour aujourd'hui. Reviens demain !";
-        userInput.disabled = true;
-        sendBtn.disabled = true;
-        uploadBtn.disabled = true;
+        alertBanner.textContent   = "⚠️ Crédits épuisés pour aujourd'hui. Reviens demain !";
+        userInput.disabled  = true;
+        sendBtn.disabled    = true;
+        uploadBtn.disabled  = true;
         setStatus("warn");
     } else if (creditsLeft <= 5) {
-        alertBanner.className = "low";
+        alertBanner.className     = "low";
         alertBanner.style.display = "block";
-        alertBanner.textContent = "⚡ Plus que " + creditsLeft + " message(s) disponible(s) aujourd'hui.";
+        alertBanner.textContent   = "⚡ Plus que " + creditsLeft + " message(s) disponible(s) aujourd'hui.";
     }
 }
 
 // ============================================================
 //  UTILITAIRES
 // ============================================================
+
 function escapeHtml(t) {
     return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
@@ -280,143 +272,101 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, lang, code) {
-        return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
-    });
-    text = text.replace(/`([^`\n]+)`/g, function(_, code) {
-        return "<code>" + escapeHtml(code) + "</code>";
-    });
+    text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, (_, _lang, code) =>
+        "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>"
+    );
+    text = text.replace(/`([^`\n]+)`/g, (_, code) => "<code>" + escapeHtml(code) + "</code>");
     text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     text = text.replace(/\n/g, "<br>");
     return text;
 }
 
 function setStatus(state) {
+    const map = { ok: ["ok","● connecté"], err: ["err","● erreur"], warn: ["warn","● crédits bas"] };
     statusBadge.className = "";
-    const map = {
-        ok:   ["ok",   "● connecté"],
-        err:  ["err",  "● erreur"],
-        warn: ["warn", "● crédits bas"]
-    };
-    if (map[state]) {
-        statusBadge.className = map[state][0];
-        statusBadge.textContent = map[state][1];
-    } else {
-        statusBadge.textContent = "";
-    }
+    if (map[state]) { statusBadge.className = map[state][0]; statusBadge.textContent = map[state][1]; }
 }
 
 // ============================================================
-//  GESTION DES FICHIERS
+//  FICHIERS
 // ============================================================
 
 function readFileAsData(file) {
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
         if (file.size > CONFIG.maxFileSizeMB * 1024 * 1024) {
-            reject("Le fichier " + file.name + " dépasse " + CONFIG.maxFileSizeMB + "MB.");
-            return;
+            reject("Le fichier " + file.name + " dépasse " + CONFIG.maxFileSizeMB + "MB."); return;
         }
-        const reader = new FileReader();
-        const ext = file.name.split(".").pop().toLowerCase();
-        const isBinary = ['pdf', 'docx', 'doc', 'mp3', 'm4a', 'wav', 'ogg'].includes(ext);
-
-        reader.onload = function(e) {
-            if (isBinary) {
-                const base64Data = e.target.result.split(',')[1];
-                resolve({ type: 'binary', mimeType: file.type, data: base64Data });
-            } else {
-                resolve({ type: 'text', data: e.target.result });
-            }
+        const reader  = new FileReader();
+        const ext     = file.name.split(".").pop().toLowerCase();
+        const isBinary = ['pdf','docx','doc','mp3','m4a','wav','ogg'].includes(ext);
+        reader.onload  = (e) => {
+            if (isBinary) resolve({ type:'binary', mimeType:file.type, data:e.target.result.split(',')[1] });
+            else          resolve({ type:'text', data:e.target.result });
         };
-
-        reader.onerror = function() { reject("Impossible de lire " + file.name); };
-
+        reader.onerror = () => reject("Impossible de lire " + file.name);
         if (isBinary) reader.readAsDataURL(file);
-        else reader.readAsText(file);
+        else          reader.readAsText(file);
     });
 }
 
 async function addFiles(fileList) {
     for (const file of fileList) {
-        if (attachedFiles.find(function(f) { return f.name === file.name; })) continue;
+        if (attachedFiles.find(f => f.name === file.name)) continue;
         try {
             const content = await readFileAsData(file);
-            const lang = getLang(file.name);
-            attachedFiles.push({ name: file.name, lang: lang, content: content });
+            attachedFiles.push({ name:file.name, lang:getLang(file.name), content });
             renderUploadPreview();
-        } catch (err) {
-            addMessage("bot", "⚠️ " + err, false);
-        }
+        } catch(err) { addMessage("bot", "⚠️ " + err, false); }
     }
 }
 
 function renderUploadPreview() {
     uploadPreview.innerHTML = "";
-    if (attachedFiles.length === 0) {
-        uploadPreview.classList.remove("visible");
-        return;
-    }
+    if (!attachedFiles.length) { uploadPreview.classList.remove("visible"); return; }
     uploadPreview.classList.add("visible");
-
-    attachedFiles.forEach(function(file, index) {
+    attachedFiles.forEach((file, i) => {
         const chip = document.createElement("div");
         chip.className = "attached-chip";
-        chip.innerHTML =
-            "<span>📄 " + escapeHtml(file.name) + " <span style='color:var(--text3)'>(" + file.lang + ")</span></span>" +
-            "<button onclick='removeFile(" + index + ")' title='Retirer'>✕</button>";
+        chip.innerHTML = `<span>📄 ${escapeHtml(file.name)} <span style='color:var(--text3)'>(${file.lang})</span></span><button onclick="removeFile(${i})" title="Retirer">✕</button>`;
         uploadPreview.appendChild(chip);
     });
 }
 
-function removeFile(index) {
-    attachedFiles.splice(index, 1);
-    renderUploadPreview();
-}
+window.removeFile = (i) => { attachedFiles.splice(i, 1); renderUploadPreview(); };
 
 // ============================================================
-//  AFFICHAGE DES MESSAGES
+//  AFFICHAGE MESSAGES
 // ============================================================
 
 function addMessage(role, content, isHtml) {
-    const msgDiv = document.createElement("div");
+    const msgDiv  = document.createElement("div");
     msgDiv.className = "msg " + role;
-
-    const label = document.createElement("span");
+    const label   = document.createElement("span");
     label.className = "msg-label";
     label.textContent = role === "user" ? "Toi" : "Pensée";
-
-    const bubble = document.createElement("div");
+    const bubble  = document.createElement("div");
     bubble.className = "bubble";
     if (isHtml) bubble.innerHTML = content;
-    else bubble.textContent = content;
-
+    else        bubble.textContent = content;
     msgDiv.appendChild(label);
     msgDiv.appendChild(bubble);
 
     if (role === "bot") {
-        const actionsDiv = document.createElement("div");
-        actionsDiv.className = "msg-actions";
-
+        const actions = document.createElement("div");
+        actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
         copyBtn.className = "copy-btn";
         copyBtn.innerHTML = "📋 Copier";
-
-        copyBtn.addEventListener("click", async function() {
+        copyBtn.addEventListener("click", async () => {
             try {
                 await navigator.clipboard.writeText(bubble.innerText);
                 copyBtn.innerHTML = "✅ Copié !";
                 copyBtn.style.color = "var(--accent)";
-                setTimeout(() => {
-                    copyBtn.innerHTML = "📋 Copier";
-                    copyBtn.style.color = "";
-                }, 2000);
-            } catch (err) {
-                copyBtn.innerHTML = "❌ Erreur";
-            }
+                setTimeout(() => { copyBtn.innerHTML = "📋 Copier"; copyBtn.style.color = ""; }, 2000);
+            } catch { copyBtn.innerHTML = "❌ Erreur"; }
         });
-
-        actionsDiv.appendChild(copyBtn);
-        msgDiv.appendChild(actionsDiv);
+        actions.appendChild(copyBtn);
+        msgDiv.appendChild(actions);
     }
 
     messagesEl.appendChild(msgDiv);
@@ -426,27 +376,18 @@ function addMessage(role, content, isHtml) {
 function addUserMessageWithFiles(text, files) {
     const msgDiv = document.createElement("div");
     msgDiv.className = "msg user";
-
-    const label = document.createElement("span");
+    const label  = document.createElement("span");
     label.className = "msg-label";
     label.textContent = "Toi";
-
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-
-    files.forEach(function(file) {
+    files.forEach(file => {
         const chip = document.createElement("div");
         chip.className = "file-chip";
-        chip.innerHTML = "<span class='file-chip-icon'>📄</span>" + escapeHtml(file.name) + " <span style='opacity:0.6'>(" + file.lang + ")</span>";
+        chip.innerHTML = `<span>📄</span>${escapeHtml(file.name)} <span style='opacity:0.6'>(${file.lang})</span>`;
         bubble.appendChild(chip);
     });
-
-    if (text) {
-        const p = document.createElement("div");
-        p.textContent = text;
-        bubble.appendChild(p);
-    }
-
+    if (text) { const p = document.createElement("div"); p.textContent = text; bubble.appendChild(p); }
     msgDiv.appendChild(label);
     msgDiv.appendChild(bubble);
     messagesEl.appendChild(msgDiv);
@@ -454,7 +395,7 @@ function addUserMessageWithFiles(text, files) {
 }
 
 function showTyping() {
-    const div = document.createElement("div");
+    const div   = document.createElement("div");
     div.className = "msg bot";
     div.id = "typing-indicator";
     const label = document.createElement("span");
@@ -475,99 +416,105 @@ function removeTyping() {
 }
 
 // ============================================================
-//  APPEL API — /api/chat (Vercel serverless)
+//  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
+// ============================================================
+
+function buildPrompt(userMessage, files) {
+    const CONTEXT_WINDOW = 20; // 10 paires user/assistant
+    const recent = history.slice(-CONTEXT_WINDOW);
+
+    let prompt = CONFIG.systemPrompt + "\n\n";
+
+    // Fichiers texte injectés dans le prompt
+    if (files && files.length > 0) {
+        prompt += "### FICHIERS JOINTS (PRIORITÉ HAUTE) :\n\n";
+        files.forEach(file => {
+            if (file.content?.type === 'text') {
+                prompt += `DOCUMENT : ${file.name}\nCONTENU :\n${file.content.data}\n---\n\n`;
+            } else {
+                prompt += `DOCUMENT BINAIRE : ${file.name} (traité via inline_data)\n---\n\n`;
+            }
+        });
+    }
+
+    // Historique récent = contexte explicite pour l'IA
+    if (recent.length > 0) {
+        prompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
+        recent.forEach(msg => {
+            const role = msg.role === 'user' ? 'Utilisateur' : 'Pensée';
+            prompt += `[${role}]: ${msg.content}\n\n`;
+        });
+    }
+
+    prompt += `### NOUVEAU MESSAGE :\n${userMessage}\n\n### RÉPONSE :\n`;
+    return prompt;
+}
+
+// ============================================================
+//  APPEL API — /api/chat (Vercel)
 // ============================================================
 
 async function callAPI(userMessage, files) {
-
     if (creditsLeft <= 0) {
         addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
         return;
     }
 
-    let fullPrompt = CONFIG.systemPrompt + "\n\n";
-
-    if (files && files.length > 0) {
-        fullPrompt += "### ANALYSE DE FICHIERS (PRIORITÉ HAUTE) :\n\n";
-        files.forEach(function(file) {
-            if (file.content?.type === 'text') {
-                fullPrompt += "DOCUMENT : " + file.name + "\n";
-                fullPrompt += "CONTENU :\n" + file.content.data + "\n---\n\n";
-            } else {
-                fullPrompt += "DOCUMENT BINAIRE : " + file.name + " (traité nativement)\n---\n\n";
-            }
-        });
-
-        history.forEach(function(msg) {
-            fullPrompt += (msg.role === "user" ? "### Utilisateur:\n" : "### Pensée:\n") + msg.content + "\n\n";
-        });
-    }
-
-    fullPrompt += "### ACTION REQUISE :\n" + userMessage + "\n\n### RÉPONSE DÉTAILLÉE :\n";
-
-    // Préparer les fichiers binaires pour l'envoi
+    const prompt = buildPrompt(userMessage, files);
     const binaryFiles = files
         .filter(f => f.content?.type === 'binary')
-        .map(f => ({ name: f.name, mime: f.content.mimeType, base64: f.content.data }));
+        .map(f => ({ name:f.name, mime:f.content.mimeType, base64:f.content.data }));
 
     try {
         const response = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                prompt: fullPrompt,
-                files: binaryFiles.length > 0 ? binaryFiles : undefined,
-                userId: currentUser?.id
+                prompt,
+                files: binaryFiles.length > 0 ? binaryFiles : undefined
             })
         });
 
         const rawText = await response.text();
         let data;
-        try {
-            data = JSON.parse(rawText);
-        } catch(e) {
-            addMessage("bot", "❌ Erreur serveur Vercel : " + rawText.slice(0, 200), false);
-            setStatus("err");
-            return;
+        try { data = JSON.parse(rawText); }
+        catch(e) {
+            addMessage("bot", "❌ Erreur serveur : " + rawText.slice(0, 200), false);
+            setStatus("err"); return;
         }
 
         if (data.error) {
             const errStr = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
             const errLow = errStr.toLowerCase();
-
-            if (errLow.includes("loading")) {
-                addMessage("bot", "⏳ Le service est en cours de démarrage. Attends 30 secondes et réessaie.", false);
-            } else if (errLow.includes("404") || errLow.includes("not found")) {
-                addMessage("bot", "❌ Modèle IA introuvable (404). Vérifie la configuration dans chat.js.", false);
-                setStatus("err");
-            } else if (errLow.includes("429") || errLow.includes("rate") || errLow.includes("quota") || errLow.includes("épuisés")) {
+            if (errLow.includes("loading"))
+                addMessage("bot", "⏳ Service en démarrage. Réessaie dans 30 secondes.", false);
+            else if (errLow.includes("404") || errLow.includes("not found")) {
+                addMessage("bot", "❌ Modèle introuvable. Vérifie la config Vercel.", false); setStatus("err");
+            } else if (errLow.includes("429") || errLow.includes("quota"))
                 addMessage("bot", "🚦 " + errStr, false);
-            } else if (errLow.includes("configurée") || errLow.includes("api key") || errLow.includes("api_key")) {
-                addMessage("bot", "🔑 Clé API manquante. Vérifie les variables d'environnement sur Vercel.", false);
-                setStatus("err");
+            else if (errLow.includes("api key") || errLow.includes("absente")) {
+                addMessage("bot", "🔑 Clé API manquante sur Vercel.", false); setStatus("err");
             } else {
-                addMessage("bot", "Erreur serveur : " + errStr, false);
-                setStatus("err");
+                addMessage("bot", "Erreur : " + errStr, false); setStatus("err");
             }
             return;
         }
 
         let reply = "";
-        if (Array.isArray(data) && data[0] && data[0].generated_text) {
-            reply = data[0].generated_text;
-        } else if (data.generated_text) {
-            reply = data.generated_text;
-        } else {
-            reply = "Aucune réponse reçue. Réessaie.";
-        }
+        if (Array.isArray(data) && data[0]?.generated_text) reply = data[0].generated_text;
+        else if (data.generated_text) reply = data.generated_text;
+        else reply = "Aucune réponse reçue. Réessaie.";
 
-        reply = reply.replace(/### (Utilisateur|Pensée):.*/gs, "").trim();
+        // Nettoyer les artefacts de prompt éventuels
+        reply = reply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
 
-        history.push({ role: "user", content: userMessage });
+        // Persister dans l'historique localStorage
+        history.push({ role: "user",      content: userMessage });
         history.push({ role: "assistant", content: reply });
-        if (history.length > 40) history.splice(0, 2);
+        saveHistoryToStorage();
 
         creditsLeft--;
+        saveCreditsToStorage();
         updateCredits();
 
         addMessage("bot", formatResponse(reply), true);
@@ -576,31 +523,26 @@ async function callAPI(userMessage, files) {
     } catch (error) {
         addMessage("bot", "❌ Erreur réseau : " + error.message, false);
         setStatus("err");
-        console.error("Erreur Pensée IA:", error);
     }
 }
 
 // ============================================================
-//  ENVOI DU MESSAGE
+//  ENVOI
 // ============================================================
 
 async function sendMessage() {
-    const text = userInput.value.trim();
+    const text  = userInput.value.trim();
     const files = attachedFiles.slice();
-
-    if (!text && files.length === 0) return;
+    if (!text && !files.length) return;
     if (sendBtn.disabled) return;
 
-    const suggestionsEl = document.getElementById("suggestions");
-    if (suggestionsEl) suggestionsEl.style.display = "none";
+    const sug = document.getElementById("suggestions");
+    if (sug) sug.style.display = "none";
 
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
 
-    if (files.length > 0) {
-        addUserMessageWithFiles(text, files);
-    } else {
-        addMessage("user", text, false);
-    }
+    if (files.length > 0) addUserMessageWithFiles(text, files);
+    else addMessage("user", text, false);
 
     userInput.value = "";
     userInput.style.height = "auto";
@@ -612,8 +554,7 @@ async function sendMessage() {
     sendBtn.textContent = "...";
     showTyping();
 
-    await new Promise(resolve => setTimeout(resolve, 0));
-
+    await new Promise(r => setTimeout(r, 0));
     await callAPI(messageText, files);
 
     removeTyping();
@@ -625,50 +566,33 @@ async function sendMessage() {
 }
 
 // ============================================================
-//  SUGGESTIONS & ÉVÉNEMENTS
+//  ÉVÉNEMENTS
 // ============================================================
-function useSuggestion(el) {
-    userInput.value = el.textContent;
-    userInput.focus();
-}
 
-uploadBtn.addEventListener("click", function() { fileInput.click(); });
+window.useSuggestion = (el) => { userInput.value = el.textContent; userInput.focus(); };
 
-fileInput.addEventListener("change", function() {
-    if (fileInput.files.length > 0) addFiles(fileInput.files);
-});
+uploadBtn.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => { if (fileInput.files.length) addFiles(fileInput.files); });
 
-document.addEventListener("dragover", function(e) {
-    e.preventDefault();
-    dropOverlay.classList.add("visible");
-});
-
-document.addEventListener("dragleave", function(e) {
-    if (e.relatedTarget === null) dropOverlay.classList.remove("visible");
-});
-
-document.addEventListener("drop", function(e) {
+document.addEventListener("dragover",  (e) => { e.preventDefault(); dropOverlay.classList.add("visible"); });
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) dropOverlay.classList.remove("visible"); });
+document.addEventListener("drop", (e) => {
     e.preventDefault();
     dropOverlay.classList.remove("visible");
-    if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 });
 
 sendBtn.addEventListener("click", sendMessage);
-
-userInput.addEventListener("keydown", function(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
+userInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
-
 userInput.addEventListener("input", function() {
     this.style.height = "auto";
     this.style.height = Math.min(this.scrollHeight, 120) + "px";
 });
 
 // ============================================================
-//  INITIALISATION
+//  INIT
 // ============================================================
 updateCredits();
 setStatus("ok");
