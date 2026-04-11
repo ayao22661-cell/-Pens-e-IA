@@ -302,8 +302,9 @@
             font-family: 'JetBrains Mono', monospace;
             letter-spacing: 0.06em;
             text-transform: uppercase;
+            white-space: nowrap;
         }
-        #clearBtn:hover { color: var(--yellow); border-color: rgba(240,192,64,0.4); background: rgba(240,192,64,0.05); }
+        #clearBtn:hover { color: var(--accent); border-color: rgba(0,229,160,0.4); background: var(--accent-dim); }
 
         #logoutBtn {
             background: none;
@@ -718,6 +719,26 @@
         /* ============================================================
            MOBILE
            ============================================================ */
+        /* Barre d'action mobile — nouvelle conversation */
+        #mobileActionBar {
+            display: none;
+        }
+        #newConvBtn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text3);
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            transition: 0.2s;
+            white-space: nowrap;
+        }
+        #newConvBtn:hover { color: var(--accent); border-color: rgba(0,229,160,0.4); background: var(--accent-dim); }
+
         @media (max-width: 480px) {
             .login-card { padding: 36px 22px 32px; }
             .msg { max-width: 92%; }
@@ -729,7 +750,9 @@
             header { padding: 11px 14px; }
             footer { display: none; }
             #suggestions { padding: 0 14px 14px; }
-            #clearBtn { display: none; }
+            /* clearBtn reste visible sur mobile — réduit */
+            #clearBtn { font-size: 9px; padding: 5px 8px; }
+            #logoutBtn { font-size: 9px; padding: 5px 8px; }
         }
     </style>
 </head>
@@ -779,7 +802,7 @@
         </div>
         <div class="header-right">
             <span id="statusBadge"></span>
-            <button id="clearBtn" title="Effacer la conversation">Effacer</button>
+            <button id="clearBtn" title="Nouvelle conversation">+ Nouveau</button>
             <button id="logoutBtn">Déconnexion</button>
         </div>
     </header>
@@ -798,13 +821,7 @@
          MESSAGES
          ============================================================ -->
     <div id="messages">
-        <div class="msg bot">
-            <span class="msg-label">Pensée</span>
-            <div class="bubble">
-                Bonjour. Je suis <strong>Pensée</strong> — ton IA personnelle.<br><br>
-                Programmation, culture, science, storytelling, stratégie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.
-            </div>
-        </div>
+        <!-- Messages injectés dynamiquement par ia.js -->
     </div>
 
     <!-- SUGGESTIONS -->
