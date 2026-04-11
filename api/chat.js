@@ -12,21 +12,44 @@ export default async function handler(req, res) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return res.status(401).json({ error: "Clé API absente." });
 
-    // Cascade de modèles — Gemini EN PREMIER (google_search dispo), Gemma en dernier recours
+    // ─────────────────────────────────────────────────────────
+    //  CASCADE DE MODÈLES
+    //  • Gemini 2.x  → API v1beta  (google_search disponible)
+    //  • Gemini 3.x  → API v1      (google_search disponible)
+    //  • Gemma       → API v1beta  (PAS de google_search)
+    // ─────────────────────────────────────────────────────────
     const modelsToTry = [
-        // 1. GEMINI PRIORITAIRES — google_search disponible
-        "gemini-2.5-flash",                      // 250k TPM — meilleur raisonnement
-        "gemini-2.5-flash-lite-preview-06-17",   // 250k TPM — backup léger (Gemini 2.5 Flash Lite)
-        "gemini-2.0-flash",                      // backup Gemini 2 Flash
-        "gemini-2.0-flash-lite",                 // backup Gemini 2 Flash Lite
+        // ── 1. GEMINI 2.5 — meilleur raisonnement (v1beta) ──
+        "gemini-2.5-flash",                    // 250k TPM — priorité absolue
+        "gemini-2.5-flash-lite-preview-06-17", // 250k TPM — backup léger
 
-        // 2. GEMMA — ⚠️ PAS de google_search, mémoire figée uniquement
+        // ── 2. GEMINI 2.0 — stables et rapides (v1beta) ──
+        "gemini-2.0-flash",                    // backup Gemini 2 Flash
+        "gemini-2.0-flash-lite",               // backup Gemini 2 Flash Lite
+
+        // ── 3. GEMINI 1.5 — fallback stable (v1beta) ──
+        "gemini-1.5-flash",                    // très fiable, large dispo
+        "gemini-1.5-pro",                      // plus lent mais robuste
+
+        // ── 4. GEMINI 3 — preview (v1 requis) ──
+        "gemini-3-flash-preview",              // frontier-class, Preview
+        "gemini-3.1-flash-lite-preview",       // version lite Gemini 3.1
+
+        // ── 5. GEMMA — ⚠️ PAS de google_search, mémoire figée ──
         // Utilisés seulement si TOUS les modèles Gemini sont saturés
-        "gemma-3-27b-it",        // 15k TPM (Risque de crash sur long historique)
+        "gemma-4-31b-it",                      // Unlimited TPM
+        "gemma-4-26b-it",                      // Unlimited TPM
+        "gemma-3-27b-it",                      // 15k TPM
         "gemma-3-12b-it",
         "gemma-3-4b-it",
         "gemma-3-2b-it"
     ];
+
+    // Gemini 3.x nécessite l'API v1 (pas v1beta)
+    function getApiVersion(modelName) {
+        if (modelName.startsWith("gemini-3")) return "v1";
+        return "v1beta";
+    }
 
     async function callGemini(modelName, attachedFiles) {
         const parts = [{ text: prompt }];
@@ -45,9 +68,9 @@ export default async function handler(req, res) {
             });
         }
 
-        // Construire le body — google_search uniquement sur les modèles Gemini
-        // (les modèles Gemma ne supportent pas les tools)
         const isGemma = modelName.startsWith("gemma");
+        const apiVersion = getApiVersion(modelName);
+
         const body = {
             contents: [{ parts }],
             generationConfig: {
@@ -57,15 +80,16 @@ export default async function handler(req, res) {
                 topK: 64
             }
         };
-        // Recherche web activée pour les modèles Gemini uniquement
-        // google_search est un outil natif Gemini — toolConfig mode "ANY" est incompatible avec lui
+
+        // google_search activé sur tous les modèles Gemini (pas Gemma)
+        // google_search est un outil natif — toolConfig mode "ANY" est incompatible avec lui
         if (!isGemma) {
             body.tools = [{ google_search: {} }];
             // Mode AUTO : Gemini décide, mais le prompt système l'incite à toujours chercher
         }
 
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -106,7 +130,7 @@ export default async function handler(req, res) {
             }
 
             if (isOverloaded(data, response) || response.status === 404) {
-                console.warn(`[INFO] ${model} indisponible — essai suivant...`);
+                console.warn(`[INFO] ${model} (${getApiVersion(model)}) indisponible — essai suivant...`);
                 continue;
             }
 
