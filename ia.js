@@ -423,7 +423,11 @@ function buildPrompt(userMessage, files) {
     const CONTEXT_WINDOW = 20; // 10 paires user/assistant
     const recent = history.slice(-CONTEXT_WINDOW);
 
-    let prompt = CONFIG.systemPrompt + "\n\n";
+    // FIX #1 — Injection de la date actuelle pour que Gemini ne réponde pas depuis sa mémoire figée
+    const today = new Date().toLocaleDateString('fr-FR', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    let prompt = `[DATE ACTUELLE : ${today}]\n\n` + CONFIG.systemPrompt + "\n\n";
 
     // Fichiers texte injectés dans le prompt
     if (files && files.length > 0) {
