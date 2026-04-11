@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
     // Cascade de modèles — Gemini EN PREMIER (google_search dispo), Gemma en dernier recours
     const modelsToTry = [
-        // 1. GEMINI PRIORITAIRES — google_search actif + forcé via toolConfig
+        // 1. GEMINI PRIORITAIRES — google_search disponible (forcé via prompt dans ia.js)
         "gemini-2.5-flash",      // 250k TPM — meilleur raisonnement
         "gemini-3-flash",        // 250k TPM — backup principal
         "gemini-3.1-flash-lite", // 250k TPM — backup léger
@@ -58,12 +58,11 @@ export default async function handler(req, res) {
                 topK: 64
             }
         };
-        // Recherche web activée et FORCÉE pour les modèles Gemini uniquement
+        // Recherche web activée pour les modèles Gemini uniquement
+        // google_search est un outil natif Gemini — toolConfig mode "ANY" est incompatible avec lui
         if (!isGemma) {
             body.tools = [{ google_search: {} }];
-            body.toolConfig = {
-                functionCallingConfig: { mode: "ANY" } // Force l'usage du tool — sans ça, Gemini décide seul
-            };
+            // Mode AUTO : Gemini décide, mais le prompt système l'incite à toujours chercher
         }
 
         const response = await fetch(
