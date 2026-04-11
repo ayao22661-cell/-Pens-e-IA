@@ -14,12 +14,18 @@ export default async function handler(req, res) {
 
     // Cascade de modèles — du plus capable au plus léger
     const modelsToTry = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.5-flash-lite",
-        "gemma-3-27b-it",
-        "gemma-3-12b-it",
-        "gemma-3-4b-it"
+        // 1. LES POIDS LOURDS (Ne bloqueront jamais sur l'historique)
+        "gemini-3.1-flash-lite", // 250k TPM
+        "gemma-4-31b-it",        // Illimité TPM
+        "gemma-4-26b-it",        // Illimité TPM
+        "gemini-3-flash",        // 250k TPM
+        "gemini-2.5-flash",      // 250k TPM
+
+        // 2. LES PETITS TUYAUX (En tout dernier recours)
+        "gemma-3-27b-it",        // 15k TPM (Risque de crash sur long historique)
+        "gemma-3-12b-it",        
+        "gemma-3-4b-it",         
+        "gemma-3-2b-it"
     ];
 
     async function callGemini(modelName, attachedFiles) {
