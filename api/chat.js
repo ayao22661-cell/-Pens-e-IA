@@ -1,6 +1,6 @@
 // ============================================================
 //  PENSÉE IA — api/chat.js (Vercel Edge & Streaming)
-//  Recherche web activée, modèles cachés
+//  Recherche web activée, modèles cachés, cascade blindée
 // ============================================================
 
 export const config = {
@@ -26,13 +26,11 @@ export default async function handler(req) {
 
     const modelsToTry = [
         "gemini-2.5-flash",
-        "gemini-2.5-flash-lite-preview-06-17",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite",
         "gemini-1.5-flash",
         "gemini-1.5-pro",
         "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite-preview",
         "gemma-4-31b-it",
         "gemma-4-26b-it",
         "gemma-3-27b-it",
@@ -142,7 +140,8 @@ export default async function handler(req) {
                 });
             }
 
-            if (response.status === 429 || response.status >= 500) {
+            // Bouclier anti-crash : on ignore les 404 (modèle introuvable), 400 (outil non supporté), 429 (surcharge) et 500+ (serveur mort)
+            if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
                 continue;
             }
 
