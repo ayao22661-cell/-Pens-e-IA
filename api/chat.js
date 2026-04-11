@@ -12,19 +12,20 @@ export default async function handler(req, res) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return res.status(401).json({ error: "Clé API absente." });
 
-    // Cascade de modèles — du plus capable au plus léger
+    // Cascade de modèles — Gemini EN PREMIER (google_search dispo), Gemma en dernier recours
     const modelsToTry = [
-        // 1. LES POIDS LOURDS (Ne bloqueront jamais sur l'historique)
-        "gemini-3.1-flash-lite", // 250k TPM
+        // 1. GEMINI PRIORITAIRES — google_search actif + forcé via toolConfig
+        "gemini-2.5-flash",      // 250k TPM — meilleur raisonnement
+        "gemini-3-flash",        // 250k TPM — backup principal
+        "gemini-3.1-flash-lite", // 250k TPM — backup léger
+
+        // 2. GEMMA — ⚠️ PAS de google_search, mémoire figée uniquement
+        // Utilisés seulement si TOUS les modèles Gemini sont saturés
         "gemma-4-31b-it",        // Illimité TPM
         "gemma-4-26b-it",        // Illimité TPM
-        "gemini-3-flash",        // 250k TPM
-        "gemini-2.5-flash",      // 250k TPM
-
-        // 2. LES PETITS TUYAUX (En tout dernier recours)
         "gemma-3-27b-it",        // 15k TPM (Risque de crash sur long historique)
-        "gemma-3-12b-it",        
-        "gemma-3-4b-it",         
+        "gemma-3-12b-it",
+        "gemma-3-4b-it",
         "gemma-3-2b-it"
     ];
 
@@ -57,9 +58,12 @@ export default async function handler(req, res) {
                 topK: 64
             }
         };
-        // Recherche web activée pour les modèles Gemini uniquement
+        // Recherche web activée et FORCÉE pour les modèles Gemini uniquement
         if (!isGemma) {
             body.tools = [{ google_search: {} }];
+            body.toolConfig = {
+                functionCallingConfig: { mode: "ANY" } // Force l'usage du tool — sans ça, Gemini décide seul
+            };
         }
 
         const response = await fetch(
@@ -94,7 +98,13 @@ export default async function handler(req, res) {
                 const parts = data.candidates[0].content?.parts || [];
                 const reply = parts.map(p => p.text || "").join("").trim() || "Réponse vide.";
 
-                return res.status(200).json([{ generated_text: reply, used_model: model }]);
+                // Avertir si on est sur Gemma (pas de google_search)
+                const isGemmaModel = model.startsWith("gemma");
+                const prefix = isGemmaModel
+                    ? "⚠️ *Mode mémoire — recherche web indisponible sur ce modèle.*\n\n"
+                    : "";
+
+                return res.status(200).json([{ generated_text: prefix + reply, used_model: model }]);
             }
 
             if (isOverloaded(data, response) || response.status === 404) {
