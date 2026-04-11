@@ -472,13 +472,12 @@ function buildPrompt(userMessage, files) {
     return prompt;
 }
 
-// ============================================================
-//  APPEL API — /api/chat (Vercel)
+//  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
 
 async function callAPI(userMessage, files) {
     if (creditsLeft <= 0) {
-        addMessage("bot", "\u26a0\ufe0f Tes cr\u00e9dits du jour sont \u00e9puis\u00e9s. Reviens demain !", false);
+        addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
         return;
     }
 
@@ -497,51 +496,78 @@ async function callAPI(userMessage, files) {
             })
         });
 
-        const rawText = await response.text();
-        let data;
-        try { data = JSON.parse(rawText); }
-        catch(e) {
-            addMessage("bot", "\u274c Erreur serveur : " + rawText.slice(0, 200), false);
-            setStatus("err"); return;
-        }
-
-        if (data.error) {
-            const errStr = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
-            const errLow = errStr.toLowerCase();
-            if (errLow.includes("loading"))
-                addMessage("bot", "\u23f3 Service en d\u00e9marrage. R\u00e9essaie dans 30 secondes.", false);
-            else if (errLow.includes("404") || errLow.includes("not found")) {
-                addMessage("bot", "\u274c Mod\u00e8le introuvable. V\u00e9rifie la config Vercel.", false); setStatus("err");
-            } else if (errLow.includes("429") || errLow.includes("quota"))
-                addMessage("bot", "\ud83d\udea6 " + errStr, false);
-            else if (errLow.includes("api key") || errLow.includes("absente")) {
-                addMessage("bot", "\ud83d\udd11 Cl\u00e9 API manquante sur Vercel.", false); setStatus("err");
-            } else {
-                addMessage("bot", "Erreur : " + errStr, false); setStatus("err");
-            }
+        if (!response.ok) {
+            let errMsg = "Erreur HTTP " + response.status;
+            try {
+                const errData = await response.json();
+                errMsg = errData.error || errMsg;
+            } catch(e) {}
+            
+            addMessage("bot", "❌ Erreur : " + errMsg, false);
+            setStatus("err");
             return;
         }
 
-        let reply = "";
-        if (Array.isArray(data) && data[0] && data[0].generated_text) reply = data[0].generated_text;
-        else if (data.generated_text) reply = data.generated_text;
-        else reply = "Aucune r\u00e9ponse re\u00e7ue. R\u00e9essaie.";
+        removeTyping();
+        
+        // Création de l'interface de la bulle vide pour le flux
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "msg bot";
+        const label = document.createElement("span");
+        label.className = "msg-label";
+        label.textContent = "Pensée";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        msgDiv.appendChild(label);
+        msgDiv.appendChild(bubble);
+        messagesEl.appendChild(msgDiv);
 
-        reply = reply.replace(/\[(Utilisateur|Pens\u00e9e)\]:[\s\S]*$/gm, "").trim();
+        // Lecture du flux binaire en direct
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let fullReply = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            fullReply += decoder.decode(value, { stream: true });
+            bubble.innerHTML = formatResponse(fullReply);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        // Nettoyage et finalisation du message
+        fullReply = fullReply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
+        bubble.innerHTML = formatResponse(fullReply);
+
+        const actions = document.createElement("div");
+        actions.className = "msg-actions";
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.innerHTML = "📋 Copier";
+        copyBtn.addEventListener("click", async function() {
+            try {
+                await navigator.clipboard.writeText(bubble.innerText);
+                copyBtn.innerHTML  = "✅ Copié !";
+                copyBtn.style.color = "var(--accent)";
+                setTimeout(function() { copyBtn.innerHTML = "📋 Copier"; copyBtn.style.color = ""; }, 2000);
+            } catch(e) { copyBtn.innerHTML = "❌ Erreur"; }
+        });
+        actions.appendChild(copyBtn);
+        msgDiv.appendChild(actions);
 
         history.push({ role: "user",      content: userMessage });
-        history.push({ role: "assistant", content: reply });
+        history.push({ role: "assistant", content: fullReply });
         saveHistoryToStorage();
 
         creditsLeft--;
         saveCreditsToStorage();
         updateCredits();
-
-        addMessage("bot", formatResponse(reply), true);
         if (creditsLeft > 0) setStatus("ok");
 
     } catch(error) {
-        addMessage("bot", "\u274c Erreur r\u00e9seau : " + error.message, false);
+        removeTyping();
+        addMessage("bot", "❌ Erreur réseau : " + error.message, false);
         setStatus("err");
     }
 }
