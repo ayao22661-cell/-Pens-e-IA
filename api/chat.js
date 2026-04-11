@@ -44,6 +44,13 @@ export default async function handler(req) {
         return "v1beta";
     }
 
+            // Filtre les verbalisations du protocole interne avant envoi au client
+    function filterThoughts(text) {
+        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+        text = text.replace(/^[\*\-]\s*\*?(Intent|Root|Architecture|Voice|Language|Format|Constraint|INTENT|RACINE|SOLUTION|PLUS|ANTICIPATION)[^\n]*/gim, '');
+        text = text.replace(/\n{3,}/g, '\n\n');
+        return text.trim();
+    }
     for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
         const apiVersion = getApiVersion(model);
@@ -112,10 +119,16 @@ export default async function handler(req) {
                                         if (dataStr === '[DONE]') continue;
                                         try {
                                             const dataObj = JSON.parse(dataStr);
-                                            const textChunk = dataObj.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                                            // Ignorer les thinking tokens natifs (Gemini 2.5 Flash)
+                                            const part = dataObj.candidates?.[0]?.content?.parts?.[0];
+                                            if (part?.thought === true) continue;
+                                            // Sauter les thinking tokens natifs (Gemini 2.5 Flash)
+                                            const thinkPart = dataObj.candidates?.[0]?.content?.parts?.[0];
+                                            if (thinkPart?.thought === true) continue;
+                                            const textChunk = thinkPart?.text || "";
                                             if (textChunk) {
-                                                // On n'envoie QUE le texte, aucune métadonnée JSON
-                                                controller.enqueue(new TextEncoder().encode(textChunk));
+                                                const filtered = filterThoughts(textChunk);
+                                                if (filtered) controller.enqueue(new TextEncoder().encode(filtered));
                                             }
                                         } catch (e) {
                                             // Ignorer les fragments JSON incomplets
