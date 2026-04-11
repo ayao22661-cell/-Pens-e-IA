@@ -136,8 +136,6 @@ logoutBtn.addEventListener("click", () => {
     }
 });
 
-checkLocalAuth();
-
 // ============================================================
 //  ÉTAT & ÉLÉMENTS
 // ============================================================
@@ -630,3 +628,6 @@ userInput.addEventListener("input", function() {
 // ============================================================
 updateCredits();
 setStatus("ok");
+
+// Init — appelé en dernier pour que tous les éléments DOM soient disponibles
+checkLocalAuth();
