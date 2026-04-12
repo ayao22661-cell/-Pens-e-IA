@@ -499,12 +499,22 @@ async function callAPI(userMessage, files) {
         .map(function(f) { return { name: f.name, mime: f.content.mimeType, base64: f.content.data }; });
 
     try {
+        const temporalKeywords = [
+            "aujourd'hui", "ce mois", "cette semaine", "cette année", "récent", "récente",
+            "dernière", "dernier", "maintenant", "actuellement", "actuel", "actuelle",
+            "nouveau", "nouvelle", "nouveaux", "nouvelles", "2025", "2026", "vient de",
+            "dernières nouvelles", "quoi de neuf", "tendance", "tendances"
+        ];
+        const needsSearch = temporalKeywords.some(function(kw) { return userMessage.toLowerCase().includes(kw); });
+
+        // 2. On intègre le paramètre dans le payload JSON
         const response = await fetch("/api/chat", {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
             body:    JSON.stringify({
                 prompt: prompt,
-                files:  binaryFiles.length > 0 ? binaryFiles : undefined
+                files:  binaryFiles.length > 0 ? binaryFiles : undefined,
+                requireWebSearch: needsSearch // LE DÉCLENCHEUR DU GATEKEEPER BACKEND
             })
         });
 
