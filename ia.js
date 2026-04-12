@@ -266,9 +266,6 @@ function stripThinkBlocks(text) {
 
 function formatResponse(text) {
     // FIX #1 — Gestion du bloc <think> en streaming :
-    // • Bloc FERMÉ (</think> présent) → suppression totale, ne doit jamais s'afficher
-    // • Bloc OUVERT (stream en cours, pas encore de </think>) → masquage via span invisible
-    //   Le contenu qui arrive APRÈS </think> s'affiche immédiatement au prochain chunk
     if (/<\/think>/i.test(text)) {
         text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
     } else if (/<think>/i.test(text)) {
@@ -441,7 +438,10 @@ function buildPrompt(userMessage, files) {
     const searchInstruction = needsSearch
         ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualit\u00e9 r\u00e9cente. Tu DOIS utiliser google_search pour r\u00e9pondre. Ne r\u00e9ponds JAMAIS depuis ta m\u00e9moire d'entra\u00eenement sur ce sujet.]\n"
         : "";
-    let prompt = "[DATE ACTUELLE : " + today + "]" + searchInstruction + "\n\n" + CONFIG.systemPrompt + "\n\n";
+    
+    // CORRECTION : On ne met plus le systemPrompt au début du message utilisateur.
+    // Il sera envoyé proprement et séparément à l'API backend via la propriété "system"
+    let prompt = "[DATE ACTUELLE : " + today + "]" + searchInstruction + "\n\n";
 
     if (files && files.length > 0) {
         prompt += "### FICHIERS JOINTS (PRIORIT\u00c9 HAUTE) :\n\n";
@@ -457,12 +457,14 @@ function buildPrompt(userMessage, files) {
     if (recent.length > 0) {
         prompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
         recent.forEach(function(msg) {
-            const role = msg.role === "user" ? "Utilisateur" : "Pens\u00e9e";
-            prompt += "[" + role + "]: " + msg.content + "\n\n";
+            // CORRECTION : Changement de la syntaxe pour éviter le trigger `[Pensée]:`
+            const role = msg.role === "user" ? "Utilisateur" : "Pensée";
+            prompt += "--- " + role + " ---\n" + msg.content + "\n\n";
         });
     }
 
-    prompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### R\u00c9PONSE :\n";
+    // CORRECTION : On sépare clairement le nouveau message du reste
+    prompt += "--- Utilisateur ---\n" + userMessage + "\n\n--- Ta réponse directe ---\n";
     return prompt;
 }
 
@@ -487,6 +489,7 @@ async function callAPI(userMessage, files) {
             headers: { "Content-Type": "application/json" },
             body:    JSON.stringify({
                 prompt: prompt,
+                system: CONFIG.systemPrompt, // CORRECTION : Envoi du prompt système de manière isolée
                 files:  binaryFiles.length > 0 ? binaryFiles : undefined
             })
         });
@@ -505,7 +508,6 @@ async function callAPI(userMessage, files) {
 
         removeTyping();
 
-        // Création de la bulle de réponse — identique à l'original
         const msgDiv = document.createElement("div");
         msgDiv.className = "msg bot";
         const label = document.createElement("span");
@@ -517,7 +519,6 @@ async function callAPI(userMessage, files) {
         msgDiv.appendChild(bubble);
         messagesEl.appendChild(msgDiv);
 
-        // Lecture du flux en direct — chunk par chunk, affichage progressif
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let fullReply = "";
@@ -530,8 +531,8 @@ async function callAPI(userMessage, files) {
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // Nettoyage final du message complet
-        fullReply = fullReply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
+        // CORRECTION : Retrait de la regex qui effaçait la réponse entière (replace(/\[(Utilisateur|Pensée)\... )
+        fullReply = fullReply.trim();
         bubble.innerHTML = formatResponse(fullReply);
 
         // Bouton copier
@@ -585,7 +586,6 @@ async function sendMessage() {
     const files = attachedFiles.slice();
     if (!text && !files.length) return;
 
-    // FIX #4 : verrou booléen — ni double-clic ni Enter rapide ne peuvent déclencher deux envois
     if (isSending) return;
     isSending = true;
 
@@ -602,7 +602,6 @@ async function sendMessage() {
     attachedFiles          = [];
     renderUploadPreview();
 
-    // FIX #2 : fileInput.value = null plus fiable que "" sur Safari mobile
     fileInput.value = null;
 
     sendBtn.disabled    = true;
@@ -614,8 +613,6 @@ async function sendMessage() {
     try {
         await callAPI(messageText, files);
     } finally {
-        // FIX #4 + FIX #A : le verrou et le bouton se libèrent TOUJOURS,
-        // même si callAPI fait un return anticipé sur erreur HTTP
         isSending = false;
         removeTyping();
         if (creditsLeft > 0) {
