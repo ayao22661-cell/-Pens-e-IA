@@ -13,7 +13,8 @@ export default async function handler(req) {
     }
 
     const bodyReq = await req.json().catch(() => ({}));
-    const { prompt, files } = bodyReq;
+    // CORRECTION : Extraction du paramètre system
+    const { prompt, files, system } = bodyReq;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
@@ -24,9 +25,6 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
-    // FIX #5 : suppression des modèles inexistants (gemini-3-flash, gemini-3.1-flash-lite)
-    // qui généraient des 404 systématiques et ralentissaient chaque requête
-    // FIX #6 : version API mappée explicitement par modèle, plus de logique startsWith fragile
     const modelsToTry = [
         // --- Modèles Flash (Privilégier la performance) ---
         { name: "gemini-2.5-flash",      apiVersion: "v1beta" }, // 5 RPM
@@ -62,6 +60,12 @@ export default async function handler(req) {
             });
         }
 
+        // CORRECTION ARCHITECTURALE : Séparation stricte de l'identité et du prompt utilisateur
+        if (system && isGemma) {
+            // Fallback propre pour les modèles open-weights qui ne supportent pas toujours systemInstruction
+            parts.unshift({ text: "INSTRUCTIONS SYSTÈME :\n" + system + "\n\n" });
+        }
+
         const body = {
             contents: [{ parts }],
             generationConfig: {
@@ -74,6 +78,13 @@ export default async function handler(req) {
 
         if (!isGemma) {
             body.tools = [{ google_search: {} }];
+            
+            // Implémentation native de l'instruction système pour l'API Gemini
+            if (system) {
+                body.systemInstruction = {
+                    parts: [{ text: system }]
+                };
+            }
         }
 
         const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
@@ -92,7 +103,6 @@ export default async function handler(req) {
                         const decoder = new TextDecoder();
                         let buffer = "";
 
-                        // Avertissement silencieux pour Gemma, sans révéler le nom du modèle
                         if (isGemma) {
                             controller.enqueue(new TextEncoder().encode("⚠️ *Mode mémoire local activé.*\n\n"));
                         }
@@ -139,12 +149,6 @@ export default async function handler(req) {
                 });
             }
 
-            // FIX #7 : 400 (requête malformée) et 429 (surcharge) traités différemment
-            // 404 = modèle introuvable → on passe au suivant
-            // 429 = surcharge temporaire → on passe au suivant (pas de retry sur le même)
-            // 400 = payload invalide pour CE modèle (outil non supporté) → on passe au suivant
-            // 500+ = serveur mort → on passe au suivant
-            // Toute autre erreur (401, 403...) = erreur structurelle → on remonte immédiatement
             if ([400, 404, 429].includes(response.status) || response.status >= 500) {
                 continue;
             }
