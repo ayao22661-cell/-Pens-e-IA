@@ -1,6 +1,6 @@
 // ============================================================
 //  PENSÉE IA — api/chat.js (Vercel Edge & Streaming)
-//  Cascade intégrale (12 modèles), Routage dynamique, Buffer anti-hallucination
+//  Recherche web activée, modèles cachés, cascade blindée
 // ============================================================
 
 export const config = {
@@ -13,7 +13,7 @@ export default async function handler(req) {
     }
 
     const bodyReq = await req.json().catch(() => ({}));
-    const { prompt, files, requireWebSearch = false } = bodyReq;
+    const { prompt, files } = bodyReq;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
@@ -24,24 +24,24 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
-    const baseModels = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-3-flash-preview",
-        "gemma-4-31b-it",
-        "gemma-4-26b-it",
-        "gemma-3-27b-it",
-        "gemma-3-12b-it",
-        "gemma-3-4b-it",
-        "gemma-3-2b-it"
-    ];
+    const modelsToTry = [
+        // --- Modèles Flash (Privilégier la performance) ---
+        "gemini-3-flash",          // 5 RPM
+        "gemini-2.5-flash",        // 5 RPM
 
-    const modelsToTry = requireWebSearch 
-        ? baseModels.filter(m => !m.startsWith("gemma")) 
-        : baseModels;
+        // --- Modèles Lite (Vitesse pure) ---
+        "gemini-3.1-flash-lite",   // 15 RPM
+        "gemini-2.5-flash-lite",   // 10 RPM
+
+        // --- Famille Gemma (Open-weights, sans recherche web) ---
+        "gemma-4-31b-it",          // 15 RPM
+        "gemma-4-26b-it",          // 15 RPM
+        "gemma-3-27b-it",          // 30 RPM
+        "gemma-3-12b-it",          // 30 RPM
+        "gemma-3-4b-it",           // 30 RPM
+        "gemma-3-2b-it",           // 30 RPM
+        "gemma-3-1b-it"            // 30 RPM (Tu avais oublié celui-ci !)
+    ];
 
     function getApiVersion(modelName) {
         if (modelName.startsWith("gemini-3")) return "v1";
@@ -94,11 +94,9 @@ export default async function handler(req) {
                     async start(controller) {
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
-                        let responseBuffer = ""; 
-                        
-                        let streamTextBuffer = "";
-                        const tagToHide = "[INSTRUCTION CRITIQUE : google_search]";
+                        let buffer = "";
 
+                        // Avertissement silencieux pour Gemma, sans révéler le nom du modèle
                         if (isGemma) {
                             controller.enqueue(new TextEncoder().encode("⚠️ *Mode mémoire local activé.*\n\n"));
                         }
@@ -108,9 +106,9 @@ export default async function handler(req) {
                                 const { done, value } = await reader.read();
                                 if (done) break;
 
-                                responseBuffer += decoder.decode(value, { stream: true });
-                                const lines = responseBuffer.split('\n');
-                                responseBuffer = lines.pop() || "";
+                                buffer += decoder.decode(value, { stream: true });
+                                const lines = buffer.split('\n');
+                                buffer = lines.pop() || "";
 
                                 for (const line of lines) {
                                     if (line.startsWith('data: ')) {
@@ -119,26 +117,9 @@ export default async function handler(req) {
                                         try {
                                             const dataObj = JSON.parse(dataStr);
                                             const textChunk = dataObj.candidates?.[0]?.content?.parts?.[0]?.text || "";
-                                            
                                             if (textChunk) {
-                                                streamTextBuffer += textChunk;
-
-                                                if (streamTextBuffer.includes("[")) {
-                                                    if (streamTextBuffer.includes(tagToHide)) {
-                                                        streamTextBuffer = streamTextBuffer.replace(tagToHide, "");
-                                                    } else if (streamTextBuffer.length > tagToHide.length + 15) {
-                                                        const lastBracket = streamTextBuffer.lastIndexOf("[");
-                                                        const safeToSend = streamTextBuffer.substring(0, lastBracket);
-                                                        
-                                                        if (safeToSend) {
-                                                            controller.enqueue(new TextEncoder().encode(safeToSend));
-                                                            streamTextBuffer = streamTextBuffer.substring(lastBracket);
-                                                        }
-                                                    }
-                                                } else {
-                                                    controller.enqueue(new TextEncoder().encode(streamTextBuffer));
-                                                    streamTextBuffer = "";
-                                                }
+                                                // On n'envoie QUE le texte, aucune métadonnée JSON
+                                                controller.enqueue(new TextEncoder().encode(textChunk));
                                             }
                                         } catch (e) {
                                             // Ignorer les fragments JSON incomplets
@@ -146,11 +127,6 @@ export default async function handler(req) {
                                     }
                                 }
                             }
-                            
-                            if (streamTextBuffer) {
-                                controller.enqueue(new TextEncoder().encode(streamTextBuffer.replace(tagToHide, "")));
-                            }
-
                         } catch (err) {
                             controller.enqueue(new TextEncoder().encode("\n[Interruption réseau locale]"));
                         } finally {
@@ -168,12 +144,14 @@ export default async function handler(req) {
                 });
             }
 
+            // Bouclier anti-crash : on ignore les 404 (modèle introuvable), 400 (outil non supporté), 429 (surcharge) et 500+ (serveur mort)
             if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
                 continue;
             }
 
             const errorData = await response.json().catch(() => ({}));
-            return new Response(JSON.stringify({ error: errorData.error?.message || `Erreur API (${response.status})` }), { status: response.status });
+            const errMsg = errorData.error?.message || `Erreur de l'API (${response.status})`;
+            return new Response(JSON.stringify({ error: errMsg }), { status: response.status });
 
         } catch (fetchError) {
             continue;
