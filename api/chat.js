@@ -1,6 +1,6 @@
 // ============================================================
 //  PENSÉE IA — api/chat.js (Vercel Edge & Streaming)
-//  Recherche web activée, modèles cachés, cascade blindée
+//  Cascade intégrale (12 modèles), Routage dynamique, Buffer anti-hallucination
 // ============================================================
 
 export const config = {
@@ -13,7 +13,7 @@ export default async function handler(req) {
     }
 
     const bodyReq = await req.json().catch(() => ({}));
-    const { prompt, files } = bodyReq;
+    const { prompt, files, requireWebSearch = false } = bodyReq;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
@@ -24,7 +24,7 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
-    const modelsToTry = [
+    const baseModels = [
         "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite",
@@ -39,18 +39,15 @@ export default async function handler(req) {
         "gemma-3-2b-it"
     ];
 
+    const modelsToTry = requireWebSearch 
+        ? baseModels.filter(m => !m.startsWith("gemma")) 
+        : baseModels;
+
     function getApiVersion(modelName) {
         if (modelName.startsWith("gemini-3")) return "v1";
         return "v1beta";
     }
 
-            // Filtre les verbalisations du protocole interne avant envoi au client
-    function filterThoughts(text) {
-        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
-        text = text.replace(/^[\*\-]\s*\*?(Intent|Root|Architecture|Voice|Language|Format|Constraint|INTENT|RACINE|SOLUTION|PLUS|ANTICIPATION)[^\n]*/gim, '');
-        text = text.replace(/\n{3,}/g, '\n\n');
-        return text.trim();
-    }
     for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
         const apiVersion = getApiVersion(model);
@@ -97,9 +94,11 @@ export default async function handler(req) {
                     async start(controller) {
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
-                        let buffer = "";
+                        let responseBuffer = ""; 
+                        
+                        let streamTextBuffer = "";
+                        const tagToHide = "[INSTRUCTION CRITIQUE : google_search]";
 
-                        // Avertissement silencieux pour Gemma, sans révéler le nom du modèle
                         if (isGemma) {
                             controller.enqueue(new TextEncoder().encode("⚠️ *Mode mémoire local activé.*\n\n"));
                         }
@@ -109,9 +108,9 @@ export default async function handler(req) {
                                 const { done, value } = await reader.read();
                                 if (done) break;
 
-                                buffer += decoder.decode(value, { stream: true });
-                                const lines = buffer.split('\n');
-                                buffer = lines.pop() || "";
+                                responseBuffer += decoder.decode(value, { stream: true });
+                                const lines = responseBuffer.split('\n');
+                                responseBuffer = lines.pop() || "";
 
                                 for (const line of lines) {
                                     if (line.startsWith('data: ')) {
@@ -119,16 +118,27 @@ export default async function handler(req) {
                                         if (dataStr === '[DONE]') continue;
                                         try {
                                             const dataObj = JSON.parse(dataStr);
-                                            // Ignorer les thinking tokens natifs (Gemini 2.5 Flash)
-                                            const part = dataObj.candidates?.[0]?.content?.parts?.[0];
-                                            if (part?.thought === true) continue;
-                                            // Sauter les thinking tokens natifs (Gemini 2.5 Flash)
-                                            const thinkPart = dataObj.candidates?.[0]?.content?.parts?.[0];
-                                            if (thinkPart?.thought === true) continue;
-                                            const textChunk = thinkPart?.text || "";
+                                            const textChunk = dataObj.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                                            
                                             if (textChunk) {
-                                                const filtered = filterThoughts(textChunk);
-                                                if (filtered) controller.enqueue(new TextEncoder().encode(filtered));
+                                                streamTextBuffer += textChunk;
+
+                                                if (streamTextBuffer.includes("[")) {
+                                                    if (streamTextBuffer.includes(tagToHide)) {
+                                                        streamTextBuffer = streamTextBuffer.replace(tagToHide, "");
+                                                    } else if (streamTextBuffer.length > tagToHide.length + 15) {
+                                                        const lastBracket = streamTextBuffer.lastIndexOf("[");
+                                                        const safeToSend = streamTextBuffer.substring(0, lastBracket);
+                                                        
+                                                        if (safeToSend) {
+                                                            controller.enqueue(new TextEncoder().encode(safeToSend));
+                                                            streamTextBuffer = streamTextBuffer.substring(lastBracket);
+                                                        }
+                                                    }
+                                                } else {
+                                                    controller.enqueue(new TextEncoder().encode(streamTextBuffer));
+                                                    streamTextBuffer = "";
+                                                }
                                             }
                                         } catch (e) {
                                             // Ignorer les fragments JSON incomplets
@@ -136,6 +146,11 @@ export default async function handler(req) {
                                     }
                                 }
                             }
+                            
+                            if (streamTextBuffer) {
+                                controller.enqueue(new TextEncoder().encode(streamTextBuffer.replace(tagToHide, "")));
+                            }
+
                         } catch (err) {
                             controller.enqueue(new TextEncoder().encode("\n[Interruption réseau locale]"));
                         } finally {
@@ -153,14 +168,12 @@ export default async function handler(req) {
                 });
             }
 
-            // Bouclier anti-crash : on ignore les 404 (modèle introuvable), 400 (outil non supporté), 429 (surcharge) et 500+ (serveur mort)
             if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
                 continue;
             }
 
             const errorData = await response.json().catch(() => ({}));
-            const errMsg = errorData.error?.message || `Erreur de l'API (${response.status})`;
-            return new Response(JSON.stringify({ error: errMsg }), { status: response.status });
+            return new Response(JSON.stringify({ error: errorData.error?.message || `Erreur API (${response.status})` }), { status: response.status });
 
         } catch (fetchError) {
             continue;
