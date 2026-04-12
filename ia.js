@@ -139,7 +139,7 @@ const dropOverlay   = document.getElementById("dropOverlay");
 // ============================================================
 
 function loadCreditsFromStorage() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today  = new Date().toISOString().slice(0, 10);
     let stored = {};
     try {
         stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
@@ -226,6 +226,7 @@ function updateCredits() {
     alertBanner.className     = "";
     alertBanner.style.display = "none";
 
+    // Réinitialiser les contrôles avant de les bloquer conditionnellement
     userInput.disabled = false;
     sendBtn.disabled   = false;
     uploadBtn.disabled = false;
@@ -258,26 +259,24 @@ function getLang(filename) {
     return CONFIG.langMap[ext] || ext.toUpperCase() || "Fichier";
 }
 
-// helper : supprime les blocs <think> uniquement s'ils sont fermés (pour l'historique)
+// Helper : supprime les blocs <think> fermés — utilisé pour l'historique uniquement
 function stripThinkBlocks(text) {
     return text.replace(/<think>[\s\S]*?<\/think>/gi, "");
 }
 
 function formatResponse(text) {
-    // ÉTAPE 1 — Gestion du bloc <think> pendant le stream :
-    // Si le bloc est FERMÉ (</think> présent) → on le supprime totalement, il ne doit pas s'afficher.
-    // Si le bloc est OUVERT (en cours de stream, pas encore de </think>) → on le masque via un
-    // span invisible, pour que la bulle ne reste pas vide pendant la phase de réflexion du modèle.
+    // FIX #1 — Gestion du bloc <think> en streaming :
+    // • Bloc FERMÉ (</think> présent) → suppression totale, ne doit jamais s'afficher
+    // • Bloc OUVERT (stream en cours, pas encore de </think>) → masquage via span invisible
+    //   Le contenu qui arrive APRÈS </think> s'affiche immédiatement au prochain chunk
     if (/<\/think>/i.test(text)) {
-        // Bloc fermé : suppression propre
         text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
     } else if (/<think>/i.test(text)) {
-        // Bloc ouvert (stream en cours) : masquage visuel, le contenu après </think> s'affichera dès qu'il arrive
         text = text.replace(/<think>[\s\S]*/i, '<span style="display:none">');
         text += "</span>";
     }
 
-    // ÉTAPE 2 — Formatage classique
+    // Formatage classique
     text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
     });
@@ -482,19 +481,6 @@ async function callAPI(userMessage, files) {
         .filter(function(f) { return f.content && f.content.type === "binary"; })
         .map(function(f) { return { name: f.name, mime: f.content.mimeType, base64: f.content.data }; });
 
-    // FIX #1 : bulle de réponse et msgDiv déclarés avant le try pour être accessibles dans finally
-    const msgDiv = document.createElement("div");
-    msgDiv.className = "msg bot";
-    const label = document.createElement("span");
-    label.className = "msg-label";
-    label.textContent = "Pensée";
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-    msgDiv.appendChild(label);
-    msgDiv.appendChild(bubble);
-
-    let fullReply = "";
-
     try {
         const response = await fetch("/api/chat", {
             method:  "POST",
@@ -505,26 +491,36 @@ async function callAPI(userMessage, files) {
             })
         });
 
-        // FIX #1 : removeTyping toujours appelé ici, qu'il y ait erreur ou pas
-        removeTyping();
-
         if (!response.ok) {
             let errMsg = "Erreur HTTP " + response.status;
             try {
                 const errData = await response.json();
                 errMsg = errData.error || errMsg;
             } catch(e) {}
+            removeTyping();
             addMessage("bot", "❌ Erreur : " + errMsg, false);
             setStatus("err");
             return;
         }
 
-        // Ajout de la bulle au DOM une fois qu'on sait que la réponse est ok
+        removeTyping();
+
+        // Création de la bulle de réponse — identique à l'original
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "msg bot";
+        const label = document.createElement("span");
+        label.className = "msg-label";
+        label.textContent = "Pensée";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        msgDiv.appendChild(label);
+        msgDiv.appendChild(bubble);
         messagesEl.appendChild(msgDiv);
 
-        // Lecture du flux binaire en direct
+        // Lecture du flux en direct — chunk par chunk, affichage progressif
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
+        let fullReply = "";
 
         while (true) {
             const { done, value } = await reader.read();
@@ -534,7 +530,7 @@ async function callAPI(userMessage, files) {
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // Nettoyage final
+        // Nettoyage final du message complet
         fullReply = fullReply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
         bubble.innerHTML = formatResponse(fullReply);
 
@@ -555,15 +551,14 @@ async function callAPI(userMessage, files) {
         actions.appendChild(copyBtn);
         msgDiv.appendChild(actions);
 
-        // FIX #3 : on sauvegarde cleanReply dans l'historique, pas fullReply brut
-        // pour éviter que les balises <think> résiduelles polluent le contexte des prochains tours
+        // FIX #3 : sauvegarde dans l'historique sans les balises <think> résiduelles
         const cleanReply = stripThinkBlocks(fullReply).trim();
 
         history.push({ role: "user",      content: userMessage });
         history.push({ role: "assistant", content: cleanReply });
         saveHistoryToStorage();
 
-        // FIX #2 (ex-FIX #3) : débit du crédit uniquement si réponse non vide
+        // FIX #2 : débit du crédit uniquement si la réponse contient du contenu réel
         if (cleanReply.length > 0) {
             creditsLeft--;
             saveCreditsToStorage();
@@ -575,7 +570,6 @@ async function callAPI(userMessage, files) {
         }
 
     } catch(error) {
-        // FIX #1 : removeTyping dans le catch aussi, au cas où l'erreur survient avant le premier removeTyping
         removeTyping();
         addMessage("bot", "❌ Erreur réseau : " + error.message, false);
         setStatus("err");
@@ -608,7 +602,7 @@ async function sendMessage() {
     attachedFiles          = [];
     renderUploadPreview();
 
-    // FIX #2 : fileInput.value = null — plus fiable que "" sur Safari mobile
+    // FIX #2 : fileInput.value = null plus fiable que "" sur Safari mobile
     fileInput.value = null;
 
     sendBtn.disabled    = true;
@@ -616,17 +610,19 @@ async function sendMessage() {
     showTyping();
 
     await new Promise(function(r) { setTimeout(r, 0); });
-    await callAPI(messageText, files);
 
-    removeTyping();
-
-    // FIX #4 : libération du verrou après la fin de l'appel
-    isSending = false;
-
-    if (creditsLeft > 0) {
-        sendBtn.disabled    = false;
-        sendBtn.textContent = "Envoyer \u203a";
-        userInput.focus();
+    try {
+        await callAPI(messageText, files);
+    } finally {
+        // FIX #4 + FIX #A : le verrou et le bouton se libèrent TOUJOURS,
+        // même si callAPI fait un return anticipé sur erreur HTTP
+        isSending = false;
+        removeTyping();
+        if (creditsLeft > 0) {
+            sendBtn.disabled    = false;
+            sendBtn.textContent = "Envoyer \u203a";
+            userInput.focus();
+        }
     }
 }
 
