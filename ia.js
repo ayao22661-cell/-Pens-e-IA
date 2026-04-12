@@ -517,7 +517,17 @@ async function callAPI(userMessage, files) {
             if (done) break;
             
             fullReply += decoder.decode(value, { stream: true });
-            bubble.innerHTML = formatResponse(fullReply);
+            
+            let displayHtml = fullReply;
+            if (displayHtml.includes("<think>")) {
+                if (displayHtml.includes("</think>")) {
+                    displayHtml = displayHtml.replace(/<think>[\s\S]*?<\/think>/gi, "");
+                } else {
+                    displayHtml = displayHtml.replace(/<think>[\s\S]*/gi, "<span style='color: var(--accent); font-style: italic;'>Analyse en cours...</span>");
+                }
+            }
+            
+            bubble.innerHTML = formatResponse(displayHtml);
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
