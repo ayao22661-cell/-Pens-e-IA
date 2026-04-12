@@ -292,8 +292,8 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    // 1. Suppression totale et silencieuse du bloc de réflexion interne
-    text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    // 1. Suppression totale et silencieuse du bloc de réflexion interne (même en cours de stream)
+    text = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
     
     // 2. Formatage classique
     text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
