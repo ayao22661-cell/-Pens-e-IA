@@ -24,33 +24,29 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
+    // FIX #5 : suppression des modèles inexistants (gemini-3-flash, gemini-3.1-flash-lite)
+    // qui généraient des 404 systématiques et ralentissaient chaque requête
+    // FIX #6 : version API mappée explicitement par modèle, plus de logique startsWith fragile
     const modelsToTry = [
         // --- Modèles Flash (Privilégier la performance) ---
-        "gemini-3-flash",          // 5 RPM
-        "gemini-2.5-flash",        // 5 RPM
+        { name: "gemini-2.5-flash",      apiVersion: "v1beta" }, // 5 RPM
+        { name: "gemini-2.0-flash",      apiVersion: "v1beta" }, // 15 RPM
 
         // --- Modèles Lite (Vitesse pure) ---
-        "gemini-3.1-flash-lite",   // 15 RPM
-        "gemini-2.5-flash-lite",   // 10 RPM
+        { name: "gemini-2.5-flash-lite", apiVersion: "v1beta" }, // 10 RPM
+        { name: "gemini-2.0-flash-lite", apiVersion: "v1beta" }, // 30 RPM
 
         // --- Famille Gemma (Open-weights, sans recherche web) ---
-        "gemma-4-31b-it",          // 15 RPM
-        "gemma-4-26b-it",          // 15 RPM
-        "gemma-3-27b-it",          // 30 RPM
-        "gemma-3-12b-it",          // 30 RPM
-        "gemma-3-4b-it",           // 30 RPM
-        "gemma-3-2b-it",           // 30 RPM
-        "gemma-3-1b-it"            // 30 RPM (Tu avais oublié celui-ci !)
+        { name: "gemma-3-27b-it",        apiVersion: "v1beta" }, // 30 RPM
+        { name: "gemma-3-12b-it",        apiVersion: "v1beta" }, // 30 RPM
+        { name: "gemma-3-4b-it",         apiVersion: "v1beta" }, // 30 RPM
+        { name: "gemma-3-2b-it",         apiVersion: "v1beta" }, // 30 RPM
+        { name: "gemma-3-1b-it",         apiVersion: "v1beta" }  // 30 RPM
     ];
 
-    function getApiVersion(modelName) {
-        if (modelName.startsWith("gemini-3")) return "v1";
-        return "v1beta";
-    }
-
-    for (const model of modelsToTry) {
+    for (const modelEntry of modelsToTry) {
+        const { name: model, apiVersion } = modelEntry;
         const isGemma = model.startsWith("gemma");
-        const apiVersion = getApiVersion(model);
         const parts = [{ text: prompt }];
 
         if (files && files.length > 0) {
@@ -118,7 +114,6 @@ export default async function handler(req) {
                                             const dataObj = JSON.parse(dataStr);
                                             const textChunk = dataObj.candidates?.[0]?.content?.parts?.[0]?.text || "";
                                             if (textChunk) {
-                                                // On n'envoie QUE le texte, aucune métadonnée JSON
                                                 controller.enqueue(new TextEncoder().encode(textChunk));
                                             }
                                         } catch (e) {
@@ -144,8 +139,13 @@ export default async function handler(req) {
                 });
             }
 
-            // Bouclier anti-crash : on ignore les 404 (modèle introuvable), 400 (outil non supporté), 429 (surcharge) et 500+ (serveur mort)
-            if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
+            // FIX #7 : 400 (requête malformée) et 429 (surcharge) traités différemment
+            // 404 = modèle introuvable → on passe au suivant
+            // 429 = surcharge temporaire → on passe au suivant (pas de retry sur le même)
+            // 400 = payload invalide pour CE modèle (outil non supporté) → on passe au suivant
+            // 500+ = serveur mort → on passe au suivant
+            // Toute autre erreur (401, 403...) = erreur structurelle → on remonte immédiatement
+            if ([400, 404, 429].includes(response.status) || response.status >= 500) {
                 continue;
             }
 
