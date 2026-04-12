@@ -120,6 +120,7 @@ logoutBtn.addEventListener("click", () => {
 let creditsLeft   = CONFIG.maxCredits;
 let history       = [];
 let attachedFiles = [];
+let isSending     = false; // FIX #4 : verrou global anti double-envoi
 
 const messagesEl    = document.getElementById("messages");
 const userInput     = document.getElementById("userInput");
@@ -138,15 +139,15 @@ const dropOverlay   = document.getElementById("dropOverlay");
 // ============================================================
 
 function loadCreditsFromStorage() {
-    const today  = new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
     let stored = {};
-try {
-    stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
-    if (!stored) stored = {};
-} catch(e) {
-    stored = {};
-}
-if (stored.date === today) {
+    try {
+        stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
+        if (!stored) stored = {};
+    } catch(e) {
+        stored = {};
+    }
+    if (stored.date === today) {
         creditsLeft = CONFIG.maxCredits - (stored.used || 0);
     } else {
         creditsLeft = CONFIG.maxCredits;
@@ -225,7 +226,6 @@ function updateCredits() {
     alertBanner.className     = "";
     alertBanner.style.display = "none";
 
-    // Réinitialiser les contrôles avant de les bloquer conditionnellement
     userInput.disabled = false;
     sendBtn.disabled   = false;
     uploadBtn.disabled = false;
@@ -258,13 +258,15 @@ function getLang(filename) {
     return CONFIG.langMap[ext] || ext.toUpperCase() || "Fichier";
 }
 
-function formatResponse(text) {
-    // 1. Suppression du bloc <think> UNIQUEMENT s'il est fermé (</think> présent)
-    //    Pendant le stream, si </think> n'est pas encore arrivé, on ne touche à rien
-    //    — le bloc sera supprimé au prochain chunk qui le complète.
-    text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+// FIX #1 : helper pour nettoyer les blocs <think> uniquement s'ils sont fermés
+function stripThinkBlocks(text) {
+    return text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+}
 
-    // 2. Formatage classique
+function formatResponse(text) {
+    // FIX #1 : on ne supprime <think> que s'il est FERMÉ — jamais en milieu de stream
+    text = stripThinkBlocks(text);
+
     text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
     });
@@ -469,6 +471,19 @@ async function callAPI(userMessage, files) {
         .filter(function(f) { return f.content && f.content.type === "binary"; })
         .map(function(f) { return { name: f.name, mime: f.content.mimeType, base64: f.content.data }; });
 
+    // FIX #1 : bulle de réponse et msgDiv déclarés avant le try pour être accessibles dans finally
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg bot";
+    const label = document.createElement("span");
+    label.className = "msg-label";
+    label.textContent = "Pensée";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    msgDiv.appendChild(label);
+    msgDiv.appendChild(bubble);
+
+    let fullReply = "";
+
     try {
         const response = await fetch("/api/chat", {
             method:  "POST",
@@ -479,50 +494,40 @@ async function callAPI(userMessage, files) {
             })
         });
 
+        // FIX #1 : removeTyping toujours appelé ici, qu'il y ait erreur ou pas
+        removeTyping();
+
         if (!response.ok) {
             let errMsg = "Erreur HTTP " + response.status;
             try {
                 const errData = await response.json();
                 errMsg = errData.error || errMsg;
             } catch(e) {}
-            
             addMessage("bot", "❌ Erreur : " + errMsg, false);
             setStatus("err");
             return;
         }
 
-        removeTyping();
-        
-        // Création de l'interface de la bulle vide pour le flux
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "msg bot";
-        const label = document.createElement("span");
-        label.className = "msg-label";
-        label.textContent = "Pensée";
-        const bubble = document.createElement("div");
-        bubble.className = "bubble";
-        msgDiv.appendChild(label);
-        msgDiv.appendChild(bubble);
+        // Ajout de la bulle au DOM une fois qu'on sait que la réponse est ok
         messagesEl.appendChild(msgDiv);
 
         // Lecture du flux binaire en direct
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
-        let fullReply = "";
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            
             fullReply += decoder.decode(value, { stream: true });
             bubble.innerHTML = formatResponse(fullReply);
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // Nettoyage et finalisation du message
+        // Nettoyage final
         fullReply = fullReply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
         bubble.innerHTML = formatResponse(fullReply);
 
+        // Bouton copier
         const actions = document.createElement("div");
         actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
@@ -539,13 +544,15 @@ async function callAPI(userMessage, files) {
         actions.appendChild(copyBtn);
         msgDiv.appendChild(actions);
 
+        // FIX #3 : on sauvegarde cleanReply dans l'historique, pas fullReply brut
+        // pour éviter que les balises <think> résiduelles polluent le contexte des prochains tours
+        const cleanReply = stripThinkBlocks(fullReply).trim();
+
         history.push({ role: "user",      content: userMessage });
-        history.push({ role: "assistant", content: fullReply });
+        history.push({ role: "assistant", content: cleanReply });
         saveHistoryToStorage();
 
-        // ── CORRECTION : débit du crédit uniquement si la réponse contient du contenu réel ──
-        // On strip les éventuels <think> résiduels avant de juger si la réponse est vide.
-        const cleanReply = fullReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        // FIX #2 (ex-FIX #3) : débit du crédit uniquement si réponse non vide
         if (cleanReply.length > 0) {
             creditsLeft--;
             saveCreditsToStorage();
@@ -557,6 +564,7 @@ async function callAPI(userMessage, files) {
         }
 
     } catch(error) {
+        // FIX #1 : removeTyping dans le catch aussi, au cas où l'erreur survient avant le premier removeTyping
         removeTyping();
         addMessage("bot", "❌ Erreur réseau : " + error.message, false);
         setStatus("err");
@@ -571,7 +579,10 @@ async function sendMessage() {
     const text  = userInput.value.trim();
     const files = attachedFiles.slice();
     if (!text && !files.length) return;
-    if (sendBtn.disabled) return;
+
+    // FIX #4 : verrou booléen — ni double-clic ni Enter rapide ne peuvent déclencher deux envois
+    if (isSending) return;
+    isSending = true;
 
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "none";
@@ -585,7 +596,9 @@ async function sendMessage() {
     userInput.style.height = "auto";
     attachedFiles          = [];
     renderUploadPreview();
-    fileInput.value = "";
+
+    // FIX #2 : fileInput.value = null — plus fiable que "" sur Safari mobile
+    fileInput.value = null;
 
     sendBtn.disabled    = true;
     sendBtn.textContent = "...";
@@ -595,6 +608,10 @@ async function sendMessage() {
     await callAPI(messageText, files);
 
     removeTyping();
+
+    // FIX #4 : libération du verrou après la fin de l'appel
+    isSending = false;
+
     if (creditsLeft > 0) {
         sendBtn.disabled    = false;
         sendBtn.textContent = "Envoyer \u203a";
