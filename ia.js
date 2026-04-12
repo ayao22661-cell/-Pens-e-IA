@@ -259,9 +259,11 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    // 1. Suppression totale et silencieuse du bloc de réflexion interne (même en cours de stream)
-    text = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
-    
+    // 1. Suppression du bloc <think> UNIQUEMENT s'il est fermé (</think> présent)
+    //    Pendant le stream, si </think> n'est pas encore arrivé, on ne touche à rien
+    //    — le bloc sera supprimé au prochain chunk qui le complète.
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
     // 2. Formatage classique
     text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
@@ -452,6 +454,7 @@ function buildPrompt(userMessage, files) {
     return prompt;
 }
 
+// ============================================================
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
 
@@ -540,10 +543,18 @@ async function callAPI(userMessage, files) {
         history.push({ role: "assistant", content: fullReply });
         saveHistoryToStorage();
 
-        creditsLeft--;
-        saveCreditsToStorage();
-        updateCredits();
-        if (creditsLeft > 0) setStatus("ok");
+        // ── CORRECTION : débit du crédit uniquement si la réponse contient du contenu réel ──
+        // On strip les éventuels <think> résiduels avant de juger si la réponse est vide.
+        const cleanReply = fullReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        if (cleanReply.length > 0) {
+            creditsLeft--;
+            saveCreditsToStorage();
+            updateCredits();
+            if (creditsLeft > 0) setStatus("ok");
+        } else {
+            addMessage("bot", "⚠️ Réponse vide reçue du serveur. Crédit non débité, réessaie.", false);
+            setStatus("err");
+        }
 
     } catch(error) {
         removeTyping();
