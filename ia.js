@@ -258,15 +258,26 @@ function getLang(filename) {
     return CONFIG.langMap[ext] || ext.toUpperCase() || "Fichier";
 }
 
-// FIX #1 : helper pour nettoyer les blocs <think> uniquement s'ils sont fermés
+// helper : supprime les blocs <think> uniquement s'ils sont fermés (pour l'historique)
 function stripThinkBlocks(text) {
     return text.replace(/<think>[\s\S]*?<\/think>/gi, "");
 }
 
 function formatResponse(text) {
-    // FIX #1 : on ne supprime <think> que s'il est FERMÉ — jamais en milieu de stream
-    text = stripThinkBlocks(text);
+    // ÉTAPE 1 — Gestion du bloc <think> pendant le stream :
+    // Si le bloc est FERMÉ (</think> présent) → on le supprime totalement, il ne doit pas s'afficher.
+    // Si le bloc est OUVERT (en cours de stream, pas encore de </think>) → on le masque via un
+    // span invisible, pour que la bulle ne reste pas vide pendant la phase de réflexion du modèle.
+    if (/<\/think>/i.test(text)) {
+        // Bloc fermé : suppression propre
+        text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    } else if (/<think>/i.test(text)) {
+        // Bloc ouvert (stream en cours) : masquage visuel, le contenu après </think> s'affichera dès qu'il arrive
+        text = text.replace(/<think>[\s\S]*/i, '<span style="display:none">');
+        text += "</span>";
+    }
 
+    // ÉTAPE 2 — Formatage classique
     text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
     });
