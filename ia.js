@@ -70,7 +70,7 @@ function checkLocalAuth() {
     if (sessionStorage.getItem("pensee_auth") === "true") {
         loginScreen.style.display = "none";
         loadCreditsFromStorage();
-        loadHistoryFromStorage();
+        initTabs();
     } else {
         loginScreen.style.display = "flex";
         if (loginPassEl) loginPassEl.focus();
@@ -98,7 +98,7 @@ function handleLogin() {
     loginScreen.style.opacity = "0";
     setTimeout(() => { loginScreen.style.display = "none"; }, 300);
     loadCreditsFromStorage();
-    loadHistoryFromStorage();
+    initTabs();
 }
 
 loginBtn.addEventListener("click", handleLogin);
@@ -120,7 +120,6 @@ logoutBtn.addEventListener("click", () => {
 let creditsLeft   = CONFIG.maxCredits;
 let history       = [];
 let attachedFiles = [];
-let isSending     = false; // FIX #4 : verrou global anti double-envoi
 
 const messagesEl    = document.getElementById("messages");
 const userInput     = document.getElementById("userInput");
@@ -141,13 +140,13 @@ const dropOverlay   = document.getElementById("dropOverlay");
 function loadCreditsFromStorage() {
     const today  = new Date().toISOString().slice(0, 10);
     let stored = {};
-    try {
-        stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
-        if (!stored) stored = {};
-    } catch(e) {
-        stored = {};
-    }
-    if (stored.date === today) {
+try {
+    stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
+    if (!stored) stored = {};
+} catch(e) {
+    stored = {};
+}
+if (stored.date === today) {
         creditsLeft = CONFIG.maxCredits - (stored.used || 0);
     } else {
         creditsLeft = CONFIG.maxCredits;
@@ -167,6 +166,144 @@ function saveCreditsToStorage() {
 // ============================================================
 //  HISTORIQUE — localStorage, persistant entre rechargements
 // ============================================================
+
+// ── Gestionnaire d'onglets ──────────────────────────────────
+const TABS_KEY = 'pensee_ia_tabs';
+
+function genTabId() {
+    return 'tab_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+}
+
+function loadTabs() {
+    try {
+        const raw = localStorage.getItem(TABS_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch(e) { return null; }
+}
+
+function saveTabs(tabs) {
+    localStorage.setItem(TABS_KEY, JSON.stringify(tabs));
+}
+
+// État onglets
+let tabs = [];          // [{ id, title }]
+let activeTabId = null;
+
+function getHistoryKey(tabId) { return 'pensee_ia_history__' + tabId; }
+
+function createTab(switchTo) {
+    const id = genTabId();
+    tabs.push({ id: id, title: 'Nouvelle conv.' });
+    saveTabs(tabs);
+    if (switchTo !== false) switchTab(id);
+    return id;
+}
+
+function deleteTab(id) {
+    if (tabs.length <= 1) {
+        // Ne pas supprimer le dernier onglet — en créer un nouveau à la place
+        createTab(true);
+        localStorage.removeItem(getHistoryKey(id));
+        tabs = tabs.filter(function(t) { return t.id !== id; });
+        saveTabs(tabs);
+        return;
+    }
+    const idx = tabs.findIndex(function(t) { return t.id === id; });
+    localStorage.removeItem(getHistoryKey(id));
+    tabs = tabs.filter(function(t) { return t.id !== id; });
+    saveTabs(tabs);
+    if (activeTabId === id) {
+        const newIdx = Math.min(idx, tabs.length - 1);
+        switchTab(tabs[newIdx].id);
+    } else {
+        renderTabs();
+    }
+}
+
+function switchTab(id) {
+    activeTabId = id;
+    // Sauvegarder la clé active
+    sessionStorage.setItem('pensee_ia_active_tab', id);
+    history = [];
+    const storageKey = getHistoryKey(id);
+    // Override CONFIG.storageKey pour les sauvegardes futures
+    CONFIG.storageKey = storageKey;
+    loadHistoryFromStorage();
+    renderTabs();
+}
+
+function updateTabTitle(id, firstUserMsg) {
+    const tab = tabs.find(function(t) { return t.id === id; });
+    if (!tab) return;
+    // Titre = premiers 28 caractères du 1er message utilisateur
+    const title = firstUserMsg.slice(0, 28) + (firstUserMsg.length > 28 ? '…' : '');
+    if (tab.title === 'Nouvelle conv.' || tab.title.endsWith('…') || tab.title === title.slice(0, -1)) {
+        tab.title = title;
+        saveTabs(tabs);
+        renderTabs();
+    }
+}
+
+function renderTabs() {
+    const bar = document.getElementById('tabsBar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    tabs.forEach(function(tab) {
+        const el = document.createElement('div');
+        el.className = 'tab' + (tab.id === activeTabId ? ' active' : '');
+        el.innerHTML = '<span class="tab-title">' + tab.title + '</span>' +
+            '<button class="tab-close" title="Fermer">✕</button>';
+        el.querySelector('.tab-title').addEventListener('click', function() {
+            if (tab.id !== activeTabId) switchTab(tab.id);
+        });
+        el.querySelector('.tab-close').addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (tabs.length === 1 || confirm('Fermer cette conversation ?')) deleteTab(tab.id);
+        });
+        bar.appendChild(el);
+    });
+}
+
+// Intercept sendMessage pour mettre à jour le titre de l'onglet
+const _origSendMessage = sendMessage;
+window.sendMessage = async function() {
+    const text = userInput.value.trim();
+    await _origSendMessage.call(this);
+    if (text && activeTabId) {
+        const tab = tabs.find(function(t) { return t.id === activeTabId; });
+        if (tab && tab.title === 'Nouvelle conv.') {
+            updateTabTitle(activeTabId, text);
+        }
+    }
+};
+// Rebrancher les événements sur la nouvelle sendMessage
+sendBtn.removeEventListener('click', sendMessage);
+sendBtn.addEventListener('click', window.sendMessage);
+userInput.removeEventListener('keydown', userInput._kd);
+userInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sendMessage(); }
+});
+
+// ── Initialisation des onglets ─────────────────────────────────────────────
+function initTabs() {
+    const stored = loadTabs();
+    if (stored && stored.length > 0) {
+        tabs = stored;
+        // Restaurer l'onglet actif de la session
+        const lastActive = sessionStorage.getItem('pensee_ia_active_tab');
+        const validLast  = lastActive && tabs.find(function(t) { return t.id === lastActive; });
+        activeTabId = validLast ? lastActive : tabs[tabs.length - 1].id;
+    } else {
+        tabs = [];
+        activeTabId = null;
+        createTab(false);
+        activeTabId = tabs[0].id;
+        sessionStorage.setItem('pensee_ia_active_tab', activeTabId);
+    }
+    CONFIG.storageKey = getHistoryKey(activeTabId);
+    renderTabs();
+}
 
 function showWelcome() {
     messagesEl.innerHTML = "";
@@ -204,10 +341,8 @@ function saveHistoryToStorage() {
 }
 
 function clearHistory() {
-    if (!confirm("Nouvelle conversation ?")) return;
-    history = [];
-    localStorage.removeItem(CONFIG.storageKey);
-    showWelcome();
+    // Crée un nouvel onglet sans confirmation (le bouton s'appelle déjà "+ Nouveau")
+    createTab(true);
 }
 
 const clearBtn = document.getElementById("clearBtn");
@@ -259,21 +394,11 @@ function getLang(filename) {
     return CONFIG.langMap[ext] || ext.toUpperCase() || "Fichier";
 }
 
-// Helper : supprime les blocs <think> fermés — utilisé pour l'historique uniquement
-function stripThinkBlocks(text) {
-    return text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-}
-
 function formatResponse(text) {
-    // FIX #1 — Gestion du bloc <think> en streaming :
-    if (/<\/think>/i.test(text)) {
-        text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-    } else if (/<think>/i.test(text)) {
-        text = text.replace(/<think>[\s\S]*/i, '<span style="display:none">');
-        text += "</span>";
-    }
-
-    // Formatage classique
+    // 1. Suppression totale et silencieuse du bloc de réflexion interne (même en cours de stream)
+    text = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
+    
+    // 2. Formatage classique
     text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
     });
@@ -438,10 +563,7 @@ function buildPrompt(userMessage, files) {
     const searchInstruction = needsSearch
         ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualit\u00e9 r\u00e9cente. Tu DOIS utiliser google_search pour r\u00e9pondre. Ne r\u00e9ponds JAMAIS depuis ta m\u00e9moire d'entra\u00eenement sur ce sujet.]\n"
         : "";
-    
-    // CORRECTION : On ne met plus le systemPrompt au début du message utilisateur.
-    // Il sera envoyé proprement et séparément à l'API backend via la propriété "system"
-    let prompt = "[DATE ACTUELLE : " + today + "]" + searchInstruction + "\n\n";
+    let prompt = "[DATE ACTUELLE : " + today + "]" + searchInstruction + "\n\n" + CONFIG.systemPrompt + "\n\n";
 
     if (files && files.length > 0) {
         prompt += "### FICHIERS JOINTS (PRIORIT\u00c9 HAUTE) :\n\n";
@@ -457,18 +579,15 @@ function buildPrompt(userMessage, files) {
     if (recent.length > 0) {
         prompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
         recent.forEach(function(msg) {
-            // CORRECTION : Changement de la syntaxe pour éviter le trigger `[Pensée]:`
-            const role = msg.role === "user" ? "Utilisateur" : "Pensée";
-            prompt += "--- " + role + " ---\n" + msg.content + "\n\n";
+            const role = msg.role === "user" ? "Utilisateur" : "Pens\u00e9e";
+            prompt += "[" + role + "]: " + msg.content + "\n\n";
         });
     }
 
-    // CORRECTION : On sépare clairement le nouveau message du reste
-    prompt += "--- Utilisateur ---\n" + userMessage + "\n\n--- Ta réponse directe ---\n";
+    prompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### R\u00c9PONSE :\n";
     return prompt;
 }
 
-// ============================================================
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
 
@@ -489,7 +608,6 @@ async function callAPI(userMessage, files) {
             headers: { "Content-Type": "application/json" },
             body:    JSON.stringify({
                 prompt: prompt,
-                system: CONFIG.systemPrompt, // CORRECTION : Envoi du prompt système de manière isolée
                 files:  binaryFiles.length > 0 ? binaryFiles : undefined
             })
         });
@@ -500,14 +618,15 @@ async function callAPI(userMessage, files) {
                 const errData = await response.json();
                 errMsg = errData.error || errMsg;
             } catch(e) {}
-            removeTyping();
+            
             addMessage("bot", "❌ Erreur : " + errMsg, false);
             setStatus("err");
             return;
         }
 
         removeTyping();
-
+        
+        // Création de l'interface de la bulle vide pour le flux
         const msgDiv = document.createElement("div");
         msgDiv.className = "msg bot";
         const label = document.createElement("span");
@@ -519,6 +638,7 @@ async function callAPI(userMessage, files) {
         msgDiv.appendChild(bubble);
         messagesEl.appendChild(msgDiv);
 
+        // Lecture du flux binaire en direct
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let fullReply = "";
@@ -526,16 +646,16 @@ async function callAPI(userMessage, files) {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            
             fullReply += decoder.decode(value, { stream: true });
             bubble.innerHTML = formatResponse(fullReply);
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // CORRECTION : Retrait de la regex qui effaçait la réponse entière (replace(/\[(Utilisateur|Pensée)\... )
-        fullReply = fullReply.trim();
+        // Nettoyage et finalisation du message
+        fullReply = fullReply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
         bubble.innerHTML = formatResponse(fullReply);
 
-        // Bouton copier
         const actions = document.createElement("div");
         actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
@@ -552,23 +672,14 @@ async function callAPI(userMessage, files) {
         actions.appendChild(copyBtn);
         msgDiv.appendChild(actions);
 
-        // FIX #3 : sauvegarde dans l'historique sans les balises <think> résiduelles
-        const cleanReply = stripThinkBlocks(fullReply).trim();
-
         history.push({ role: "user",      content: userMessage });
-        history.push({ role: "assistant", content: cleanReply });
+        history.push({ role: "assistant", content: fullReply });
         saveHistoryToStorage();
 
-        // FIX #2 : débit du crédit uniquement si la réponse contient du contenu réel
-        if (cleanReply.length > 0) {
-            creditsLeft--;
-            saveCreditsToStorage();
-            updateCredits();
-            if (creditsLeft > 0) setStatus("ok");
-        } else {
-            addMessage("bot", "⚠️ Réponse vide reçue du serveur. Crédit non débité, réessaie.", false);
-            setStatus("err");
-        }
+        creditsLeft--;
+        saveCreditsToStorage();
+        updateCredits();
+        if (creditsLeft > 0) setStatus("ok");
 
     } catch(error) {
         removeTyping();
@@ -585,9 +696,7 @@ async function sendMessage() {
     const text  = userInput.value.trim();
     const files = attachedFiles.slice();
     if (!text && !files.length) return;
-
-    if (isSending) return;
-    isSending = true;
+    if (sendBtn.disabled) return;
 
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "none";
@@ -601,25 +710,20 @@ async function sendMessage() {
     userInput.style.height = "auto";
     attachedFiles          = [];
     renderUploadPreview();
-
-    fileInput.value = null;
+    fileInput.value = "";
 
     sendBtn.disabled    = true;
     sendBtn.textContent = "...";
     showTyping();
 
     await new Promise(function(r) { setTimeout(r, 0); });
+    await callAPI(messageText, files);
 
-    try {
-        await callAPI(messageText, files);
-    } finally {
-        isSending = false;
-        removeTyping();
-        if (creditsLeft > 0) {
-            sendBtn.disabled    = false;
-            sendBtn.textContent = "Envoyer \u203a";
-            userInput.focus();
-        }
+    removeTyping();
+    if (creditsLeft > 0) {
+        sendBtn.disabled    = false;
+        sendBtn.textContent = "Envoyer \u203a";
+        userInput.focus();
     }
 }
 
