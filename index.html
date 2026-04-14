@@ -322,6 +322,70 @@
         #logoutBtn:hover { color: var(--red); border-color: rgba(255,95,95,0.4); background: rgba(255,95,95,0.05); }
 
         /* ============================================================
+           BARRE ONGLETS
+           ============================================================ */
+        #tabsBar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 16px 0;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        #tabsBar::-webkit-scrollbar { display: none; }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 14px;
+            border-radius: 8px 8px 0 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text3);
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            transition: all 0.18s ease;
+            white-space: nowrap;
+            max-width: 160px;
+            position: relative;
+            background: transparent;
+            flex-shrink: 0;
+            letter-spacing: 0.04em;
+            user-select: none;
+        }
+        .tab:hover { color: var(--text2); background: var(--bg3); }
+        .tab.active {
+            color: var(--accent);
+            background: var(--bg);
+            border-color: var(--border);
+            border-bottom-color: var(--bg);
+        }
+        .tab-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 110px;
+        }
+        .tab-close {
+            background: none;
+            border: none;
+            color: var(--text3);
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+            padding: 0 2px;
+            border-radius: 3px;
+            transition: color 0.15s;
+            flex-shrink: 0;
+        }
+        .tab-close:hover { color: var(--red); }
+
+        /* ============================================================
            BARRE CRÉDITS
            ============================================================ */
         #creditBar {
@@ -806,6 +870,9 @@
             <button id="logoutBtn">Déconnexion</button>
         </div>
     </header>
+
+    <!-- BARRE ONGLETS -->
+    <div id="tabsBar"></div>
 
     <!-- BARRE CRÉDITS -->
     <div id="creditBar">
