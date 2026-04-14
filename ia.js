@@ -722,7 +722,6 @@ async function callAPI(userMessage, files) {
         }
 
         // Nettoyage et finalisation du message
-        // REMPLACE PAR :
         fullReply = fullReply.replace(/^\s*\[Pensée\]:\s*/i, "");
         const cutIndex = fullReply.indexOf("[Utilisateur]:");
         if (cutIndex !== -1) fullReply = fullReply.substring(0, cutIndex);
