@@ -236,34 +236,103 @@ function switchTab(id) {
 function updateTabTitle(id, firstUserMsg) {
     const tab = tabs.find(function(t) { return t.id === id; });
     if (!tab) return;
-    // Titre = premiers 28 caractères du 1er message utilisateur
     const title = firstUserMsg.slice(0, 28) + (firstUserMsg.length > 28 ? '…' : '');
     if (tab.title === 'Nouvelle conv.' || tab.title.endsWith('…') || tab.title === title.slice(0, -1)) {
         tab.title = title;
         saveTabs(tabs);
         renderTabs();
+        // Mettre à jour le titre du header
+        const titleEl = document.getElementById('activeConvTitle');
+        if (titleEl && id === activeTabId) titleEl.textContent = title;
     }
 }
 
 function renderTabs() {
-    const bar = document.getElementById('tabsBar');
-    if (!bar) return;
-    bar.innerHTML = '';
+    const list = document.getElementById('convList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    // Grouper par date (aujourd'hui / hier / plus ancien)
+    const now = Date.now();
+    const DAY = 86400000;
+    const groups = [
+        { label: "Aujourd'hui", items: [] },
+        { label: 'Hier',        items: [] },
+        { label: 'Plus ancien', items: [] },
+    ];
     tabs.forEach(function(tab) {
-        const el = document.createElement('div');
-        el.className = 'tab' + (tab.id === activeTabId ? ' active' : '');
-        el.innerHTML = '<span class="tab-title">' + tab.title + '</span>' +
-            '<button class="tab-close" title="Fermer">✕</button>';
-        el.querySelector('.tab-title').addEventListener('click', function() {
-            if (tab.id !== activeTabId) switchTab(tab.id);
-        });
-        el.querySelector('.tab-close').addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (tabs.length === 1 || confirm('Fermer cette conversation ?')) deleteTab(tab.id);
-        });
-        bar.appendChild(el);
+        const ts = parseInt(tab.id.split('_')[1]) || 0;
+        const age = now - ts;
+        if (age < DAY)        groups[0].items.push(tab);
+        else if (age < 2*DAY) groups[1].items.push(tab);
+        else                   groups[2].items.push(tab);
     });
+
+    groups.forEach(function(group) {
+        if (!group.items.length) return;
+        const label = document.createElement('div');
+        label.className = 'conv-section-label';
+        label.textContent = group.label;
+        list.appendChild(label);
+        // Plus récent en haut
+        group.items.slice().reverse().forEach(function(tab) {
+            const el = document.createElement('div');
+            el.className = 'conv-item' + (tab.id === activeTabId ? ' active' : '');
+
+            const title = document.createElement('span');
+            title.className = 'conv-item-title';
+            title.textContent = tab.title;
+            title.addEventListener('click', function() {
+                if (tab.id !== activeTabId) switchTab(tab.id);
+                closeSidebarMobile();
+            });
+
+            const del = document.createElement('button');
+            del.className = 'conv-item-del';
+            del.title = 'Supprimer';
+            del.innerHTML = '🗑';
+            del.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (tabs.length === 1 || confirm('Supprimer cette conversation ?')) deleteTab(tab.id);
+            });
+
+            el.appendChild(title);
+            el.appendChild(del);
+            list.appendChild(el);
+        });
+    });
+
+    // Mettre à jour le titre dans le header
+    const activeTab = tabs.find(function(t) { return t.id === activeTabId; });
+    const titleEl = document.getElementById('activeConvTitle');
+    if (titleEl && activeTab) titleEl.textContent = activeTab.title;
 }
+
+// Mobile sidebar toggle
+function closeSidebarMobile() {
+    const sb = document.getElementById('sidebar');
+    const ov = document.getElementById('sidebarOverlay');
+    if (sb) sb.classList.remove('open');
+    if (ov) ov.classList.remove('visible');
+}
+
+(function() {
+    const toggle = document.getElementById('sidebarToggle');
+    const sb     = document.getElementById('sidebar');
+    const ov     = document.getElementById('sidebarOverlay');
+    if (toggle) toggle.addEventListener('click', function() {
+        sb.classList.toggle('open');
+        ov.classList.toggle('visible');
+    });
+    if (ov) ov.addEventListener('click', closeSidebarMobile);
+
+    // Bouton "+ Nouveau" sidebar
+    const newBtn = document.getElementById('newConvSideBtn');
+    if (newBtn) newBtn.addEventListener('click', function() {
+        createTab(true);
+        closeSidebarMobile();
+    });
+})();
 
 // Intercept sendMessage pour mettre à jour le titre de l'onglet
 const _origSendMessage = sendMessage;
