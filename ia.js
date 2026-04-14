@@ -334,26 +334,6 @@ function closeSidebarMobile() {
     });
 })();
 
-// Intercept sendMessage pour mettre à jour le titre de l'onglet
-const _origSendMessage = sendMessage;
-window.sendMessage = async function() {
-    const text = userInput.value.trim();
-    await _origSendMessage.call(this);
-    if (text && activeTabId) {
-        const tab = tabs.find(function(t) { return t.id === activeTabId; });
-        if (tab && tab.title === 'Nouvelle conv.') {
-            updateTabTitle(activeTabId, text);
-        }
-    }
-};
-// Rebrancher les événements sur la nouvelle sendMessage
-sendBtn.removeEventListener('click', sendMessage);
-sendBtn.addEventListener('click', window.sendMessage);
-userInput.removeEventListener('keydown', userInput._kd);
-userInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sendMessage(); }
-});
-
 // ── Initialisation des onglets ─────────────────────────────────────────────
 function initTabs() {
     const stored = loadTabs();
@@ -774,6 +754,14 @@ async function sendMessage() {
 
     if (files.length > 0) addUserMessageWithFiles(text, files);
     else addMessage("user", text, false);
+
+    // MISE À JOUR DU TITRE : Si c'est le premier message d'une nouvelle conv
+    if (text && activeTabId) {
+        const tab = tabs.find(function(t) { return t.id === activeTabId; });
+        if (tab && tab.title === 'Nouvelle conv.') {
+            updateTabTitle(activeTabId, text);
+        }
+    }
 
     userInput.value        = "";
     userInput.style.height = "auto";
