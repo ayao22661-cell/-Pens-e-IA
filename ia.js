@@ -722,7 +722,11 @@ async function callAPI(userMessage, files) {
         }
 
         // Nettoyage et finalisation du message
-        fullReply = fullReply.replace(/\[(Utilisateur|Pensée)\]:[\s\S]*$/gm, "").trim();
+        // REMPLACE PAR :
+        fullReply = fullReply.replace(/^\s*\[Pensée\]:\s*/i, "");
+        const cutIndex = fullReply.indexOf("[Utilisateur]:");
+        if (cutIndex !== -1) fullReply = fullReply.substring(0, cutIndex);
+        fullReply = fullReply.trim();
         bubble.innerHTML = formatResponse(fullReply);
 
         const actions = document.createElement("div");
