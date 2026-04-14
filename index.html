@@ -38,7 +38,7 @@
             color: var(--text);
             height: 100dvh;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             overflow: hidden;
             position: relative;
         }
@@ -224,19 +224,25 @@
         }
 
         /* ============================================================
-           HEADER
+           SIDEBAR
            ============================================================ */
-        header {
-            padding: 13px 22px;
-            border-bottom: 1px solid var(--border);
+        #sidebar {
+            width: 240px;
+            min-width: 240px;
+            background: var(--bg2);
+            border-right: 1px solid var(--border);
             display: flex;
-            align-items: center;
-            gap: 14px;
-            background: rgba(14,17,24,0.92);
-            backdrop-filter: blur(12px);
+            flex-direction: column;
+            height: 100dvh;
             flex-shrink: 0;
-            z-index: 100;
-            position: relative;
+            z-index: 50;
+        }
+
+        /* Logo dans la sidebar */
+        #sidebar-header {
+            padding: 18px 16px 14px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
         }
 
         .logo-mark { display: flex; align-items: center; gap: 9px; }
@@ -253,7 +259,6 @@
             0%,100% { opacity:1; box-shadow: 0 0 10px var(--accent); }
             50%      { opacity:0.5; box-shadow: 0 0 4px var(--accent); }
         }
-
         .logo-text { display: flex; flex-direction: column; }
         .logo-text h1 {
             font-family: 'Fraunces', serif;
@@ -263,7 +268,6 @@
             line-height: 1;
         }
         .logo-text h1 em { color: var(--accent); font-style: italic; }
-
         .creator-tag {
             font-family: 'JetBrains Mono', monospace;
             font-size: 9px;
@@ -272,134 +276,124 @@
             margin-top: 3px;
         }
 
-        .header-right {
-            margin-left: auto;
+        /* Bouton nouveau */
+        #newConvSideBtn {
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-
-        #statusBadge {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            padding: 4px 10px;
-            border-radius: 20px;
-            display: none;
-        }
-        #statusBadge.ok   { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.15); }
-        #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
-        #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.2); }
-
-        #clearBtn {
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--text3);
-            padding: 6px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 10px;
-            transition: 0.2s;
-            font-family: 'JetBrains Mono', monospace;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-        #clearBtn:hover { color: var(--accent); border-color: rgba(0,229,160,0.4); background: var(--accent-dim); }
-
-        #logoutBtn {
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--text3);
-            padding: 6px 13px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 10px;
-            transition: 0.2s;
-            font-family: 'JetBrains Mono', monospace;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-        #logoutBtn:hover { color: var(--red); border-color: rgba(255,95,95,0.4); background: rgba(255,95,95,0.05); }
-
-        /* ============================================================
-           BARRE ONGLETS
-           ============================================================ */
-        #tabsBar {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            padding: 6px 16px 0;
-            background: var(--bg2);
-            border-bottom: 1px solid var(--border);
-            flex-shrink: 0;
-            overflow-x: auto;
-            scrollbar-width: none;
-        }
-        #tabsBar::-webkit-scrollbar { display: none; }
-
-        .tab {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            padding: 7px 14px;
-            border-radius: 8px 8px 0 0;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            color: var(--text3);
-            cursor: pointer;
-            border: 1px solid transparent;
-            border-bottom: none;
-            transition: all 0.18s ease;
-            white-space: nowrap;
-            max-width: 160px;
-            position: relative;
-            background: transparent;
-            flex-shrink: 0;
-            letter-spacing: 0.04em;
-            user-select: none;
-        }
-        .tab:hover { color: var(--text2); background: var(--bg3); }
-        .tab.active {
+            margin: 12px 12px 8px;
+            padding: 9px 14px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(0,229,160,0.2);
+            border-radius: 10px;
             color: var(--accent);
-            background: var(--bg);
-            border-color: var(--border);
-            border-bottom-color: var(--bg);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            flex-shrink: 0;
         }
-        .tab-title {
+        #newConvSideBtn:hover {
+            background: rgba(0,229,160,0.18);
+            border-color: rgba(0,229,160,0.4);
+            transform: translateY(-1px);
+        }
+        #newConvSideBtn .btn-icon { font-size: 14px; }
+
+        /* Liste conversations */
+        #convList {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        #convList::-webkit-scrollbar { width: 3px; }
+        #convList::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+        .conv-section-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            padding: 10px 8px 4px;
+        }
+
+        .conv-item {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.15s;
+            padding: 0;
+            min-height: 36px;
+            position: relative;
+            overflow: hidden;
+        }
+        .conv-item:hover { background: var(--bg3); }
+        .conv-item.active { background: var(--bg4); }
+        .conv-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 20%; bottom: 20%;
+            width: 2px;
+            background: var(--accent);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .conv-item-title {
+            flex: 1;
+            font-family: 'Syne', sans-serif;
+            font-size: 12.5px;
+            color: var(--text2);
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 110px;
+            padding: 8px 10px;
+            line-height: 1.3;
         }
-        .tab-close {
+        .conv-item.active .conv-item-title { color: var(--text); }
+
+        .conv-item-del {
+            opacity: 0;
             background: none;
             border: none;
             color: var(--text3);
             cursor: pointer;
-            font-size: 12px;
-            line-height: 1;
-            padding: 0 2px;
-            border-radius: 3px;
-            transition: color 0.15s;
+            font-size: 13px;
+            padding: 8px 10px;
+            border-radius: 0 8px 8px 0;
+            transition: opacity 0.15s, color 0.15s;
             flex-shrink: 0;
         }
-        .tab-close:hover { color: var(--red); }
+        .conv-item:hover .conv-item-del { opacity: 1; }
+        .conv-item-del:hover { color: var(--red); }
 
-        /* ============================================================
-           BARRE CRÉDITS
-           ============================================================ */
+        /* Footer sidebar */
+        #sidebar-footer {
+            padding: 12px 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        /* Crédits dans la sidebar */
         #creditBar {
-            padding: 7px 22px;
-            background: var(--bg2);
-            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
-            gap: 12px;
-            flex-shrink: 0;
+            gap: 8px;
         }
         .credit-label {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
+            font-size: 9px;
             color: var(--text3);
             white-space: nowrap;
             letter-spacing: 0.1em;
@@ -421,12 +415,93 @@
         }
         #creditCount {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
+            font-size: 9px;
             color: var(--text2);
             white-space: nowrap;
-            min-width: 56px;
-            text-align: right;
         }
+
+        #logoutBtn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text3);
+            padding: 7px 13px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 10px;
+            transition: 0.2s;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            width: 100%;
+        }
+        #logoutBtn:hover { color: var(--red); border-color: rgba(255,95,95,0.4); background: rgba(255,95,95,0.05); }
+
+        /* ============================================================
+           ZONE PRINCIPALE (droite)
+           ============================================================ */
+        #mainArea {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        /* Header minimal en haut de la zone chat */
+        header {
+            padding: 11px 22px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: rgba(14,17,24,0.92);
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+            z-index: 100;
+            position: relative;
+        }
+        .header-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #statusBadge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: none;
+        }
+        #statusBadge.ok   { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.15); }
+        #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
+        #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.2); }
+
+        /* Titre de la conversation active */
+        #activeConvTitle {
+            font-family: 'Syne', sans-serif;
+            font-size: 13px;
+            color: var(--text2);
+            font-weight: 400;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 340px;
+        }
+
+        #clearBtn {
+            display: none; /* remplacé par la sidebar */
+        }
+
+        /* ============================================================
+           BARRE ONGLETS — supprimée (remplacée par sidebar)
+           ============================================================ */
+        #tabsBar { display: none; }
+
+        /* ============================================================
+           BARRE CRÉDITS (ancienne, cachée — dans sidebar maintenant)
+           ============================================================ */
 
         /* ============================================================
            BANNIÈRE ALERTE
@@ -781,29 +856,41 @@
         footer em { color: var(--accent); font-style: normal; font-weight: 700; }
 
         /* ============================================================
-           MOBILE
+           MOBILE — sidebar en overlay
            ============================================================ */
-        /* Barre d'action mobile — nouvelle conversation */
-        #mobileActionBar {
+        #sidebarToggle {
             display: none;
-        }
-        #newConvBtn {
             background: none;
             border: 1px solid var(--border);
-            color: var(--text3);
-            padding: 6px 14px;
-            border-radius: 8px;
+            color: var(--text2);
+            border-radius: 7px;
+            padding: 6px 10px;
             cursor: pointer;
-            font-size: 11px;
-            font-family: 'JetBrains Mono', monospace;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
+            font-size: 16px;
+            line-height: 1;
             transition: 0.2s;
-            white-space: nowrap;
         }
-        #newConvBtn:hover { color: var(--accent); border-color: rgba(0,229,160,0.4); background: var(--accent-dim); }
+        #sidebarToggle:hover { color: var(--accent); border-color: rgba(0,229,160,0.3); }
 
-        @media (max-width: 480px) {
+        @media (max-width: 680px) {
+            #sidebar {
+                position: fixed;
+                left: 0; top: 0; bottom: 0;
+                transform: translateX(-100%);
+                transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1);
+                z-index: 200;
+                box-shadow: 4px 0 32px rgba(0,0,0,0.5);
+            }
+            #sidebar.open { transform: translateX(0); }
+            #sidebarOverlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.55);
+                z-index: 199;
+            }
+            #sidebarOverlay.visible { display: block; }
+            #sidebarToggle { display: flex; align-items: center; justify-content: center; }
             .login-card { padding: 36px 22px 32px; }
             .msg { max-width: 92%; }
             .bubble { padding: 12px 15px; font-size: 13.5px; }
@@ -814,9 +901,6 @@
             header { padding: 11px 14px; }
             footer { display: none; }
             #suggestions { padding: 0 14px 14px; }
-            /* clearBtn reste visible sur mobile — réduit */
-            #clearBtn { font-size: 9px; padding: 5px 8px; }
-            #logoutBtn { font-size: 9px; padding: 5px 8px; }
         }
     </style>
 </head>
@@ -852,70 +936,88 @@
 
     <!-- DROP OVERLAY -->
     <div id="dropOverlay">⬇ Dépose ton fichier ici</div>
+    <!-- SIDEBAR OVERLAY mobile -->
+    <div id="sidebarOverlay"></div>
 
     <!-- ============================================================
-         HEADER
+         SIDEBAR GAUCHE
          ============================================================ -->
-    <header>
-        <div class="logo-mark">
-            <div class="logo-dot"></div>
-            <div class="logo-text">
-                <h1><em>Pensée</em> IA</h1>
-                <div class="creator-tag">by Yao Baba Ange Emmanuel</div>
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <div class="logo-mark">
+                <div class="logo-dot"></div>
+                <div class="logo-text">
+                    <h1><em>Pensée</em> IA</h1>
+                    <div class="creator-tag">by Yao Baba Ange Emmanuel</div>
+                </div>
             </div>
         </div>
-        <div class="header-right">
-            <span id="statusBadge"></span>
-            <button id="clearBtn" title="Nouvelle conversation">+ Nouveau</button>
+
+        <button id="newConvSideBtn">
+            <span class="btn-icon">＋</span> Nouvelle conv.
+        </button>
+
+        <div id="convList">
+            <!-- Rempli dynamiquement par ia.js -->
+        </div>
+
+        <div id="sidebar-footer">
+            <div id="creditBar">
+                <span class="credit-label">Crédits</span>
+                <div class="credit-track"><div id="creditFill"></div></div>
+                <span id="creditCount">20 / 20</span>
+            </div>
             <button id="logoutBtn">Déconnexion</button>
         </div>
-    </header>
-
-    <!-- BARRE ONGLETS -->
-    <div id="tabsBar"></div>
-
-    <!-- BARRE CRÉDITS -->
-    <div id="creditBar">
-        <span class="credit-label">Crédits</span>
-        <div class="credit-track"><div id="creditFill"></div></div>
-        <span id="creditCount">20 / 20</span>
     </div>
-
-    <!-- ALERTE -->
-    <div id="alertBanner"></div>
 
     <!-- ============================================================
-         MESSAGES
+         ZONE PRINCIPALE DROITE
          ============================================================ -->
-    <div id="messages">
-        <!-- Messages injectés dynamiquement par ia.js -->
-    </div>
+    <div id="mainArea">
 
-    <!-- SUGGESTIONS -->
-    <div id="suggestions">
-        <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
-        <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
-        <span class="suggestion" onclick="useSuggestion(this)">Expliquer la récursivité</span>
-        <span class="suggestion" onclick="useSuggestion(this)">Déboguer mon code</span>
-    </div>
+        <!-- Header minimal -->
+        <header>
+            <button id="sidebarToggle">☰</button>
+            <span id="activeConvTitle">Nouvelle conversation</span>
+            <div class="header-right">
+                <span id="statusBadge"></span>
+                <!-- clearBtn caché — remplacé par sidebar -->
+                <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
+            </div>
+        </header>
 
-    <!-- FICHIERS ATTACHÉS -->
-    <div id="uploadPreview"></div>
+        <!-- ALERTE -->
+        <div id="alertBanner"></div>
 
-    <!-- ============================================================
-         INPUT
-         ============================================================ -->
-    <div id="inputArea">
-        <button id="uploadBtn" title="Joindre un fichier">📎</button>
-        <input type="file" id="fileInput" multiple accept="*/*">
-        <textarea id="userInput" rows="1" placeholder="Pose ta question ou dépose un fichier…"></textarea>
-        <button id="sendBtn">Envoyer ›</button>
-    </div>
+        <!-- MESSAGES -->
+        <div id="messages"></div>
 
-    <!-- FOOTER -->
-    <footer>
-        <em>Pensée IA</em> · Codage & Intelligence · Créé par <em>Yao Baba Ange Emmanuel</em>
-    </footer>
+        <!-- SUGGESTIONS -->
+        <div id="suggestions">
+            <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
+            <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
+            <span class="suggestion" onclick="useSuggestion(this)">Expliquer la récursivité</span>
+            <span class="suggestion" onclick="useSuggestion(this)">Déboguer mon code</span>
+        </div>
+
+        <!-- FICHIERS ATTACHÉS -->
+        <div id="uploadPreview"></div>
+
+        <!-- INPUT -->
+        <div id="inputArea">
+            <button id="uploadBtn" title="Joindre un fichier">📎</button>
+            <input type="file" id="fileInput" multiple accept="*/*">
+            <textarea id="userInput" rows="1" placeholder="Pose ta question ou dépose un fichier…"></textarea>
+            <button id="sendBtn">Envoyer ›</button>
+        </div>
+
+        <!-- FOOTER -->
+        <footer>
+            <em>Pensée IA</em> · Codage & Intelligence · Créé par <em>Yao Baba Ange Emmanuel</em>
+        </footer>
+
+    </div><!-- /mainArea -->
 
     <script type="module" src="ia.js"></script>
 
