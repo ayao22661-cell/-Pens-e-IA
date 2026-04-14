@@ -290,7 +290,8 @@ function renderTabs() {
             const del = document.createElement('button');
             del.className = 'conv-item-del';
             del.title = 'Supprimer';
-            del.innerHTML = '🗑';
+            // Injection d'un SVG propre et minimaliste (poubelle)
+            del.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
             del.addEventListener('click', function(e) {
                 e.stopPropagation();
                 if (tabs.length === 1 || confirm('Supprimer cette conversation ?')) deleteTab(tab.id);
