@@ -615,14 +615,19 @@ function formatResponse(text) {
         </div>`.trim();
     };
 
-    // 3. GÉNÉRATION
-    try {
-        const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
-        return DOMPurify.sanitize(htmlOutput);
-    } catch (e) {
-        console.error("Erreur de parsing Markdown:", e);
-        return cleanText.replace(/\n/g, "<br>");
-    }
+    // 3. GÉNÉRATION ET SÉCURISATION (Version autorisant le Sandbox)
+try {
+    const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
+    
+    // On configure DOMPurify pour laisser passer nos attributs vitaux
+    return DOMPurify.sanitize(htmlOutput, {
+        ADD_ATTR: ['onclick', 'data-code'], // ✅ Indispensable pour le bouton
+        ADD_TAGS: ['iframe']                // ✅ Indispensable pour l'affichage
+    });
+} catch (e) {
+    console.error("Erreur de parsing Markdown:", e);
+    return cleanText.replace(/\n/g, "<br>");
+}
 }
 
 // ============================================================
