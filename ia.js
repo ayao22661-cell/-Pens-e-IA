@@ -67,6 +67,49 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 let currentUser = null;
 let isSignUpMode = false;
 
+// Action : Demander un lien de récupération
+forgotPasswordBtn?.addEventListener("click", async () => {
+    const email = loginEmailEl.value.trim();
+    if (!email) {
+        loginError.style.display = "block";
+        loginError.textContent = "Saisis ton email pour recevoir le lien.";
+        return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+    });
+
+    if (error) {
+        loginError.style.display = "block";
+        loginError.textContent = error.message;
+    } else {
+        loginSuccess.style.display = "block";
+        loginSuccess.textContent = "Lien de récupération envoyé par email !";
+        loginError.style.display = "none";
+    }
+});
+
+// Action : Enregistrer le nouveau mot de passe
+saveNewPasswordBtn?.addEventListener("click", async () => {
+    const newPassword = newPasswordInput.value.trim();
+    if (newPassword.length < 6) {
+        loginError.style.display = "block";
+        loginError.textContent = "6 caractères minimum.";
+        return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+        loginError.style.display = "block";
+        loginError.textContent = error.message;
+    } else {
+        alert("Mot de passe mis à jour !");
+        location.reload();
+    }
+});
+
 // Éléments DOM
 const loginScreen       = document.getElementById("loginScreen");
 const loginEmailEl      = document.getElementById("loginEmail");
@@ -76,6 +119,13 @@ const loginError        = document.getElementById("loginError");
 const loginSuccess      = document.getElementById("loginSuccess");
 const toggleAuthModeBtn = document.getElementById("toggleAuthMode");
 const logoutBtn         = document.getElementById("logoutBtn");
+
+// Nouveaux éléments pour la récupération
+const forgotPasswordBtn  = document.getElementById("forgotPasswordBtn");
+const resetPasswordArea  = document.getElementById("resetPasswordArea");
+const authFields         = document.getElementById("authFields");
+const newPasswordInput   = document.getElementById("newPassword");
+const saveNewPasswordBtn = document.getElementById("saveNewPasswordBtn");
 
 // Basculer entre Connexion et Inscription
 if (toggleAuthModeBtn) {
@@ -90,8 +140,22 @@ if (toggleAuthModeBtn) {
 
 // Vérification de la session au chargement
 async function checkLocalAuth() {
-    // 1. Écouter les changements d'état (connexion, déconnexion, clic email)
-    supabase.auth.onAuthStateChange((event, session) => {
+    // 1. Écouter les changements d'état (connexion, déconnexion, clic email, recovery)
+    supabase.auth.onAuthStateChange(async (event, session) => {
+        // GESTION RÉCUPÉRATION MOT DE PASSE
+        if (event === "PASSWORD_RECOVERY") {
+            loginScreen.style.display = "flex";
+            if (authFields) authFields.style.display = "none";
+            if (loginBtn) loginBtn.style.display = "none";
+            if (toggleAuthModeBtn) toggleAuthModeBtn.style.display = "none";
+            if (resetPasswordArea) resetPasswordArea.style.display = "block";
+            
+            const instr = document.getElementById("authInstruction");
+            if (instr) instr.textContent = "Définit ton nouveau mot de passe.";
+            return;
+        }
+
+        // GESTION SESSION ACTIVE
         if (session) {
             currentUser = session.user;
             loginScreen.style.display = "none";
@@ -104,12 +168,13 @@ async function checkLocalAuth() {
             loadCreditsFromStorage();
             initTabs();
         } else {
+            // Pas de session : on montre le login
             loginScreen.style.display = "flex";
             if (loginEmailEl) loginEmailEl.focus();
         }
     });
 
-    // 2. Vérification immédiate au chargement
+    // 2. Vérification immédiate au chargement pour éviter le flash du login
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         currentUser = session.user;
