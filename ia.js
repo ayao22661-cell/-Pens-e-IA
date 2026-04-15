@@ -597,9 +597,26 @@ function formatResponse(text) {
         }
     }
     
-    // 4. Formatage classique (Code, Markdown, Sauts de ligne)
+    // 4. Formatage classique et Sandbox Web
     cleanText = cleanText.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
-        return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
+        const lang = (_lang || "").toLowerCase();
+        const cleanCode = escapeHtml(code.trim());
+        // Encodage sécurisé du code brut pour le passer au bouton sans casser le HTML
+        const encodedCode = encodeURIComponent(code.trim());
+        const isWeb = ['html', 'css', 'javascript', 'js'].includes(lang);
+
+        const runId = 'sandbox_' + Math.random().toString(36).substring(2, 9);
+        const btnHtml = isWeb ? `<button class="run-btn" data-code="${encodedCode}" onclick="executeWebCode(this, '${runId}', '${lang}')">▶ Exécuter</button>` : '';
+
+        return `
+        <div class="code-block-wrapper">
+            <div class="code-header">
+                <span class="code-lang">${lang || 'code'}</span>
+                ${btnHtml}
+            </div>
+            <pre><code>${cleanCode}</code></pre>
+            <div id="${runId}" class="sandbox-container"></div>
+        </div>`.trim();
     });
     cleanText = cleanText.replace(/`([^`\n]+)`/g, function(_, code) { return "<code>" + escapeHtml(code) + "</code>"; });
     cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
@@ -1030,3 +1047,59 @@ userInput.addEventListener("input", function() {
 updateCredits();
 setStatus("ok");
 checkLocalAuth();
+// ============================================================
+//  MOTEUR SANDBOX (Exécution Web)
+// ============================================================
+window.executeWebCode = function(btn, containerId, lang) {
+    const container = document.getElementById(containerId);
+    // On décode le code brut mis en attente
+    const rawCode = decodeURIComponent(btn.getAttribute('data-code'));
+
+    // Logique de fermeture
+    if (btn.classList.contains('running')) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        btn.classList.remove('running');
+        btn.innerHTML = '▶ Exécuter';
+        return;
+    }
+
+    // Création de l'environnement isolé
+    container.innerHTML = '';
+    container.style.display = 'block';
+    const iframe = document.createElement('iframe');
+    iframe.sandbox = 'allow-scripts allow-modals'; // Autorise l'exécution et les alert()
+    container.appendChild(iframe);
+
+    let finalCode = rawCode;
+
+    // Si c'est du JS pur, on crée une fausse console pour voir le résultat à l'écran
+    if (lang === 'js' || lang === 'javascript') {
+        finalCode = `
+        <!DOCTYPE html><html>
+        <body style="font-family: monospace; background: #f4f4f5; color: #333; padding: 16px; margin: 0;">
+            <div style="color: #888; font-size: 10px; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.1em;">Console :</div>
+            <pre id="output" style="white-space: pre-wrap; word-break: break-all; margin: 0; font-size: 13px;"></pre>
+            <script>
+                const out = document.getElementById('output');
+                console.log = function(...args) {
+                    out.textContent += args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ') + '\\n';
+                };
+                try {
+                    ${rawCode}
+                } catch (e) {
+                    out.style.color = '#e11d48';
+                    out.textContent += '\\nErreur critique : ' + e.message;
+                }
+            </script>
+        </body></html>`;
+    }
+
+    // Injection dans l'Iframe
+    const blob = new Blob([finalCode], { type: 'text/html;charset=utf-8' });
+    iframe.src = URL.createObjectURL(blob);
+
+    // Mise à jour de l'UI
+    btn.classList.add('running');
+    btn.innerHTML = '⏹ Fermer';
+};
