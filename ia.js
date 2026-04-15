@@ -399,26 +399,6 @@ function closeSidebarMobile() {
     });
 })();
 
-// Intercept sendMessage pour mettre à jour le titre de l'onglet
-const _origSendMessage = sendMessage;
-window.sendMessage = async function() {
-    const text = userInput.value.trim();
-    await _origSendMessage.call(this);
-    if (text && activeTabId) {
-        const tab = tabs.find(function(t) { return t.id === activeTabId; });
-        if (tab && tab.title === 'Nouvelle conv.') {
-            updateTabTitle(activeTabId, text);
-        }
-    }
-};
-// Rebrancher les événements sur la nouvelle sendMessage
-sendBtn.removeEventListener('click', sendMessage);
-sendBtn.addEventListener('click', window.sendMessage);
-userInput.removeEventListener('keydown', userInput._kd);
-userInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sendMessage(); }
-});
-
 // ── Initialisation des onglets ─────────────────────────────────────────────
 async function initTabs() {
     tabs = await loadTabs();
@@ -558,17 +538,26 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    // 1. Suppression totale et silencieuse du bloc de réflexion interne (même en cours de stream)
-    text = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
+    // 1. Détecter si l'IA est en train de réfléchir (bloc non fermé)
+    const isThinking = /<think>(?!.*<\/think>)/is.test(text);
     
-    // 2. Formatage classique
-    text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
+    // 2. Suppression totale et silencieuse du bloc de réflexion
+    let cleanText = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
+    
+    // 3. Indicateur visuel : Si le texte visible est vide mais que l'IA réfléchit
+    if (isThinking && cleanText.trim() === "") {
+        return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
+    }
+    
+    // 4. Formatage classique
+    cleanText = cleanText.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
     });
-    text = text.replace(/`([^`\n]+)`/g, function(_, code) { return "<code>" + escapeHtml(code) + "</code>"; });
-    text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    text = text.replace(/\n/g, "<br>");
-    return text;
+    cleanText = cleanText.replace(/`([^`\n]+)`/g, function(_, code) { return "<code>" + escapeHtml(code) + "</code>"; });
+    cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    cleanText = cleanText.replace(/\n/g, "<br>");
+    
+    return cleanText;
 }
 
 function setStatus(state) {
@@ -862,6 +851,10 @@ async function callAPI(userMessage, files) {
 //  ENVOI
 // ============================================================
 
+// ============================================================
+//  ENVOI ET GESTION DES MESSAGES
+// ============================================================
+
 async function sendMessage() {
     const text  = userInput.value.trim();
     const files = attachedFiles.slice();
@@ -873,32 +866,45 @@ async function sendMessage() {
 
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
 
+    // 1. Affichage du message utilisateur
     if (files.length > 0) addUserMessageWithFiles(text, files);
     else addMessage("user", text, false);
 
+    // 2. Mise à jour automatique du titre de l'onglet si nouvelle conversation
+    if (text && activeTabId) {
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (tab && tab.title === 'Nouvelle conv.') {
+            updateTabTitle(activeTabId, text);
+        }
+    }
+
+    // 3. Nettoyage de l'interface
     userInput.value        = "";
     userInput.style.height = "auto";
     attachedFiles          = [];
     renderUploadPreview();
     fileInput.value = "";
 
+    // 4. Verrouillage (Mode attente)
     sendBtn.disabled    = true;
     sendBtn.textContent = "...";
     showTyping();
 
-    await new Promise(function(r) { setTimeout(r, 0); });
+    // 5. Appel réseau vers ton API Vercel
+    await new Promise(r => setTimeout(r, 0));
     await callAPI(messageText, files);
 
+    // 6. Rétablissement de l'interface
     removeTyping();
     if (creditsLeft > 0) {
         sendBtn.disabled    = false;
-        sendBtn.textContent = "Envoyer \u203a";
+        sendBtn.textContent = "Envoyer ›";
         userInput.focus();
     }
 }
 
 // ============================================================
-//  ÉVÉNEMENTS
+//  ÉVÉNEMENTS GLOBAUX
 // ============================================================
 
 window.useSuggestion = function(el) { userInput.value = el.textContent; userInput.focus(); };
@@ -914,6 +920,7 @@ document.addEventListener("drop", function(e) {
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 });
 
+// Écouteurs de la zone de saisie
 sendBtn.addEventListener("click", sendMessage);
 userInput.addEventListener("keydown", function(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -924,9 +931,7 @@ userInput.addEventListener("input", function() {
 });
 
 // ============================================================
-//  INIT — ordre impératif :
-//  1. updateCredits / setStatus (pas besoin d'auth)
-//  2. checkLocalAuth EN DERNIER (utilise messagesEl + toutes les fonctions)
+//  INIT GLOBALE
 // ============================================================
 updateCredits();
 setStatus("ok");
