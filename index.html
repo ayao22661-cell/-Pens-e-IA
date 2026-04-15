@@ -945,35 +945,44 @@
          ÉCRAN DE CONNEXION — mot de passe uniquement
          ============================================================ -->
     <div id="loginScreen">
-        <div class="login-card">
-            <div class="login-logo">
-                <div class="login-logo-dot"></div>
-                <span class="login-logo-name"><em>Pensée</em> IA</span>
-            </div>
-
-            <p>Entre le mot de passe pour accéder à ton espace.</p>
-
-            <div class="login-group">
-                <label>Mot de passe</label>
-                <input
-                    type="password"
-                    id="loginPassword"
-                    class="login-input"
-                    placeholder="••••"
-                    autocomplete="current-password"
-                >
-            </div>
-
-            <button id="loginBtn">Se connecter ›</button>
-            
-            <div id="toggleAuthMode" style="margin-top: 16px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text2); cursor: pointer; text-decoration: underline; transition: color 0.2s;">
-                Pas encore de compte ? S'inscrire
-            </div>
-            
-            <div id="loginError" style="color: var(--red); font-size: 11px; margin-top: 14px; display: none; font-family: 'JetBrains Mono', monospace;"></div>
-            <div id="loginSuccess" style="color: var(--accent); font-size: 11px; margin-top: 14px; display: none; font-family: 'JetBrains Mono', monospace; line-height: 1.5;"></div>
+    <div class="login-card">
+        <div class="login-logo">
+            <div class="login-logo-dot"></div>
+            <span class="login-logo-name"><em>Pensée</em> IA</span>
         </div>
+
+        <p id="authInstruction">Connecte-toi ou crée un compte pour accéder à ton espace.</p>
+
+        <div class="login-group">
+            <label>Email</label>
+            <input 
+                type="email" 
+                id="loginEmail" 
+                class="login-input" 
+                placeholder="nom@exemple.com"
+                style="margin-bottom: 12px;"
+            >
+            
+            <label>Mot de passe</label>
+            <input
+                type="password"
+                id="loginPassword"
+                class="login-input"
+                placeholder="••••••••"
+                autocomplete="current-password"
+            >
+        </div>
+
+        <button id="loginBtn">Se connecter ›</button>
+        
+        <div id="toggleAuthMode" style="margin-top: 16px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text2); cursor: pointer; text-decoration: underline; transition: color 0.2s;">
+            Pas encore de compte ? S'inscrire
+        </div>
+        
+        <div id="loginError" style="color: var(--red); font-size: 11px; margin-top: 14px; display: none; font-family: 'JetBrains Mono', monospace;"></div>
+        <div id="loginSuccess" style="color: var(--accent); font-size: 11px; margin-top: 14px; display: none; font-family: 'JetBrains Mono', monospace; line-height: 1.5;"></div>
     </div>
+</div>
 
     <!-- DROP OVERLAY -->
     <div id="dropOverlay">⬇ Dépose ton fichier ici</div>
