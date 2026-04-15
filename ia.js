@@ -291,7 +291,7 @@ function switchTab(id) {
     sessionStorage.setItem('pensee_ia_active_tab', id);
     history = [];
     CONFIG.storageKey = getHistoryKey(id);
-    loadHistoryFromStorage();
+    loadHistoryFromDB();
     renderTabs();
 }
 
@@ -440,7 +440,7 @@ async function initTabs() {
     }
     
     renderTabs();
-    loadHistoryFromStorage(); 
+    loadHistoryFromDB(); 
 }
 
 function showWelcome() {
@@ -450,28 +450,53 @@ function showWelcome() {
     if (sug) sug.style.display = "flex";
 }
 
-function loadHistoryFromStorage() {
+async function loadHistoryFromDB() {
     messagesEl.innerHTML = "";
-    try {
-        const stored = localStorage.getItem(CONFIG.storageKey);
-        if (!stored) { showWelcome(); return; }
-        const parsed = JSON.parse(stored);
-        if (!Array.isArray(parsed) || parsed.length === 0) { showWelcome(); return; }
-        history = parsed;
-        parsed.forEach(function(msg) {
-            addMessage(
-                msg.role === "assistant" ? "bot" : "user",
-                msg.role === "assistant" ? formatResponse(msg.content) : msg.content,
-                msg.role === "assistant"
-            );
-        });
-        const sug = document.getElementById("suggestions");
-        if (sug) sug.style.display = "none";
-    } catch(e) {
-        console.warn("Historique corrompu, reset.", e);
-        localStorage.removeItem(CONFIG.storageKey);
+    history = []; // On réinitialise l'historique local du contexte
+
+    if (!activeTabId || !currentUser) {
         showWelcome();
+        return;
     }
+
+    const { data, error } = await supabase
+        .from('messages')
+        .select('role, content')
+        .eq('conversation_id', activeTabId)
+        .order('created_at', { ascending: true }); // Du plus ancien au plus récent
+
+    if (error || !data || data.length === 0) {
+        showWelcome();
+        return;
+    }
+
+    history = data; // On charge le contexte pour la fenêtre de l'IA
+    
+    data.forEach(msg => {
+        addMessage(
+            msg.role === "assistant" ? "bot" : "user",
+            msg.role === "assistant" ? formatResponse(msg.content) : msg.content,
+            msg.role === "assistant"
+        );
+    });
+
+    const sug = document.getElementById("suggestions");
+    if (sug) sug.style.display = "none";
+}
+
+async function saveMessageToDB(role, content) {
+    if (!activeTabId || !currentUser) return;
+    
+    const { error } = await supabase
+        .from('messages')
+        .insert([{
+            conversation_id: activeTabId,
+            user_id: currentUser.id,
+            role: role,
+            content: content
+        }]);
+        
+    if (error) console.error("Erreur de sauvegarde du message :", error);
 }
 
 function saveHistoryToStorage() {
@@ -813,12 +838,16 @@ async function callAPI(userMessage, files) {
         actions.appendChild(copyBtn);
         msgDiv.appendChild(actions);
 
+        // Mise à jour du contexte local pour les prochains prompts
         history.push({ role: "user",      content: userMessage });
         history.push({ role: "assistant", content: fullReply });
-        saveHistoryToStorage();
+        
+        // Sauvegarde asynchrone en base de données
+        saveMessageToDB("user", userMessage);
+        saveMessageToDB("assistant", fullReply);
 
         creditsLeft--;
-        saveCreditsToStorage();
+        saveCreditsToStorage(); // Les crédits restent en local pour ce sprint
         updateCredits();
         if (creditsLeft > 0) setStatus("ok");
 
