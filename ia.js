@@ -740,7 +740,7 @@ function removeTyping() {
 //  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
 // ============================================================
 
-function buildPrompt(userMessage, files) {
+function buildPrompt(userMessage, files, memoryContext = "") {
     const CONTEXT_WINDOW = 20;
     const recent = history.slice(-CONTEXT_WINDOW);
 
@@ -769,6 +769,10 @@ function buildPrompt(userMessage, files) {
             }
         });
     }
+    if (memoryContext) {
+        prompt += "### CONTEXTE MÉMOIRE (Informations extraites de la base de données) :\n";
+        prompt += memoryContext + "\n---\n\n";
+    }
 
     if (recent.length > 0) {
         prompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
@@ -785,13 +789,13 @@ function buildPrompt(userMessage, files) {
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
 
-async function callAPI(userMessage, files) {
+async function callAPI(userMessage, files, memoryContext = "") {
     if (creditsLeft <= 0) {
         addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
         return;
     }
 
-    const prompt = buildPrompt(userMessage, files);
+    const prompt = buildPrompt(userMessage, files, memoryContext);
     const binaryFiles = files
         .filter(function(f) { return f.content && f.content.type === "binary"; })
         .map(function(f) { return { name: f.name, mime: f.content.mimeType, base64: f.content.data }; });
@@ -923,6 +927,19 @@ async function sendMessage() {
     const files = attachedFiles.slice();
     if (!text && !files.length) return;
     if (sendBtn.disabled) return;
+    if (text.startsWith("/memo ")) {
+        const memoContent = text.replace("/memo ", "").trim();
+        if (memoContent) {
+            userInput.value = "";
+            userInput.style.height = "auto";
+            addMessage("user", text, false);
+            showTyping();
+            await memorizeText(memoContent);
+            removeTyping();
+            addMessage("bot", "🧠 **Mémoire sauvegardée.** Info vectorisée et enregistrée.", true);
+        }
+        return;
+    }
 
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "none";
@@ -957,9 +974,15 @@ async function sendMessage() {
     // C'est cette ligne qui garantit que ton message s'affiche partout !
     await saveMessageToDB("user", messageText);
 
+    const memories = await searchMemory(messageText);
+    let memoryContext = "";
+    if (memories && memories.length > 0) {
+        memoryContext = memories.map(m => m.content).join("\n\n");
+    }
+
     // 5. Appel réseau vers ton API Vercel
     await new Promise(r => setTimeout(r, 0));
-    await callAPI(messageText, files);
+    await callAPI(messageText, files, memoryContext);
 
     // 6. Rétablissement de l'interface
     removeTyping();
