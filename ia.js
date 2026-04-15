@@ -974,19 +974,23 @@ async function sendMessage() {
     // C'est cette ligne qui garantit que ton message s'affiche partout !
     await saveMessageToDB("user", messageText);
 
-    const memories = await searchMemory(messageText);
     let memoryContext = "";
+try {
+    const memories = await searchMemory(messageText);
     if (memories && memories.length > 0) {
         memoryContext = memories.map(m => m.content).join("\n\n");
     }
+} catch (memErr) {
+    console.warn("Recherche mémoire échouée (non bloquant) :", memErr);
+}
 
     // 5. Appel réseau vers ton API Vercel
     await new Promise(r => setTimeout(r, 0));
-    await callAPI(messageText, files, memoryContext);
-
-    // 6. Rétablissement de l'interface
-    removeTyping();
-    if (creditsLeft > 0) {
+    try {
+        await callAPI(messageText, files, memoryContext);
+    } finally {
+        // 6. Rétablissement GARANTI même en cas d'erreur réseau ou exception
+        removeTyping();
         sendBtn.disabled    = false;
         sendBtn.textContent = "Envoyer ›";
         userInput.focus();
