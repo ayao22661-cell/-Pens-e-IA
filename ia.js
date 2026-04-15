@@ -205,38 +205,60 @@ const dropOverlay   = document.getElementById("dropOverlay");
 
 async function loadCreditsFromDB() {
     if (!currentUser) return;
-    const today = new Date().toISOString().slice(0, 10);
     
-    // Récupération du profil depuis Supabase
+    // On récupère la date locale au format YYYY-MM-DD
+    const now = new Date();
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    
     let { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', currentUser.id)
-        .single();
+        .maybeSingle(); // maybeSingle évite l'erreur si le profil n'existe pas encore
 
-    if (error || !profile) return;
+    if (error) {
+        console.error("Erreur Profil:", error);
+        return;
+    }
 
-    // Reset journalier si la date stockée est différente d'aujourd'hui
+    // Si le profil n'existe pas (cas rare avec le trigger), on le crée
+    if (!profile) {
+        const { data: newProfile } = await supabase
+            .from('profiles')
+            .insert([{ id: currentUser.id, last_reset_date: today, credits_used: 0 }])
+            .select().single();
+        profile = newProfile;
+    }
+
+    // Vérification du reset
     if (profile.last_reset_date !== today) {
+        // C'est un nouveau jour !
         await supabase
             .from('profiles')
             .update({ credits_used: 0, last_reset_date: today })
             .eq('id', currentUser.id);
         creditsLeft = CONFIG.maxCredits;
     } else {
+        // On reste sur les crédits de la journée
         creditsLeft = CONFIG.maxCredits - (profile.credits_used || 0);
     }
+    
     updateCredits();
 }
 
 async function useCreditInDB() {
     if (!currentUser) return;
-    // Calcul du nouveau nombre de crédits utilisés
-    const used = CONFIG.maxCredits - (creditsLeft - 1);
-    await supabase
+    
+    // On calcule combien on a utilisé au total
+    // Si il reste 19 crédits sur 20, on a utilisé 1
+    const usedCount = CONFIG.maxCredits - creditsLeft;
+
+    const { error } = await supabase
         .from('profiles')
-        .update({ credits_used: used })
+        .update({ credits_used: usedCount })
         .eq('id', currentUser.id);
+        
+    if (error) console.error("Erreur synchro crédits:", error);
 }
 
 // ============================================================
