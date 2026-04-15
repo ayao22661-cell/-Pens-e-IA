@@ -13,8 +13,7 @@ export default async function handler(req) {
     }
 
     const bodyReq = await req.json().catch(() => ({}));
-    // CORRECTION : Extraction du paramètre system
-    const { prompt, files, system } = bodyReq;
+    const { prompt, files } = bodyReq;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
@@ -26,25 +25,27 @@ export default async function handler(req) {
     }
 
     const modelsToTry = [
-        // --- Modèles Flash (Privilégier la performance) ---
-        { name: "gemini-2.5-flash",      apiVersion: "v1beta" }, // 5 RPM
-        { name: "gemini-2.0-flash",      apiVersion: "v1beta" }, // 15 RPM
-
-        // --- Modèles Lite (Vitesse pure) ---
-        { name: "gemini-2.5-flash-lite", apiVersion: "v1beta" }, // 10 RPM
-        { name: "gemini-2.0-flash-lite", apiVersion: "v1beta" }, // 30 RPM
+        // --- Modèles Flash stables (avec recherche web) ---
+        "gemini-2.5-flash",        // 10 RPM
+        "gemini-2.0-flash",        // 15 RPM
+        "gemini-1.5-flash",        // 15 RPM
 
         // --- Famille Gemma (Open-weights, sans recherche web) ---
-        { name: "gemma-3-27b-it",        apiVersion: "v1beta" }, // 30 RPM
-        { name: "gemma-3-12b-it",        apiVersion: "v1beta" }, // 30 RPM
-        { name: "gemma-3-4b-it",         apiVersion: "v1beta" }, // 30 RPM
-        { name: "gemma-3-2b-it",         apiVersion: "v1beta" }, // 30 RPM
-        { name: "gemma-3-1b-it",         apiVersion: "v1beta" }  // 30 RPM
+        "gemma-3-27b-it",          // 30 RPM
+        "gemma-3-12b-it",          // 30 RPM
+        "gemma-3-4b-it",           // 30 RPM
+        "gemma-3-2b-it",           // 30 RPM
+        "gemma-3-1b-it"            // 30 RPM
     ];
 
-    for (const modelEntry of modelsToTry) {
-        const { name: model, apiVersion } = modelEntry;
+    function getApiVersion(modelName) {
+        // gemini-2.x et gemma-3.x utilisent v1beta
+        return "v1beta";
+    }
+
+    for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
+        const apiVersion = getApiVersion(model);
         const parts = [{ text: prompt }];
 
         if (files && files.length > 0) {
@@ -60,12 +61,6 @@ export default async function handler(req) {
             });
         }
 
-        // CORRECTION ARCHITECTURALE : Séparation stricte de l'identité et du prompt utilisateur
-        if (system && isGemma) {
-            // Fallback propre pour les modèles open-weights qui ne supportent pas toujours systemInstruction
-            parts.unshift({ text: "INSTRUCTIONS SYSTÈME :\n" + system + "\n\n" });
-        }
-
         const body = {
             contents: [{ parts }],
             generationConfig: {
@@ -78,13 +73,6 @@ export default async function handler(req) {
 
         if (!isGemma) {
             body.tools = [{ google_search: {} }];
-            
-            // Implémentation native de l'instruction système pour l'API Gemini
-            if (system) {
-                body.systemInstruction = {
-                    parts: [{ text: system }]
-                };
-            }
         }
 
         const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
@@ -103,6 +91,7 @@ export default async function handler(req) {
                         const decoder = new TextDecoder();
                         let buffer = "";
 
+                        // Avertissement silencieux pour Gemma, sans révéler le nom du modèle
                         if (isGemma) {
                             controller.enqueue(new TextEncoder().encode("⚠️ *Mode mémoire local activé.*\n\n"));
                         }
@@ -122,7 +111,13 @@ export default async function handler(req) {
                                         if (dataStr === '[DONE]') continue;
                                         try {
                                             const dataObj = JSON.parse(dataStr);
-                                            const textChunk = dataObj.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                                            // Gemini avec google_search peut renvoyer plusieurs parts
+                                            // (text + groundingMetadata). On concatène tous les parts textuels.
+                                            const parts = dataObj.candidates?.[0]?.content?.parts || [];
+                                            const textChunk = parts
+                                                .filter(p => typeof p.text === "string")
+                                                .map(p => p.text)
+                                                .join("");
                                             if (textChunk) {
                                                 controller.enqueue(new TextEncoder().encode(textChunk));
                                             }
@@ -149,7 +144,8 @@ export default async function handler(req) {
                 });
             }
 
-            if ([400, 404, 429].includes(response.status) || response.status >= 500) {
+            // Bouclier anti-crash : on ignore les 404 (modèle introuvable), 400 (outil non supporté), 429 (surcharge) et 500+ (serveur mort)
+            if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
                 continue;
             }
 
