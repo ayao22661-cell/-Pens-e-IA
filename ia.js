@@ -233,53 +233,52 @@ function saveCreditsToStorage() {
 //  HISTORIQUE — localStorage, persistant entre rechargements
 // ============================================================
 
-// ── Gestionnaire d'onglets ──────────────────────────────────
-const TABS_KEY = 'pensee_ia_tabs';
-
-function genTabId() {
-    return 'tab_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-}
-
-function loadTabs() {
-    try {
-        const raw = localStorage.getItem(TABS_KEY);
-        if (!raw) return null;
-        return JSON.parse(raw);
-    } catch(e) { return null; }
-}
-
-function saveTabs(tabs) {
-    localStorage.setItem(TABS_KEY, JSON.stringify(tabs));
-}
-
-// État onglets
-let tabs = [];          // [{ id, title }]
+// ── Gestionnaire d'onglets (Supabase) ──────────────────────────────────
+let tabs = [];
 let activeTabId = null;
 
 function getHistoryKey(tabId) { return 'pensee_ia_history__' + tabId; }
 
-function createTab(switchTo) {
-    const id = genTabId();
-    tabs.push({ id: id, title: 'Nouvelle conv.' });
-    saveTabs(tabs);
-    if (switchTo !== false) switchTab(id);
-    return id;
+async function loadTabs() {
+    if (!currentUser) return [];
+    const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .order('created_at', { ascending: false });
+    
+    if (error) console.error("Erreur chargement tabs:", error);
+    return data || [];
 }
 
-function deleteTab(id) {
-    if (tabs.length <= 1) {
-        // Ne pas supprimer le dernier onglet — en créer un nouveau à la place
-        createTab(true);
-        localStorage.removeItem(getHistoryKey(id));
-        tabs = tabs.filter(function(t) { return t.id !== id; });
-        saveTabs(tabs);
-        return;
+async function createTab(switchTo) {
+    if (!currentUser) return null;
+    const { data, error } = await supabase
+        .from('conversations')
+        .insert([{ user_id: currentUser.id, title: 'Nouvelle conv.' }])
+        .select()
+        .single();
+
+    if (error) {
+        console.error("Erreur création tab:", error);
+        return null;
     }
-    const idx = tabs.findIndex(function(t) { return t.id === id; });
-    localStorage.removeItem(getHistoryKey(id));
-    tabs = tabs.filter(function(t) { return t.id !== id; });
-    saveTabs(tabs);
-    if (activeTabId === id) {
+
+    tabs.unshift(data);
+    if (switchTo !== false) switchTab(data.id);
+    else renderTabs();
+    return data.id;
+}
+
+async function deleteTab(id) {
+    const { error } = await supabase.from('conversations').delete().eq('id', id);
+    if (error) { console.error("Erreur suppression:", error); return; }
+
+    const idx = tabs.findIndex(t => t.id === id);
+    tabs = tabs.filter(t => t.id !== id);
+    
+    if (tabs.length === 0) {
+        await createTab(true);
+    } else if (activeTabId === id) {
         const newIdx = Math.min(idx, tabs.length - 1);
         switchTab(tabs[newIdx].id);
     } else {
@@ -289,27 +288,26 @@ function deleteTab(id) {
 
 function switchTab(id) {
     activeTabId = id;
-    // Sauvegarder la clé active
     sessionStorage.setItem('pensee_ia_active_tab', id);
     history = [];
-    const storageKey = getHistoryKey(id);
-    // Override CONFIG.storageKey pour les sauvegardes futures
-    CONFIG.storageKey = storageKey;
+    CONFIG.storageKey = getHistoryKey(id);
     loadHistoryFromStorage();
     renderTabs();
 }
 
-function updateTabTitle(id, firstUserMsg) {
-    const tab = tabs.find(function(t) { return t.id === id; });
+async function updateTabTitle(id, firstUserMsg) {
+    const tab = tabs.find(t => t.id === id);
     if (!tab) return;
+    
     const title = firstUserMsg.slice(0, 28) + (firstUserMsg.length > 28 ? '…' : '');
     if (tab.title === 'Nouvelle conv.' || tab.title.endsWith('…') || tab.title === title.slice(0, -1)) {
-        tab.title = title;
-        saveTabs(tabs);
-        renderTabs();
-        // Mettre à jour le titre du header
-        const titleEl = document.getElementById('activeConvTitle');
-        if (titleEl && id === activeTabId) titleEl.textContent = title;
+        const { error } = await supabase.from('conversations').update({ title: title }).eq('id', id);
+        if (!error) {
+            tab.title = title;
+            renderTabs();
+            const titleEl = document.getElementById('activeConvTitle');
+            if (titleEl && id === activeTabId) titleEl.textContent = title;
+        }
     }
 }
 
@@ -318,7 +316,6 @@ function renderTabs() {
     if (!list) return;
     list.innerHTML = '';
 
-    // Grouper par date (aujourd'hui / hier / plus ancien)
     const now = Date.now();
     const DAY = 86400000;
     const groups = [
@@ -326,29 +323,32 @@ function renderTabs() {
         { label: 'Hier',        items: [] },
         { label: 'Plus ancien', items: [] },
     ];
-    tabs.forEach(function(tab) {
-        const ts = parseInt(tab.id.split('_')[1]) || 0;
+    
+    tabs.forEach(tab => {
+        // Utilise la date de Supabase au lieu de l'ID généré localement
+        const ts = new Date(tab.created_at).getTime();
         const age = now - ts;
         if (age < DAY)        groups[0].items.push(tab);
         else if (age < 2*DAY) groups[1].items.push(tab);
         else                   groups[2].items.push(tab);
     });
 
-    groups.forEach(function(group) {
+    groups.forEach(group => {
         if (!group.items.length) return;
         const label = document.createElement('div');
         label.className = 'conv-section-label';
         label.textContent = group.label;
         list.appendChild(label);
-        // Plus récent en haut
-        group.items.slice().reverse().forEach(function(tab) {
+        
+        // Supabase trie déjà, pas besoin de reverse()
+        group.items.forEach(tab => {
             const el = document.createElement('div');
             el.className = 'conv-item' + (tab.id === activeTabId ? ' active' : '');
 
             const title = document.createElement('span');
             title.className = 'conv-item-title';
             title.textContent = tab.title;
-            title.addEventListener('click', function() {
+            title.addEventListener('click', () => {
                 if (tab.id !== activeTabId) switchTab(tab.id);
                 closeSidebarMobile();
             });
@@ -356,9 +356,8 @@ function renderTabs() {
             const del = document.createElement('button');
             del.className = 'conv-item-del';
             del.title = 'Supprimer';
-            // Injection d'un SVG propre et minimaliste (poubelle)
             del.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
-            del.addEventListener('click', function(e) {
+            del.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (tabs.length === 1 || confirm('Supprimer cette conversation ?')) deleteTab(tab.id);
             });
@@ -369,8 +368,7 @@ function renderTabs() {
         });
     });
 
-    // Mettre à jour le titre dans le header
-    const activeTab = tabs.find(function(t) { return t.id === activeTabId; });
+    const activeTab = tabs.find(t => t.id === activeTabId);
     const titleEl = document.getElementById('activeConvTitle');
     if (titleEl && activeTab) titleEl.textContent = activeTab.title;
 }
@@ -422,23 +420,27 @@ userInput.addEventListener('keydown', function(e) {
 });
 
 // ── Initialisation des onglets ─────────────────────────────────────────────
-function initTabs() {
-    const stored = loadTabs();
-    if (stored && stored.length > 0) {
-        tabs = stored;
-        // Restaurer l'onglet actif de la session
+async function initTabs() {
+    tabs = await loadTabs();
+    
+    if (tabs && tabs.length > 0) {
         const lastActive = sessionStorage.getItem('pensee_ia_active_tab');
-        const validLast  = lastActive && tabs.find(function(t) { return t.id === lastActive; });
-        activeTabId = validLast ? lastActive : tabs[tabs.length - 1].id;
+        const validLast = lastActive && tabs.find(t => t.id === lastActive);
+        activeTabId = validLast ? lastActive : tabs[0].id;
     } else {
-        tabs = [];
         activeTabId = null;
-        createTab(false);
-        activeTabId = tabs[0].id;
-        sessionStorage.setItem('pensee_ia_active_tab', activeTabId);
+        tabs = [];
+        const newId = await createTab(false);
+        if (newId) activeTabId = newId;
     }
-    CONFIG.storageKey = getHistoryKey(activeTabId);
+    
+    if (activeTabId) {
+        sessionStorage.setItem('pensee_ia_active_tab', activeTabId);
+        CONFIG.storageKey = getHistoryKey(activeTabId);
+    }
+    
     renderTabs();
+    loadHistoryFromStorage(); 
 }
 
 function showWelcome() {
