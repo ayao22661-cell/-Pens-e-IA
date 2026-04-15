@@ -101,7 +101,7 @@ async function checkLocalAuth() {
                 window.history.replaceState(null, null, window.location.pathname);
             }
 
-            loadCreditsFromStorage();
+            loadCreditsFromDB();
             initTabs();
         } else {
             loginScreen.style.display = "flex";
@@ -203,30 +203,40 @@ const dropOverlay   = document.getElementById("dropOverlay");
 //  CRÉDITS — localStorage, reset quotidien automatique
 // ============================================================
 
-function loadCreditsFromStorage() {
-    const today  = new Date().toISOString().slice(0, 10);
-    let stored = {};
-try {
-    stored = JSON.parse(localStorage.getItem(CONFIG.creditsKey) || "{}");
-    if (!stored) stored = {};
-} catch(e) {
-    stored = {};
-}
-if (stored.date === today) {
-        creditsLeft = CONFIG.maxCredits - (stored.used || 0);
-    } else {
+async function loadCreditsFromDB() {
+    if (!currentUser) return;
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Récupération du profil depuis Supabase
+    let { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .single();
+
+    if (error || !profile) return;
+
+    // Reset journalier si la date stockée est différente d'aujourd'hui
+    if (profile.last_reset_date !== today) {
+        await supabase
+            .from('profiles')
+            .update({ credits_used: 0, last_reset_date: today })
+            .eq('id', currentUser.id);
         creditsLeft = CONFIG.maxCredits;
-        localStorage.setItem(CONFIG.creditsKey, JSON.stringify({ date: today, used: 0 }));
+    } else {
+        creditsLeft = CONFIG.maxCredits - (profile.credits_used || 0);
     }
     updateCredits();
 }
 
-function saveCreditsToStorage() {
-    const today = new Date().toISOString().slice(0, 10);
-    localStorage.setItem(CONFIG.creditsKey, JSON.stringify({
-        date: today,
-        used: CONFIG.maxCredits - creditsLeft
-    }));
+async function useCreditInDB() {
+    if (!currentUser) return;
+    // Calcul du nouveau nombre de crédits utilisés
+    const used = CONFIG.maxCredits - (creditsLeft - 1);
+    await supabase
+        .from('profiles')
+        .update({ credits_used: used })
+        .eq('id', currentUser.id);
 }
 
 // ============================================================
@@ -831,16 +841,17 @@ async function callAPI(userMessage, files) {
         actions.appendChild(copyBtn);
         msgDiv.appendChild(actions);
 
-        // Mise à jour du contexte local pour les prochains prompts
+        // Mise à jour du contexte local
         history.push({ role: "user",      content: userMessage });
         history.push({ role: "assistant", content: fullReply });
         
-        // Sauvegarde asynchrone en base de données
-        saveMessageToDB("user", userMessage);
-        saveMessageToDB("assistant", fullReply);
+        // Sauvegarde de la réponse de l'IA (le message utilisateur est déjà sauvé)
+        await saveMessageToDB("assistant", fullReply);
 
+        // Déduction du crédit sur Supabase
+        await useCreditInDB();
+        
         creditsLeft--;
-        saveCreditsToStorage(); // Les crédits restent en local pour ce sprint
         updateCredits();
         if (creditsLeft > 0) setStatus("ok");
 
@@ -893,6 +904,10 @@ async function sendMessage() {
     sendBtn.disabled    = true;
     sendBtn.textContent = "...";
     showTyping();
+
+    // SAUVEGARDE IMMÉDIATE DU MESSAGE UTILISATEUR
+    // C'est cette ligne qui garantit que ton message s'affiche partout !
+    await saveMessageToDB("user", messageText);
 
     // 5. Appel réseau vers ton API Vercel
     await new Promise(r => setTimeout(r, 0));
