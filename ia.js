@@ -570,6 +570,11 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
+    // SÉCURITÉ : Si la bibliothèque n'est pas encore chargée, on utilise un rendu basique
+    if (typeof marked === 'undefined') {
+        console.warn("Marked.js n'est pas encore prêt.");
+        return text.replace(/\n/g, "<br>"); 
+    }
     // 1. GESTION DU BLOC <think>
     const isThinking = /<think>(?!.*<\/think>)/is.test(text);
     let thinkContent = "";
