@@ -542,7 +542,9 @@ function formatResponse(text) {
     const isThinking = /<think>(?!.*<\/think>)/is.test(text);
     
     // 2. Suppression totale et silencieuse du bloc de réflexion
-    let cleanText = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
+    let cleanText = isThinking
+        ? text.replace(/<think>[\s\S]*$/i, "")          // Coupe à l'ouverture si non fermé
+        : text.replace(/<think>[\s\S]*?<\/think>/gi, ""); // Supprime proprement si fermé
     
     // 3. Indicateur visuel : Si le texte visible est vide mais que l'IA réfléchit
     if (isThinking && cleanText.trim() === "") {
@@ -805,8 +807,8 @@ async function callAPI(userMessage, files) {
         }
 
         // Nettoyage et finalisation du message
-        fullReply = fullReply.replace(/^\s*\[Pensée\]:\s*/i, "");
-        const cutIndex = fullReply.indexOf("[Utilisateur]:");
+        fullReply = fullReply.replace(/^\s*\[Pens[ée]{1,2}e?\s*(?:IA)?\s*\]:\s*/i, "");
+        const cutIndex = fullReply.search(/\[Utilisateur\]:|### NOUVEAU MESSAGE/i);
         if (cutIndex !== -1) fullReply = fullReply.substring(0, cutIndex);
         fullReply = fullReply.trim();
         bubble.innerHTML = formatResponse(fullReply);
