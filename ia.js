@@ -90,16 +90,30 @@ if (toggleAuthModeBtn) {
 
 // Vérification de la session au chargement
 async function checkLocalAuth() {
+    // 1. Écouter les changements d'état (connexion, déconnexion, clic email)
+    supabase.auth.onAuthStateChange((event, session) => {
+        if (session) {
+            currentUser = session.user;
+            loginScreen.style.display = "none";
+            
+            // Nettoyage de l'URL (enlève le #access_token...)
+            if (window.location.hash) {
+                window.history.replaceState(null, null, window.location.pathname);
+            }
+
+            loadCreditsFromStorage();
+            initTabs();
+        } else {
+            loginScreen.style.display = "flex";
+            if (loginEmailEl) loginEmailEl.focus();
+        }
+    });
+
+    // 2. Vérification immédiate au chargement
     const { data: { session } } = await supabase.auth.getSession();
-    
     if (session) {
         currentUser = session.user;
         loginScreen.style.display = "none";
-        loadCreditsFromStorage(); 
-        initTabs();               
-    } else {
-        loginScreen.style.display = "flex";
-        if (loginEmailEl) loginEmailEl.focus();
     }
 }
 
