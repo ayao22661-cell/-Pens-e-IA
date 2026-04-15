@@ -147,7 +147,24 @@ RÈGLES STRICTES :
 - Termine par UN insight contre-intuitif que l'utilisateur ne peut pas trouver ailleurs.
 - Si google_search est disponible : cherche les signaux faibles, pas les tendances mainstream.`
     }
+    ,
+    audit: {
+        id: "audit",
+        label: "Audit",
+        icon: "⚖️",
+        description: "Contrôle qualité, sécurité, optimisation",
+        systemOverride: `
+━━━ MODE AGENT : AUDIT TECHNIQUE ━━━
+Tu es l'auditeur final. Ta mission est de garantir l'excellence opérationnelle.
+RÈGLES D'OR :
+- Analyse la proposition précédente par rapport à la demande initiale.
+- Vérifie avec une rigueur absolue : Sécurité (ex: RLS Supabase), Performance (ex: Edge compatibility, complexité algorithmique), UI (Lois de Gestalt), et la logique métier.
+- Si le résultat est absolument parfait et prêt pour la production, commence ta réponse par : "[VALIDE]".
+- Si la moindre amélioration est nécessaire, commence par : "[À CORRIGER]" suivi d'un rapport structuré, chirurgical et concis.
+- Reste factuel, froid et professionnel. Ton but est de traquer la faille.`
+    }
 };
+
 
 // Agent actif (null = détection automatique)
 let activeAgentId = null;
@@ -1130,7 +1147,7 @@ async function callAPI(userMessage, files, memoryContext = "") {
         fullReply = fullReply.trim();
         bubble.innerHTML = formatResponse(fullReply);
 
-        // Bouton copier
+        // Bouton copier (Ton code existant)
         const actions = document.createElement("div");
         actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
@@ -1145,6 +1162,52 @@ async function callAPI(userMessage, files, memoryContext = "") {
             } catch(e) { copyBtn.innerHTML = "❌ Erreur"; }
         });
         actions.appendChild(copyBtn);
+
+        // ==========================================
+        // DÉBUT DE L'AJOUT : BOUTON AUDIT
+        // ==========================================
+        if (resolvedAgentId === 'code' || resolvedAgentId === 'strategie') {
+            const auditBtn = document.createElement("button");
+            auditBtn.className = "copy-btn"; // On réutilise le style discret du bouton copier
+            auditBtn.innerHTML = "⚖️ Auditer";
+            auditBtn.title = "Lancer un audit strict sur cette réponse";
+
+            auditBtn.addEventListener("click", async function() {
+                if (auditBtn.disabled) return;
+
+                // Verrouillage du bouton
+                auditBtn.innerHTML = "⏳ Audit...";
+                auditBtn.disabled = true;
+                
+                // Feedback visuel dans le chat
+                addMessage("user", "Lance un audit strict sur ta dernière proposition.", false);
+                showTyping();
+
+                const auditPrompt = `Analyse cette proposition technique :\n\n${fullReply}\n\nTrouve les bugs, les failles de sécurité, les problèmes d'optimisation ou de logique. Réponds par [VALIDE] si c'est parfait, ou [À CORRIGER] avec un rapport structuré.`;
+
+                // Bascule temporaire sur l'Agent Audit
+                const originalAgent = activeAgentId;
+                activeAgentId = "audit";
+                updateAgentBadge("audit");
+
+                try {
+                    // Appel de l'API avec le contexte mémoire
+                    await callAPI(auditPrompt, [], memoryContext);
+                } finally {
+                    // Restauration de l'état précédent
+                    activeAgentId = originalAgent;
+                    updateAgentBadge(originalAgent || null);
+                    auditBtn.innerHTML = "⚖️ Auditer";
+                    auditBtn.disabled = false;
+                }
+            });
+            actions.appendChild(auditBtn);
+        }
+        // ==========================================
+        // FIN DE L'AJOUT
+        // ==========================================
+
+        msgDiv.appendChild(actions); // (Ton code existant)
         msgDiv.appendChild(actions);
 
         // Mise à jour contexte
