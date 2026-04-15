@@ -880,46 +880,63 @@
             transition: 0.2s;
         }
         #sidebarToggle:hover { color: var(--accent); border-color: rgba(0,229,160,0.3); }
+        
+@media (max-width: 680px) {
+    #sidebar {
+        position: fixed;
+        left: 0; top: 0; bottom: 0;
+        transform: translateX(-100%);
+        transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1);
+        z-index: 200;
+        box-shadow: 4px 0 32px rgba(0,0,0,0.5);
+    }
+    #sidebar.open { transform: translateX(0); }
+    #sidebarOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        z-index: 199;
+    }
+    #sidebarOverlay.visible { display: block; }
+    #sidebarToggle { display: flex; align-items: center; justify-content: center; }
+    
+    /* Zone de message plus large */
+    .msg { max-width: 92%; }
+    .bubble { padding: 12px 15px; font-size: 13.5px; }
+    
+    /* Ergonomie de la Sidebar */
+    .conv-item {
+        min-height: 56px; /* Plus haut pour un défilement au doigt sans erreur */
+    }
+    
+    .conv-item-title {
+        font-size: 14px; /* Plus lisible */
+        padding: 12px 15px;
+    }
 
-        @media (max-width: 680px) {
-            #sidebar {
-                position: fixed;
-                left: 0; top: 0; bottom: 0;
-                transform: translateX(-100%);
-                transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1);
-                z-index: 200;
-                box-shadow: 4px 0 32px rgba(0,0,0,0.5);
-            }
-            #sidebar.open { transform: translateX(0); }
-            #sidebarOverlay {
-                display: none;
-                position: fixed;
-                inset: 0;
-                background: rgba(0,0,0,0.55);
-                z-index: 199;
-            }
-            #sidebarOverlay.visible { display: block; }
-            #sidebarToggle { display: flex; align-items: center; justify-content: center; }
-            .login-card { padding: 36px 22px 32px; }
-            .msg { max-width: 92%; }
-            .bubble { padding: 12px 15px; font-size: 13.5px; }
-            .bubble pre { font-size: 10.5px; padding: 10px; }
-            #inputArea { padding: 10px 12px; gap: 8px; }
-            #sendBtn { padding: 12px 16px; font-size: 13px; }
-            #messages { padding: 16px 14px; }
-            header { padding: 11px 14px; }
-            footer { display: none; }
-            #suggestions { padding: 0 14px 14px; }
-            .conv-item-del { 
-                opacity: 1; 
-                padding: 12px 16px; /* Zone de clic plus large pour supprimer */
-            }
-            #newConvSideBtn {
-                padding: 14px 18px; /* Zone de clic massive pour le pouce */
-                font-size: 13px;
-                margin: 16px 14px 12px;
-            }
-        }
+    .conv-item-del { 
+        opacity: 1 !important; 
+        min-width: 52px; /* Largeur fixe pour le pouce */
+        min-height: 56px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 95, 95, 0.05); /* Léger fond pour délimiter la zone */
+    }
+
+    .conv-item-del svg {
+        width: 20px; /* Icône plus grande pour la visibilité */
+        height: 20px;
+    }
+
+    #newConvSideBtn {
+        padding: 16px; 
+        font-size: 13px;
+        margin: 15px 12px;
+    }
+}
     </style>
 </head>
 <body>
