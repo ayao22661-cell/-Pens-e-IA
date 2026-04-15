@@ -1,10 +1,59 @@
 // ============================================================
 //  PENSÉE IA — api/chat.js (Vercel Edge & Streaming)
-//  Recherche web activée, modèles cachés, cascade blindée
+//  Multi-agents, systemInstruction natif Google, cascade blindée
 // ============================================================
 
 export const config = {
     runtime: 'edge'
+};
+
+// ============================================================
+//  CONFIGURATION DES AGENTS
+//  Chaque agent a : température, outils, modèle prioritaire
+// ============================================================
+const AGENTS = {
+    code: {
+        temperature: 0.2,
+        topP: 0.90,
+        topK: 40,
+        useSearch: false,           // Le code ne nécessite pas de recherche web
+        preferredModel: null        // Utilise la cascade normale
+    },
+    recherche: {
+        temperature: 0.6,
+        topP: 0.95,
+        topK: 64,
+        useSearch: true,            // Recherche web forcée
+        preferredModel: "gemini-2.5-flash"  // Toujours le plus capable pour la synthèse
+    },
+    creatif: {
+        temperature: 1.0,
+        topP: 0.98,
+        topK: 64,
+        useSearch: false,
+        preferredModel: null
+    },
+    strategie: {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 64,
+        useSearch: true,            // Données marché récentes utiles
+        preferredModel: null
+    },
+    visionnaire: {
+        temperature: 0.9,
+        topP: 0.97,
+        topK: 64,
+        useSearch: true,            // Signaux faibles + tendances
+        preferredModel: "gemini-2.5-flash"
+    },
+    default: {
+        temperature: 0.5,
+        topP: 0.95,
+        topK: 64,
+        useSearch: false,
+        preferredModel: null
+    }
 };
 
 export default async function handler(req) {
@@ -13,7 +62,7 @@ export default async function handler(req) {
     }
 
     const bodyReq = await req.json().catch(() => ({}));
-    const { prompt, files } = bodyReq;
+    const { prompt, files, systemInstruction, agentId } = bodyReq;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
@@ -24,30 +73,35 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
-    const modelsToTry = [
-        // --- Modèles Flash stables (avec recherche web) ---
-        "gemini-2.5-flash",        // 10 RPM
-        "gemini-2.0-flash",        // 15 RPM
-        "gemini-1.5-flash",        // 15 RPM
+    // Récupération de la config agent (fallback sur default)
+    const agentConfig = AGENTS[agentId] || AGENTS.default;
 
-        // --- Famille Gemma (Open-weights, sans recherche web) ---
-        "gemma-3-27b-it",          // 30 RPM
-        "gemma-3-12b-it",          // 30 RPM
-        "gemma-3-4b-it",           // 30 RPM
-        "gemma-3-2b-it",           // 30 RPM
-        "gemma-3-1b-it"            // 30 RPM
+    // Modèles : si l'agent préfère un modèle, on le met en tête de cascade
+    const baseModels = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemma-3-27b-it",
+        "gemma-3-12b-it",
+        "gemma-3-4b-it",
+        "gemma-3-2b-it",
+        "gemma-3-1b-it"
     ];
 
-    function getApiVersion(modelName) {
-        // gemini-2.x et gemma-3.x utilisent v1beta
-        return "v1beta";
+    let modelsToTry = baseModels;
+    if (agentConfig.preferredModel) {
+        // Mise en tête du modèle préféré sans doublon
+        modelsToTry = [
+            agentConfig.preferredModel,
+            ...baseModels.filter(m => m !== agentConfig.preferredModel)
+        ];
     }
 
     for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
-        const apiVersion = getApiVersion(model);
         const parts = [{ text: prompt }];
 
+        // Ajout des fichiers binaires
         if (files && files.length > 0) {
             files.forEach(file => {
                 if (file.base64) {
@@ -61,21 +115,42 @@ export default async function handler(req) {
             });
         }
 
+        // ── Gestion du systemInstruction selon le modèle ──────────────
+        // Gemma ne supporte PAS systemInstruction → on réinjecte dans le message
+        // Gemini supporte le canal natif → on l'utilise
+        let finalParts = parts;
+        if (isGemma && systemInstruction) {
+            finalParts = [
+                {
+                    text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text
+                },
+                ...parts.slice(1) // Fichiers binaires intacts
+            ];
+        }
+
+        // ── Activation de la recherche web ────────────────────────────
+        // Gemma ne supporte PAS google_search
+        // On respecte aussi le flag useSearch de l'agent
+        const canUseSearch = !isGemma && agentConfig.useSearch;
+
         const body = {
-            contents: [{ parts }],
+            ...((!isGemma && systemInstruction) && {
+                systemInstruction: { parts: [{ text: systemInstruction }] }
+            }),
+            contents: [{ role: "user", parts: finalParts }],
             generationConfig: {
                 maxOutputTokens: 65536,
-                temperature: 0.5,
-                topP: 0.95,
-                topK: 64
+                temperature: agentConfig.temperature,
+                topP: agentConfig.topP,
+                topK: agentConfig.topK
             }
         };
 
-        if (!isGemma) {
+        if (canUseSearch) {
             body.tools = [{ google_search: {} }];
         }
 
-        const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
         try {
             const response = await fetch(url, {
@@ -91,7 +166,7 @@ export default async function handler(req) {
                         const decoder = new TextDecoder();
                         let buffer = "";
 
-                        // Avertissement silencieux pour Gemma, sans révéler le nom du modèle
+                        // Avertissement silencieux si Gemma (sans révéler le modèle)
                         if (isGemma) {
                             controller.enqueue(new TextEncoder().encode("⚠️ *Mode mémoire local activé.*\n\n"));
                         }
@@ -111,8 +186,6 @@ export default async function handler(req) {
                                         if (dataStr === '[DONE]') continue;
                                         try {
                                             const dataObj = JSON.parse(dataStr);
-                                            // Gemini avec google_search peut renvoyer plusieurs parts
-                                            // (text + groundingMetadata). On concatène tous les parts textuels.
                                             const parts = dataObj.candidates?.[0]?.content?.parts || [];
                                             const textChunk = parts
                                                 .filter(p => typeof p.text === "string")
@@ -122,7 +195,7 @@ export default async function handler(req) {
                                                 controller.enqueue(new TextEncoder().encode(textChunk));
                                             }
                                         } catch (e) {
-                                            // Ignorer les fragments JSON incomplets
+                                            // Fragment JSON incomplet, ignoré
                                         }
                                     }
                                 }
@@ -144,7 +217,6 @@ export default async function handler(req) {
                 });
             }
 
-            // Bouclier anti-crash : on ignore les 404 (modèle introuvable), 400 (outil non supporté), 429 (surcharge) et 500+ (serveur mort)
             if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
                 continue;
             }
