@@ -7,6 +7,7 @@ const CONFIG = {
     maxFileSizeMB: 10,
     storageKey:  'pensee_ia_history',
     creditsKey:  'pensee_ia_credits',
+    enterToSendKey: 'pensee_ia_enter_to_send',
     langMap: {
         js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
         py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
@@ -55,7 +56,7 @@ Mode compagnon : chaleureux, cultivé, humain — avec la même rigueur d'analys
 };
 
 // ============================================================
-//  AUTH — mot de passe unique local
+//  AUTH
 // ============================================================
 
 const ACCESS_PASSWORD = "2024";
@@ -71,6 +72,7 @@ function checkLocalAuth() {
         loginScreen.style.display = "none";
         loadCreditsFromStorage();
         initTabs();
+        initSettings(); // Init des réglages systèmes
     } else {
         loginScreen.style.display = "flex";
         if (loginPassEl) loginPassEl.focus();
@@ -99,6 +101,7 @@ function handleLogin() {
     setTimeout(() => { loginScreen.style.display = "none"; }, 300);
     loadCreditsFromStorage();
     initTabs();
+    initSettings();
 }
 
 loginBtn.addEventListener("click", handleLogin);
@@ -114,12 +117,12 @@ logoutBtn.addEventListener("click", () => {
 
 // ============================================================
 //  ÉTAT & ÉLÉMENTS DOM
-//  ⚠️  Déclarés AVANT tout appel qui les utilise
 // ============================================================
 
 let creditsLeft   = CONFIG.maxCredits;
 let history       = [];
 let attachedFiles = [];
+let enterToSend   = true;
 
 const messagesEl    = document.getElementById("messages");
 const userInput     = document.getElementById("userInput");
@@ -133,8 +136,101 @@ const uploadBtn     = document.getElementById("uploadBtn");
 const uploadPreview = document.getElementById("uploadPreview");
 const dropOverlay   = document.getElementById("dropOverlay");
 
+// Éléments Modale Paramètres
+const settingsModal     = document.getElementById("settingsModal");
+const settingsBtn       = document.getElementById("settingsBtn");
+const closeSettingsBtn  = document.getElementById("closeSettingsBtn");
+const memoryFill        = document.getElementById("memoryFill");
+const memoryUsed        = document.getElementById("memoryUsed");
+const exportDataBtn     = document.getElementById("exportDataBtn");
+const purgeDataBtn      = document.getElementById("purgeDataBtn");
+const enterToSendToggle = document.getElementById("enterToSendToggle");
+
 // ============================================================
-//  CRÉDITS — localStorage, reset quotidien automatique
+//  SYSTÈME & PARAMÈTRES (NOUVEAU)
+// ============================================================
+
+function initSettings() {
+    // 1. Charger la pref Enter
+    const storedEnterPref = localStorage.getItem(CONFIG.enterToSendKey);
+    if (storedEnterPref !== null) enterToSend = storedEnterPref === 'true';
+    enterToSendToggle.checked = enterToSend;
+
+    // 2. Events d'ouverture/fermeture
+    settingsBtn.addEventListener('click', () => {
+        calculateStorage();
+        settingsModal.classList.add('visible');
+    });
+    closeSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('visible');
+    });
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) settingsModal.classList.remove('visible');
+    });
+
+    // 3. Toggle Action
+    enterToSendToggle.addEventListener('change', (e) => {
+        enterToSend = e.target.checked;
+        localStorage.setItem(CONFIG.enterToSendKey, enterToSend);
+    });
+
+    // 4. Export JSON
+    exportDataBtn.addEventListener('click', () => {
+        const dump = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('pensee_ia_')) {
+                try { dump[key] = JSON.parse(localStorage.getItem(key)); }
+                catch(e) { dump[key] = localStorage.getItem(key); }
+            }
+        }
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dump, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href",     dataStr);
+        downloadAnchorNode.setAttribute("download", "pensee_backup_" + new Date().toISOString().slice(0,10) + ".json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    });
+
+    // 5. Purge Danger
+    purgeDataBtn.addEventListener('click', () => {
+        if(confirm("ATTENTION : Cela va supprimer définitivement TOUT ton historique de conversation. Es-tu absolument sûr ?")) {
+            if(confirm("Dernier avertissement. Confirmer la suppression totale ?")) {
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('pensee_ia_')) keysToRemove.push(key);
+                }
+                keysToRemove.forEach(k => localStorage.removeItem(k));
+                location.reload();
+            }
+        }
+    });
+}
+
+function calculateStorage() {
+    let totalBytes = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('pensee_ia_')) {
+            totalBytes += (localStorage.getItem(key).length + key.length) * 2; // Approximativement 2 octets par car UTF-16
+        }
+    }
+    // Estimation d'un plafond à 5MB
+    const MAX_BYTES = 5 * 1024 * 1024; 
+    let percent = (totalBytes / MAX_BYTES) * 100;
+    if (percent > 100) percent = 100;
+    
+    memoryFill.style.width = `${percent}%`;
+    memoryFill.style.background = percent > 85 ? 'var(--red)' : (percent > 60 ? 'var(--yellow)' : 'var(--accent)');
+    
+    const kb = (totalBytes / 1024).toFixed(1);
+    memoryUsed.textContent = `${kb} KB / ~5 MB`;
+}
+
+// ============================================================
+//  CRÉDITS
 // ============================================================
 
 function loadCreditsFromStorage() {
@@ -164,10 +260,9 @@ function saveCreditsToStorage() {
 }
 
 // ============================================================
-//  HISTORIQUE — localStorage, persistant entre rechargements
+//  HISTORIQUE & ONGLETS
 // ============================================================
 
-// ── Gestionnaire d'onglets ──────────────────────────────────
 const TABS_KEY = 'pensee_ia_tabs';
 
 function genTabId() {
@@ -186,8 +281,7 @@ function saveTabs(tabs) {
     localStorage.setItem(TABS_KEY, JSON.stringify(tabs));
 }
 
-// État onglets
-let tabs = [];          // [{ id, title }]
+let tabs = [];
 let activeTabId = null;
 
 function getHistoryKey(tabId) { return 'pensee_ia_history__' + tabId; }
@@ -202,7 +296,6 @@ function createTab(switchTo) {
 
 function deleteTab(id) {
     if (tabs.length <= 1) {
-        // Ne pas supprimer le dernier onglet — en créer un nouveau à la place
         createTab(true);
         localStorage.removeItem(getHistoryKey(id));
         tabs = tabs.filter(function(t) { return t.id !== id; });
@@ -223,11 +316,9 @@ function deleteTab(id) {
 
 function switchTab(id) {
     activeTabId = id;
-    // Sauvegarder la clé active
     sessionStorage.setItem('pensee_ia_active_tab', id);
     history = [];
     const storageKey = getHistoryKey(id);
-    // Override CONFIG.storageKey pour les sauvegardes futures
     CONFIG.storageKey = storageKey;
     loadHistoryFromStorage();
     renderTabs();
@@ -241,7 +332,6 @@ function updateTabTitle(id, firstUserMsg) {
         tab.title = title;
         saveTabs(tabs);
         renderTabs();
-        // Mettre à jour le titre du header
         const titleEl = document.getElementById('activeConvTitle');
         if (titleEl && id === activeTabId) titleEl.textContent = title;
     }
@@ -252,7 +342,6 @@ function renderTabs() {
     if (!list) return;
     list.innerHTML = '';
 
-    // Grouper par date (aujourd'hui / hier / plus ancien)
     const now = Date.now();
     const DAY = 86400000;
     const groups = [
@@ -274,7 +363,6 @@ function renderTabs() {
         label.className = 'conv-section-label';
         label.textContent = group.label;
         list.appendChild(label);
-        // Plus récent en haut
         group.items.slice().reverse().forEach(function(tab) {
             const el = document.createElement('div');
             el.className = 'conv-item' + (tab.id === activeTabId ? ' active' : '');
@@ -290,7 +378,6 @@ function renderTabs() {
             const del = document.createElement('button');
             del.className = 'conv-item-del';
             del.title = 'Supprimer';
-            // Injection d'un SVG propre et minimaliste (poubelle)
             del.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
             del.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -303,13 +390,11 @@ function renderTabs() {
         });
     });
 
-    // Mettre à jour le titre dans le header
     const activeTab = tabs.find(function(t) { return t.id === activeTabId; });
     const titleEl = document.getElementById('activeConvTitle');
     if (titleEl && activeTab) titleEl.textContent = activeTab.title;
 }
 
-// Mobile sidebar toggle
 function closeSidebarMobile() {
     const sb = document.getElementById('sidebar');
     const ov = document.getElementById('sidebarOverlay');
@@ -327,7 +412,6 @@ function closeSidebarMobile() {
     });
     if (ov) ov.addEventListener('click', closeSidebarMobile);
 
-    // Bouton "+ Nouveau" sidebar
     const newBtn = document.getElementById('newConvSideBtn');
     if (newBtn) newBtn.addEventListener('click', function() {
         createTab(true);
@@ -335,7 +419,6 @@ function closeSidebarMobile() {
     });
 })();
 
-// Intercept sendMessage pour mettre à jour le titre de l'onglet
 const _origSendMessage = sendMessage;
 window.sendMessage = async function() {
     const text = userInput.value.trim();
@@ -347,20 +430,22 @@ window.sendMessage = async function() {
         }
     }
 };
-// Rebrancher les événements sur la nouvelle sendMessage
-sendBtn.removeEventListener('click', sendMessage);
-sendBtn.addEventListener('click', window.sendMessage);
-userInput.removeEventListener('keydown', userInput._kd);
+
+// Application de l'option "Enter pour Envoyer"
 userInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sendMessage(); }
+    if (e.key === 'Enter') {
+        if (enterToSend && !e.shiftKey) { 
+            e.preventDefault(); 
+            window.sendMessage(); 
+        }
+        // Si enterToSend est false, Enter natif fait un saut de ligne.
+    }
 });
 
-// ── Initialisation des onglets ─────────────────────────────────────────────
 function initTabs() {
     const stored = loadTabs();
     if (stored && stored.length > 0) {
         tabs = stored;
-        // Restaurer l'onglet actif de la session
         const lastActive = sessionStorage.getItem('pensee_ia_active_tab');
         const validLast  = lastActive && tabs.find(function(t) { return t.id === lastActive; });
         activeTabId = validLast ? lastActive : tabs[tabs.length - 1].id;
@@ -410,16 +495,8 @@ function saveHistoryToStorage() {
     localStorage.setItem(CONFIG.storageKey, JSON.stringify(history.slice(-100)));
 }
 
-function clearHistory() {
-    // Crée un nouvel onglet sans confirmation (le bouton s'appelle déjà "+ Nouveau")
-    createTab(true);
-}
-
-const clearBtn = document.getElementById("clearBtn");
-if (clearBtn) clearBtn.addEventListener("click", clearHistory);
-
 // ============================================================
-//  CRÉDITS UI
+//  CRÉDITS UI & UTILITAIRES
 // ============================================================
 
 function updateCredits() {
@@ -431,7 +508,6 @@ function updateCredits() {
     alertBanner.className     = "";
     alertBanner.style.display = "none";
 
-    // Réinitialiser les contrôles avant de les bloquer conditionnellement
     userInput.disabled = false;
     sendBtn.disabled   = false;
     uploadBtn.disabled = false;
@@ -451,10 +527,6 @@ function updateCredits() {
     }
 }
 
-// ============================================================
-//  UTILITAIRES
-// ============================================================
-
 function escapeHtml(t) {
     return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -465,10 +537,7 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    // 1. Suppression totale et silencieuse du bloc de réflexion interne (même en cours de stream)
     text = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
-    
-    // 2. Formatage classique
     text = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
     });
@@ -532,7 +601,7 @@ function renderUploadPreview() {
 window.removeFile = function(i) { attachedFiles.splice(i, 1); renderUploadPreview(); };
 
 // ============================================================
-//  AFFICHAGE MESSAGES
+//  AFFICHAGE MESSAGES & API
 // ============================================================
 
 function addMessage(role, content, isHtml) {
@@ -612,10 +681,6 @@ function removeTyping() {
     if (t) t.remove();
 }
 
-// ============================================================
-//  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
-// ============================================================
-
 function buildPrompt(userMessage, files) {
     const CONTEXT_WINDOW = 20;
     const recent = history.slice(-CONTEXT_WINDOW);
@@ -658,9 +723,6 @@ function buildPrompt(userMessage, files) {
     return prompt;
 }
 
-//  APPEL API — /api/chat (Vercel Edge & Streaming)
-// ============================================================
-
 async function callAPI(userMessage, files) {
     if (creditsLeft <= 0) {
         addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
@@ -688,7 +750,6 @@ async function callAPI(userMessage, files) {
                 const errData = await response.json();
                 errMsg = errData.error || errMsg;
             } catch(e) {}
-            
             addMessage("bot", "❌ Erreur : " + errMsg, false);
             setStatus("err");
             return;
@@ -696,7 +757,6 @@ async function callAPI(userMessage, files) {
 
         removeTyping();
         
-        // Création de l'interface de la bulle vide pour le flux
         const msgDiv = document.createElement("div");
         msgDiv.className = "msg bot";
         const label = document.createElement("span");
@@ -708,7 +768,6 @@ async function callAPI(userMessage, files) {
         msgDiv.appendChild(bubble);
         messagesEl.appendChild(msgDiv);
 
-        // Lecture du flux binaire en direct
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let fullReply = "";
@@ -716,13 +775,12 @@ async function callAPI(userMessage, files) {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            
             fullReply += decoder.decode(value, { stream: true });
             bubble.innerHTML = formatResponse(fullReply);
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // Nettoyage et finalisation du message
+        // Remplacement correct pour éviter le bug de la boîte vide (suppression du préfixe IA)
         fullReply = fullReply.replace(/^\s*\[Pensée\]:\s*/i, "");
         const cutIndex = fullReply.indexOf("[Utilisateur]:");
         if (cutIndex !== -1) fullReply = fullReply.substring(0, cutIndex);
@@ -762,53 +820,12 @@ async function callAPI(userMessage, files) {
 }
 
 // ============================================================
-//  ENVOI
-// ============================================================
-
-async function sendMessage() {
-    const text  = userInput.value.trim();
-    const files = attachedFiles.slice();
-    if (!text && !files.length) return;
-    if (sendBtn.disabled) return;
-
-    const sug = document.getElementById("suggestions");
-    if (sug) sug.style.display = "none";
-
-    const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
-
-    if (files.length > 0) addUserMessageWithFiles(text, files);
-    else addMessage("user", text, false);
-
-    userInput.value        = "";
-    userInput.style.height = "auto";
-    attachedFiles          = [];
-    renderUploadPreview();
-    fileInput.value = "";
-
-    sendBtn.disabled    = true;
-    sendBtn.textContent = "...";
-    showTyping();
-
-    await new Promise(function(r) { setTimeout(r, 0); });
-    await callAPI(messageText, files);
-
-    removeTyping();
-    if (creditsLeft > 0) {
-        sendBtn.disabled    = false;
-        sendBtn.textContent = "Envoyer \u203a";
-        userInput.focus();
-    }
-}
-
-// ============================================================
 //  ÉVÉNEMENTS
 // ============================================================
 
 window.useSuggestion = function(el) { userInput.value = el.textContent; userInput.focus(); };
-
 uploadBtn.addEventListener("click", function() { fileInput.click(); });
 fileInput.addEventListener("change", function() { if (fileInput.files.length) addFiles(fileInput.files); });
-
 document.addEventListener("dragover",  function(e) { e.preventDefault(); dropOverlay.classList.add("visible"); });
 document.addEventListener("dragleave", function(e) { if (!e.relatedTarget) dropOverlay.classList.remove("visible"); });
 document.addEventListener("drop", function(e) {
@@ -817,19 +834,14 @@ document.addEventListener("drop", function(e) {
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 });
 
-sendBtn.addEventListener("click", sendMessage);
-userInput.addEventListener("keydown", function(e) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+sendBtn.addEventListener("click", window.sendMessage);
 userInput.addEventListener("input", function() {
     this.style.height = "auto";
     this.style.height = Math.min(this.scrollHeight, 120) + "px";
 });
 
 // ============================================================
-//  INIT — ordre impératif :
-//  1. updateCredits / setStatus (pas besoin d'auth)
-//  2. checkLocalAuth EN DERNIER (utilise messagesEl + toutes les fonctions)
+//  INIT
 // ============================================================
 updateCredits();
 setStatus("ok");
