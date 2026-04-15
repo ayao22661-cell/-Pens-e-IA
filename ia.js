@@ -553,15 +553,29 @@ function formatResponse(text) {
     
     // 2. Suppression totale et silencieuse du bloc de réflexion
     let cleanText = isThinking
-        ? text.replace(/<think>[\s\S]*$/i, "")          // Coupe à l'ouverture si non fermé
-        : text.replace(/<think>[\s\S]*?<\/think>/gi, ""); // Supprime proprement si fermé
+        ? text.replace(/<think>[\s\S]*$/i, "")
+        : text.replace(/<think>[\s\S]*?<\/think>/gi, "");
     
-    // 3. Indicateur visuel : Si le texte visible est vide mais que l'IA réfléchit
-    if (isThinking && cleanText.trim() === "") {
-        return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
+    // 3. GESTION BLINDÉE DES BULLES VIDES
+    if (cleanText.trim() === "") {
+        if (isThinking) {
+            // L'IA est toujours en train de générer le bloc <think>
+            return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
+        } else {
+            // L'IA a fermé la balise, mais n'a RIEN écrit d'autre.
+            // On vérifie si elle a caché sa réponse dans le bloc think.
+            const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
+            if (thinkMatch && thinkMatch[1].trim() !== "") {
+                // On repêche la réponse brute
+                cleanText = "<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>" + thinkMatch[1].trim();
+            } else {
+                // Transition (fraction de seconde) avant l'affichage du vrai texte
+                return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'>✍️ Rédaction en cours...</span>";
+            }
+        }
     }
     
-    // 4. Formatage classique
+    // 4. Formatage classique (Code, Markdown, Sauts de ligne)
     cleanText = cleanText.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
         return "<pre><code>" + escapeHtml(code.trim()) + "</code></pre>";
     });
@@ -570,12 +584,6 @@ function formatResponse(text) {
     cleanText = cleanText.replace(/\n/g, "<br>");
     
     return cleanText;
-}
-
-function setStatus(state) {
-    const map = { ok: ["ok", "\u25cf connect\u00e9"], err: ["err", "\u25cf erreur"], warn: ["warn", "\u25cf cr\u00e9dits bas"] };
-    statusBadge.className = "";
-    if (map[state]) { statusBadge.className = map[state][0]; statusBadge.textContent = map[state][1]; }
 }
 
 // ============================================================
