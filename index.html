@@ -54,7 +54,7 @@
         }
 
         /* ============================================================
-           ÉCRAN DE CONNEXION
+           ÉCRAN DE CONNEXION — mot de passe uniquement
            ============================================================ */
         #loginScreen {
             position: fixed;
@@ -238,6 +238,7 @@
             z-index: 50;
         }
 
+        /* Logo dans la sidebar */
         #sidebar-header {
             padding: 18px 16px 14px;
             border-bottom: 1px solid var(--border);
@@ -275,6 +276,7 @@
             margin-top: 3px;
         }
 
+        /* Bouton nouveau */
         #newConvSideBtn {
             display: flex;
             align-items: center;
@@ -301,6 +303,7 @@
         }
         #newConvSideBtn .btn-icon { font-size: 14px; }
 
+        /* Liste conversations */
         #convList {
             flex: 1;
             overflow-y: auto;
@@ -361,7 +364,7 @@
             opacity: 0;
             background: none;
             border: none;
-            color: var(--red);
+            color: var(--red); /* Rouge par défaut */
             cursor: pointer;
             padding: 8px 12px;
             border-radius: 0 8px 8px 0;
@@ -381,6 +384,7 @@
         .conv-item:hover .conv-item-del { opacity: 1; }
         .conv-item-del:hover svg { opacity: 1; transform: scale(1.15); }
 
+        /* Footer sidebar */
         #sidebar-footer {
             padding: 12px 12px;
             border-top: 1px solid var(--border);
@@ -390,6 +394,7 @@
             flex-shrink: 0;
         }
 
+        /* Crédits dans la sidebar */
         #creditBar {
             display: flex;
             align-items: center;
@@ -452,6 +457,7 @@
             overflow: hidden;
         }
 
+        /* Header minimal en haut de la zone chat */
         header {
             padding: 11px 22px;
             border-bottom: 1px solid var(--border);
@@ -481,13 +487,7 @@
         #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
         #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.2); }
 
-        #settingsBtn {
-            background: none; border: none; color: var(--text2); cursor: pointer; padding: 4px;
-            border-radius: 5px; display: flex; align-items: center; justify-content: center; transition: 0.2s;
-        }
-        #settingsBtn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
-        #settingsBtn svg { width: 18px; height: 18px; fill: currentColor; }
-
+        /* Titre de la conversation active */
         #activeConvTitle {
             font-family: 'Syne', sans-serif;
             font-size: 13px;
@@ -499,6 +499,22 @@
             max-width: 340px;
         }
 
+        #clearBtn {
+            display: none; /* remplacé par la sidebar */
+        }
+
+        /* ============================================================
+           BARRE ONGLETS — supprimée (remplacée par sidebar)
+           ============================================================ */
+        #tabsBar { display: none; }
+
+        /* ============================================================
+           BARRE CRÉDITS (ancienne, cachée — dans sidebar maintenant)
+           ============================================================ */
+
+        /* ============================================================
+           BANNIÈRE ALERTE
+           ============================================================ */
         #alertBanner {
             display: none;
             padding: 9px 22px;
@@ -511,6 +527,9 @@
         #alertBanner.low   { display:block; background:rgba(240,192,64,0.07); color:var(--yellow); border-bottom:1px solid rgba(240,192,64,0.12); }
         #alertBanner.empty { display:block; background:rgba(255,95,95,0.07); color:var(--red); border-bottom:1px solid rgba(255,95,95,0.12); }
 
+        /* ============================================================
+           MESSAGES
+           ============================================================ */
         #messages {
             flex: 1;
             min-height: 0;
@@ -830,44 +849,6 @@
         }
 
         /* ============================================================
-           MODALE PARAMÈTRES
-           ============================================================ */
-        #settingsModal {
-            position: fixed; inset: 0; background: rgba(8,10,15,0.85); backdrop-filter: blur(6px);
-            z-index: 9998; display: none; align-items: center; justify-content: center; padding: 20px; opacity: 0; transition: 0.3s;
-        }
-        #settingsModal.visible { display: flex; opacity: 1; }
-        .settings-content {
-            background: var(--bg2); border: 1px solid var(--border2); border-radius: 20px; width: 100%; max-width: 440px;
-            padding: 32px; box-shadow: var(--shadow); transform: translateY(20px); transition: 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        }
-        #settingsModal.visible .settings-content { transform: translateY(0); }
-        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-        .settings-header h2 { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; }
-        .close-settings { background: none; border: none; color: var(--text3); font-size: 24px; cursor: pointer; transition: 0.2s; }
-        .close-settings:hover { color: var(--text); }
-        
-        .setting-group { margin-bottom: 24px; }
-        .setting-label { display: block; font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text3); margin-bottom: 12px; text-transform: uppercase; }
-        .memory-track { height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
-        #memoryFill { height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: 0.5s ease; }
-        .memory-stats { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text2); }
-        
-        .settings-action-btn { width: 100%; padding: 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 13px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
-        .settings-action-btn:hover { border-color: var(--border2); background: var(--bg4); }
-        .settings-action-btn.danger { color: var(--red); border-color: rgba(255,95,95,0.2); }
-        .settings-action-btn.danger:hover { background: rgba(255,95,95,0.1); }
-        
-        .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); }
-        .toggle-text { font-family: 'Syne', sans-serif; font-size: 14px; color: var(--text); }
-        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--bg4); transition: .3s; border-radius: 24px; }
-        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: var(--text); transition: .3s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--accent); }
-        input:checked + .slider:before { transform: translateX(20px); background-color: #060810; }
-
-        /* ============================================================
            FOOTER
            ============================================================ */
         footer {
@@ -899,105 +880,103 @@
             transition: 0.2s;
         }
         #sidebarToggle:hover { color: var(--accent); border-color: rgba(0,229,160,0.3); }
+        
+@media (max-width: 680px) {
+    #sidebar {
+        position: fixed;
+        left: 0; top: 0; bottom: 0;
+        transform: translateX(-100%);
+        transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1);
+        z-index: 200;
+        box-shadow: 4px 0 32px rgba(0,0,0,0.5);
+    }
+    #sidebar.open { transform: translateX(0); }
+    #sidebarOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        z-index: 199;
+    }
+    #sidebarOverlay.visible { display: block; }
+    #sidebarToggle { display: flex; align-items: center; justify-content: center; }
+    
+    /* Zone de message plus large */
+    .msg { max-width: 92%; }
+    .bubble { padding: 12px 15px; font-size: 13.5px; }
+    
+    /* Ergonomie de la Sidebar */
+    .conv-item {
+        min-height: 56px; /* Plus haut pour un défilement au doigt sans erreur */
+    }
+    
+    .conv-item-title {
+        font-size: 14px; /* Plus lisible */
+        padding: 12px 15px;
+    }
 
-        @media (max-width: 680px) {
-            #sidebar {
-                position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%);
-                transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1); z-index: 200; box-shadow: 4px 0 32px rgba(0,0,0,0.5);
-            }
-            #sidebar.open { transform: translateX(0); }
-            #sidebarOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 199; }
-            #sidebarOverlay.visible { display: block; }
-            #sidebarToggle { display: flex; align-items: center; justify-content: center; }
-            
-            .msg { max-width: 92%; }
-            .bubble { padding: 12px 15px; font-size: 13.5px; }
-            .conv-item { min-height: 56px; }
-            .conv-item-title { font-size: 14px; padding: 12px 15px; }
-            .conv-item-del { 
-                opacity: 1 !important; min-width: 52px; min-height: 56px; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 95, 95, 0.05); 
-            }
-            .conv-item-del svg { width: 20px; height: 20px; }
-            #newConvSideBtn { padding: 16px; font-size: 13px; margin: 15px 12px; }
+    .conv-item-del { 
+        opacity: 1 !important; 
+        min-width: 52px; /* Largeur fixe pour le pouce */
+        min-height: 56px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 95, 95, 0.05); /* Léger fond pour délimiter la zone */
+    }
 
-            .login-card { padding: 36px 22px 32px; }
-            .bubble pre { font-size: 10.5px; padding: 10px; }
-            #inputArea { padding: 10px 12px; gap: 8px; }
-            #sendBtn { padding: 12px 16px; font-size: 13px; }
-            #messages { padding: 16px 14px; }
-            header { padding: 11px 14px; }
-            footer { display: none; }
-            #suggestions { padding: 0 14px 14px; }
-        }
+    .conv-item-del svg {
+        width: 20px; /* Icône plus grande pour la visibilité */
+        height: 20px;
+    }
+
+    #newConvSideBtn {
+        padding: 16px; 
+        font-size: 13px;
+        margin: 15px 12px;
+    }
+}
     </style>
 </head>
 <body>
 
-    <!-- CONNEXION -->
+    <!-- ============================================================
+         ÉCRAN DE CONNEXION — mot de passe uniquement
+         ============================================================ -->
     <div id="loginScreen">
         <div class="login-card">
             <div class="login-logo">
                 <div class="login-logo-dot"></div>
                 <span class="login-logo-name"><em>Pensée</em> IA</span>
             </div>
+
             <p>Entre le mot de passe pour accéder à ton espace.</p>
+
             <div class="login-group">
                 <label>Mot de passe</label>
-                <input type="password" id="loginPassword" class="login-input" placeholder="••••" autocomplete="current-password">
+                <input
+                    type="password"
+                    id="loginPassword"
+                    class="login-input"
+                    placeholder="••••"
+                    autocomplete="current-password"
+                >
             </div>
+
             <button id="loginBtn">Accéder à Pensée ›</button>
             <div id="loginError">Mot de passe incorrect.</div>
         </div>
     </div>
 
-    <!-- MODALE PARAMÈTRES -->
-    <div id="settingsModal">
-        <div class="settings-content">
-            <div class="settings-header">
-                <h2>Système & Données</h2>
-                <button class="close-settings" id="closeSettingsBtn">&times;</button>
-            </div>
-
-            <div class="setting-group">
-                <span class="setting-label">Espace LocalStorage (Max ~5Mo)</span>
-                <div class="memory-track"><div id="memoryFill"></div></div>
-                <div class="memory-stats">
-                    <span id="memoryUsed">Calcul...</span>
-                    <span>100%</span>
-                </div>
-            </div>
-
-            <div class="setting-group">
-                <span class="setting-label">Sauvegarde</span>
-                <button id="exportDataBtn" class="settings-action-btn">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                    Exporter l'historique (.json)
-                </button>
-            </div>
-
-            <div class="setting-group">
-                <span class="setting-label">Zone de Danger</span>
-                <button id="purgeDataBtn" class="settings-action-btn danger">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                    Purger tout le LocalStorage
-                </button>
-            </div>
-
-            <div class="toggle-row">
-                <span class="toggle-text">Touche 'Entrée' pour envoyer</span>
-                <label class="switch">
-                    <input type="checkbox" id="enterToSendToggle" checked>
-                    <span class="slider"></span>
-                </label>
-            </div>
-        </div>
-    </div>
-
-    <!-- OVERLAYS -->
+    <!-- DROP OVERLAY -->
     <div id="dropOverlay">⬇ Dépose ton fichier ici</div>
+    <!-- SIDEBAR OVERLAY mobile -->
     <div id="sidebarOverlay"></div>
 
-    <!-- SIDEBAR GAUCHE -->
+    <!-- ============================================================
+         SIDEBAR GAUCHE
+         ============================================================ -->
     <div id="sidebar">
         <div id="sidebar-header">
             <div class="logo-mark">
@@ -1013,7 +992,9 @@
             <span class="btn-icon">＋</span> Nouvelle conv.
         </button>
 
-        <div id="convList"></div>
+        <div id="convList">
+            <!-- Rempli dynamiquement par ia.js -->
+        </div>
 
         <div id="sidebar-footer">
             <div id="creditBar">
@@ -1025,22 +1006,29 @@
         </div>
     </div>
 
-    <!-- ZONE PRINCIPALE -->
+    <!-- ============================================================
+         ZONE PRINCIPALE DROITE
+         ============================================================ -->
     <div id="mainArea">
+
+        <!-- Header minimal -->
         <header>
             <button id="sidebarToggle">☰</button>
             <span id="activeConvTitle">Nouvelle conversation</span>
             <div class="header-right">
                 <span id="statusBadge"></span>
-                <button id="settingsBtn" title="Paramètres Système">
-                    <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
-                </button>
+                <!-- clearBtn caché — remplacé par sidebar -->
+                <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
             </div>
         </header>
 
+        <!-- ALERTE -->
         <div id="alertBanner"></div>
+
+        <!-- MESSAGES -->
         <div id="messages"></div>
 
+        <!-- SUGGESTIONS -->
         <div id="suggestions">
             <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
             <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
@@ -1048,8 +1036,10 @@
             <span class="suggestion" onclick="useSuggestion(this)">Déboguer mon code</span>
         </div>
 
+        <!-- FICHIERS ATTACHÉS -->
         <div id="uploadPreview"></div>
 
+        <!-- INPUT -->
         <div id="inputArea">
             <button id="uploadBtn" title="Joindre un fichier">📎</button>
             <input type="file" id="fileInput" multiple accept="*/*">
@@ -1057,11 +1047,14 @@
             <button id="sendBtn">Envoyer ›</button>
         </div>
 
+        <!-- FOOTER -->
         <footer>
             <em>Pensée IA</em> · Codage & Intelligence · Créé par <em>Yao Baba Ange Emmanuel</em>
         </footer>
-    </div>
+
+    </div><!-- /mainArea -->
 
     <script type="module" src="ia.js"></script>
+
 </body>
 </html>
