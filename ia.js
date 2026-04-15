@@ -570,41 +570,38 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    // SÉCURITÉ : Si la bibliothèque n'est pas encore chargée, on utilise un rendu basique
-    if (typeof marked === 'undefined') {
-        console.warn("Marked.js n'est pas encore prêt.");
-        return text.replace(/\n/g, "<br>"); 
-    }
+    // Sécurité si Marked n'est pas chargé
+    if (typeof marked === 'undefined') return text.replace(/\n/g, "<br>");
+
     // 1. GESTION DU BLOC <think>
     const isThinking = /<think>(?!.*<\/think>)/is.test(text);
     let thinkContent = "";
-    
-    // Extraction pour le secours si le texte final est vide
     const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
     if (thinkMatch) thinkContent = thinkMatch[1].trim();
 
-    // Nettoyage du texte pour le Markdown
     let cleanText = isThinking
         ? text.replace(/<think>[\s\S]*$/i, "")
         : text.replace(/<think>[\s\S]*?<\/think>/gi, "");
 
-    // Gestion des états vides (Animation ou Secours)
     if (cleanText.trim() === "") {
         if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
         if (thinkContent) return `<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>${thinkContent}`;
         return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'>✍️ Rédaction en cours...</span>";
     }
 
-    // 2. CONFIGURATION DU RENDU PROFESSIONNEL (Marked + Sandbox)
+    // 2. CONFIGURATION DU RENDU (Compatibilité v11+)
     const renderer = new marked.Renderer();
 
-    // Surcharge du rendu des blocs de code pour intégrer le Sandbox
-    renderer.code = function(code, language) {
-        const lang = (language || "").toLowerCase();
-        const isWeb = ['html', 'css', 'javascript', 'js'].includes(lang);
-        const encodedCode = encodeURIComponent(code);
-        const runId = 'sandbox_' + Math.random().toString(36).substring(2, 9);
+    renderer.code = function(argsOrCode, _lang) {
+        // Détection du format : objet (v11+) ou chaîne (v10-)
+        const isV11 = typeof argsOrCode === 'object' && argsOrCode !== null;
+        const code = (isV11 ? argsOrCode.text : argsOrCode) || "";
+        const language = (isV11 ? argsOrCode.lang : _lang) || "";
         
+        const lang = language.toLowerCase();
+        const isWeb = ['html', 'css', 'javascript', 'js'].includes(lang);
+        const encodedCode = encodeURIComponent(code.trim());
+        const runId = 'sandbox_' + Math.random().toString(36).substring(2, 9);
         const btnHtml = isWeb ? `<button class="run-btn" data-code="${encodedCode}" onclick="executeWebCode(this, '${runId}', '${lang}')">▶ Exécuter</button>` : '';
 
         return `
@@ -618,9 +615,14 @@ function formatResponse(text) {
         </div>`.trim();
     };
 
-    // 3. GÉNÉRATION ET SÉCURISATION DU HTML
-    const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
-    return DOMPurify.sanitize(htmlOutput);
+    // 3. GÉNÉRATION
+    try {
+        const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
+        return DOMPurify.sanitize(htmlOutput);
+    } catch (e) {
+        console.error("Erreur de parsing Markdown:", e);
+        return cleanText.replace(/\n/g, "<br>");
+    }
 }
 
 // ============================================================
