@@ -570,42 +570,36 @@ function getLang(filename) {
 }
 
 function formatResponse(text) {
-    // 1. Détecter si l'IA est en train de réfléchir (bloc non fermé)
+    // 1. GESTION DU BLOC <think>
     const isThinking = /<think>(?!.*<\/think>)/is.test(text);
+    let thinkContent = "";
     
-    // 2. Suppression totale et silencieuse du bloc de réflexion
+    // Extraction pour le secours si le texte final est vide
+    const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
+    if (thinkMatch) thinkContent = thinkMatch[1].trim();
+
+    // Nettoyage du texte pour le Markdown
     let cleanText = isThinking
         ? text.replace(/<think>[\s\S]*$/i, "")
         : text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-    
-    // 3. GESTION BLINDÉE DES BULLES VIDES
-    if (cleanText.trim() === "") {
-        if (isThinking) {
-            // L'IA est toujours en train de générer le bloc <think>
-            return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
-        } else {
-            // L'IA a fermé la balise, mais n'a RIEN écrit d'autre.
-            // On vérifie si elle a caché sa réponse dans le bloc think.
-            const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
-            if (thinkMatch && thinkMatch[1].trim() !== "") {
-                // On repêche la réponse brute
-                cleanText = "<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>" + thinkMatch[1].trim();
-            } else {
-                // Transition (fraction de seconde) avant l'affichage du vrai texte
-                return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'>✍️ Rédaction en cours...</span>";
-            }
-        }
-    }
-    
-    // 4. Formatage classique et Sandbox Web
-    cleanText = cleanText.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(_, _lang, code) {
-        const lang = (_lang || "").toLowerCase();
-        const cleanCode = escapeHtml(code.trim());
-        // Encodage sécurisé du code brut pour le passer au bouton sans casser le HTML
-        const encodedCode = encodeURIComponent(code.trim());
-        const isWeb = ['html', 'css', 'javascript', 'js'].includes(lang);
 
+    // Gestion des états vides (Animation ou Secours)
+    if (cleanText.trim() === "") {
+        if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
+        if (thinkContent) return `<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>${thinkContent}`;
+        return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'>✍️ Rédaction en cours...</span>";
+    }
+
+    // 2. CONFIGURATION DU RENDU PROFESSIONNEL (Marked + Sandbox)
+    const renderer = new marked.Renderer();
+
+    // Surcharge du rendu des blocs de code pour intégrer le Sandbox
+    renderer.code = function(code, language) {
+        const lang = (language || "").toLowerCase();
+        const isWeb = ['html', 'css', 'javascript', 'js'].includes(lang);
+        const encodedCode = encodeURIComponent(code);
         const runId = 'sandbox_' + Math.random().toString(36).substring(2, 9);
+        
         const btnHtml = isWeb ? `<button class="run-btn" data-code="${encodedCode}" onclick="executeWebCode(this, '${runId}', '${lang}')">▶ Exécuter</button>` : '';
 
         return `
@@ -614,15 +608,14 @@ function formatResponse(text) {
                 <span class="code-lang">${lang || 'code'}</span>
                 ${btnHtml}
             </div>
-            <pre><code>${cleanCode}</code></pre>
+            <pre><code>${escapeHtml(code.trim())}</code></pre>
             <div id="${runId}" class="sandbox-container"></div>
         </div>`.trim();
-    });
-    cleanText = cleanText.replace(/`([^`\n]+)`/g, function(_, code) { return "<code>" + escapeHtml(code) + "</code>"; });
-    cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    cleanText = cleanText.replace(/\n/g, "<br>");
-    
-    return cleanText;
+    };
+
+    // 3. GÉNÉRATION ET SÉCURISATION DU HTML
+    const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
+    return DOMPurify.sanitize(htmlOutput);
 }
 
 // ============================================================
