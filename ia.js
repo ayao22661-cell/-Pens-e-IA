@@ -869,6 +869,22 @@ async function callAPI(userMessage, files) {
         setStatus("err");
     }
 }
+// ============================================================
+//  GESTION DU BADGE DE STATUT
+// ============================================================
+function setStatus(state) {
+    if (!statusBadge) return; // Sécurité si l'élément HTML n'est pas chargé
+    const map = { 
+        ok: ["ok", "● connecté"], 
+        err: ["err", "● erreur"], 
+        warn: ["warn", "● crédits bas"] 
+    };
+    statusBadge.className = "";
+    if (map[state]) { 
+        statusBadge.className = map[state][0]; 
+        statusBadge.textContent = map[state][1]; 
+    }
+}
 
 // ============================================================
 //  ENVOI
