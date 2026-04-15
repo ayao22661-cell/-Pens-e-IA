@@ -807,9 +807,11 @@ async function callAPI(userMessage, files) {
         }
 
         // Nettoyage et finalisation du message
+        // On coupe SEULEMENT si "[Utilisateur]:" apparaît après au moins 80 chars de contenu réel
+        // (évite de vider la bulle quand le modèle cite la structure du prompt dans sa réponse)
         fullReply = fullReply.replace(/^\s*\[Pens[ée]{1,2}e?\s*(?:IA)?\s*\]:\s*/i, "");
-        const cutIndex = fullReply.search(/\[Utilisateur\]:|### NOUVEAU MESSAGE/i);
-        if (cutIndex !== -1) fullReply = fullReply.substring(0, cutIndex);
+        const cutIndex = fullReply.search(/\n\[Utilisateur\]:|\n###\s*NOUVEAU MESSAGE/i);
+        if (cutIndex > 80) fullReply = fullReply.substring(0, cutIndex);
         fullReply = fullReply.trim();
         bubble.innerHTML = formatResponse(fullReply);
 
