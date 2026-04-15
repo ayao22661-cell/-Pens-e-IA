@@ -1015,6 +1015,66 @@ function removeTyping() {
     const t = document.getElementById("typing-indicator");
     if (t) t.remove();
 }
+// ============================================================
+//  SYSTÈME DE MÉMOIRE (RAG) MULTI-WORKSPACES
+// ============================================================
+
+// 1. Transformation du texte en vecteur mathématique (via ton api/embed.js)
+async function getEmbedding(text) {
+    const response = await fetch('/api/embed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text })
+    });
+    if (!response.ok) throw new Error("Erreur API de vectorisation");
+    const data = await response.json();
+    return data.embedding; // Tableau de 768 nombres
+}
+
+// 2. Recherche dans Supabase (restreinte à l'onglet actif)
+async function searchMemory(query) {
+    if (!currentUser || !activeTabId) return []; 
+    
+    try {
+        const queryVector = await getEmbedding(query);
+        const vectorString = `[${queryVector.join(',')}]`; 
+        
+        const { data, error } = await supabase.rpc('match_memories', {
+            query_embedding: vectorString,
+            match_threshold: 0.5,
+            match_count: 3,
+            p_user_id: currentUser.id,
+            p_workspace_id: activeTabId // Isolation par onglet
+        });
+        
+        if (error) throw error;
+        return data || [];
+    } catch (e) {
+        console.warn("RAG indisponible ou vide :", e.message);
+        return [];
+    }
+}
+
+// 3. Enregistrement d'une nouvelle information (via commande /memo)
+async function memorizeText(content) {
+    if (!currentUser || !activeTabId) return; 
+    
+    try {
+        const vector = await getEmbedding(content);
+        const vectorString = `[${vector.join(',')}]`;
+        
+        const { error } = await supabase.from('memories').insert([{
+            user_id: currentUser.id,
+            workspace_id: activeTabId, // Isolation par onglet
+            content: content,
+            embedding: vectorString
+        }]);
+        
+        if (error) throw error;
+    } catch (e) {
+        console.error("Mémorisation impossible :", e.message);
+    }
+}
 
 // ============================================================
 //  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
@@ -1189,6 +1249,7 @@ async function callAPI(userMessage, files, memoryContext = "") {
                 const originalAgent = activeAgentId;
                 activeAgentId = "audit";
                 updateAgentBadge("audit");
+                
 
                 try {
                     // Appel de l'API avec le contexte mémoire
