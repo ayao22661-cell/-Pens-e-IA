@@ -55,6 +55,247 @@ Mode compagnon : chaleureux, cultivé, humain — avec la même rigueur d'analys
 };
 
 // ============================================================
+//  AGENTS IA — Système multi-agents avec détection auto + sélection manuelle
+// ============================================================
+
+const AGENTS_CONFIG = {
+
+    code: {
+        id: "code",
+        label: "Code",
+        icon: "⚙️",
+        description: "Dev, debug, audit",
+        systemOverride: `
+━━━ MODE AGENT : CODE ━━━
+Tu es en mode ingénierie pure. Température basse, précision maximale.
+RÈGLES STRICTES :
+- Chaque correction suit le format chirurgical : TROUVE / REMPLACE PAR / POURQUOI.
+- Toujours auditer : bugs, performances, sécurité, accessibilité, mobile-first.
+- Jamais de code approximatif. Si tu n'es pas sûr à 100%, dis-le avec [DIAGNOSTIC INCERTAIN].
+- Propose systématiquement la version la plus maintenable, pas juste la plus rapide à écrire.
+- Si le code fourni a des problèmes structurels profonds, signale-le avant de corriger le détail.`
+    },
+
+    recherche: {
+        id: "recherche",
+        label: "Recherche",
+        icon: "🔍",
+        description: "Web, synthèse, actualité",
+        systemOverride: `
+━━━ MODE AGENT : RECHERCHE ━━━
+Tu es en mode synthèse et veille. Données fraîches, sources croisées.
+RÈGLES STRICTES :
+- Tu DOIS utiliser google_search sur chaque requête. Aucune exception.
+- Signale TOUJOURS la source : [MÉMOIRE] vs [RECHERCHE WEB].
+- Croise au moins 2 angles différents avant de conclure.
+- Si les résultats sont contradictoires, expose la contradiction — ne tranche pas arbitrairement.
+- Utilise [DIAGNOSTIC INCERTAIN] si les données manquent ou sont trop anciennes.
+- Format de synthèse : contexte → faits clés → implications → ce que ça change.`
+    },
+
+    creatif: {
+        id: "creatif",
+        label: "Créatif",
+        icon: "✍️",
+        description: "Storytelling, scripts, narration",
+        systemOverride: `
+━━━ MODE AGENT : CRÉATIF ━━━
+Tu es en mode création pure. L'immersion est la seule norme.
+RÈGLES STRICTES :
+- Chaque scène doit avoir : direction sonore, lumière, cadrage, sous-texte émotionnel.
+- L'ancrage culturel est absolu — Abidjan, l'Afrique, le monde : vérité sociologique, zéro cliché.
+- Jamais de métaphore morte, jamais de formule convenue. Chaque mot doit gagner sa place.
+- Pour les scripts : structure en actes explicite, tensions visibles, personnages à contradictions internes.
+- Pour la poésie : rythme d'abord, sens ensuite. La musicalité prime sur la clarté immédiate.
+- Propose toujours une note de mise en scène ou de direction après chaque création.`
+    },
+
+    strategie: {
+        id: "strategie",
+        label: "Stratégie",
+        icon: "📈",
+        description: "Marketing, business, croissance",
+        systemOverride: `
+━━━ MODE AGENT : STRATÉGIE ━━━
+Tu es en mode architecte de systèmes. Chaque conseil intègre ses effets de second ordre.
+RÈGLES STRICTES :
+- Pense toujours en 3 horizons : court terme (action immédiate), moyen terme (momentum), long terme (positionnement).
+- Chaque recommandation inclut : l'opportunité, le risque, l'indicateur de succès.
+- Algorithmes (YouTube, Pinterest, TikTok, Instagram) : pense distribution avant création.
+- Marketing pour contextes africains/émergents : adapte les frameworks occidentaux à la réalité locale.
+- Jamais de conseil générique. Si tu ne connais pas le contexte précis, pose UNE question ciblée avant.
+- UX/UI : mobile-first absolu, lois de Gestalt, psychologie de la conversion.`
+    },
+
+    visionnaire: {
+        id: "visionnaire",
+        label: "Visionnaire",
+        icon: "🔭",
+        description: "Insights systémiques, ruptures, second ordre",
+        systemOverride: `
+━━━ MODE AGENT : VISIONNAIRE ━━━
+Tu es l'agent différenciateur. Tu vois ce que les autres ne voient pas encore.
+IDENTITÉ UNIQUE :
+Tu connectes des domaines opposés — technologie × culture × économie × psychologie collective.
+Tu ne prédis pas l'avenir : tu lis les signaux faibles du présent pour cartographier les bifurcations possibles.
+RÈGLES STRICTES :
+- Commence toujours par la question que personne ne pose mais qui structure tout le reste.
+- Expose les présupposés cachés derrière chaque demande avant d'y répondre.
+- Cartographie les effets de second et troisième ordre — pas seulement les conséquences directes.
+- Ancre dans la réalité africaine et mondiale simultanément : les ruptures globales se manifestent différemment selon les contextes.
+- Utilise des analogies inter-domaines pour révéler des patterns invisibles dans le domaine cible.
+- Termine par UN insight contre-intuitif que l'utilisateur ne peut pas trouver ailleurs.
+- Si google_search est disponible : cherche les signaux faibles, pas les tendances mainstream.`
+    }
+};
+
+// Agent actif (null = détection automatique)
+let activeAgentId = null;
+
+// ── DÉTECTION AUTOMATIQUE DE L'AGENT ─────────────────────
+function detectAgent(message) {
+    const msg = message.toLowerCase();
+
+    const patterns = {
+        code: [
+            "code", "bug", "erreur", "débogue", "debug", "fonction", "script", "api",
+            "javascript", "python", "html", "css", "react", "composant", "classe",
+            "variable", "boucle", "array", "objet", "json", "sql", "base de données",
+            "deploy", "vercel", "github", "npm", "module", "import", "export"
+        ],
+        recherche: [
+            "recherche", "actualité", "aujourd'hui", "récent", "dernière", "news",
+            "quoi de neuf", "tendance", "2025", "2026", "vient de", "annonce",
+            "trouve", "cherche", "infos sur", "qu'est-ce que", "c'est quoi", "explique"
+        ],
+        creatif: [
+            "écris", "rédige", "histoire", "script", "scénario", "poème", "chanson",
+            "personnage", "scène", "narration", "roman", "nouvelle", "dialogue",
+            "storyboard", "synopsis", "pitch", "créatif", "imaginaire", "fiction"
+        ],
+        strategie: [
+            "stratégie", "marketing", "croissance", "audience", "vente", "client",
+            "business", "monétise", "revenus", "youtube", "tiktok", "instagram",
+            "algorithme", "contenu", "brand", "marque", "campagne", "conversion",
+            "ux", "ui", "design", "landing", "funnel", "acquisition"
+        ],
+        visionnaire: [
+            "futur", "vision", "rupture", "disruption", "innovation", "système",
+            "pourquoi vraiment", "profondément", "fondamentalement", "ce que personne",
+            "big picture", "macro", "tendances profondes", "second ordre", "analyse",
+            "comprends pas", "sens de", "impact réel", "vraie question"
+        ]
+    };
+
+    const scores = {};
+    for (const [agentId, keywords] of Object.entries(patterns)) {
+        scores[agentId] = keywords.filter(kw => msg.includes(kw)).length;
+    }
+
+    const winner = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+    return winner[1] > 0 ? winner[0] : null;
+}
+
+// ── CONSTRUCTION DU SYSTEM PROMPT FINAL ──────────────────
+function buildSystemInstruction(agentId, needsSearch) {
+    const today = new Date().toLocaleDateString("fr-FR", {
+        weekday: "long", year: "numeric", month: "long", day: "numeric"
+    });
+
+    const searchInstruction = needsSearch
+        ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualité récente. Tu DOIS utiliser google_search pour répondre. Ne réponds JAMAIS depuis ta mémoire d'entraînement sur ce sujet.]\n"
+        : "";
+
+    const agentLayer = agentId && AGENTS_CONFIG[agentId]
+        ? AGENTS_CONFIG[agentId].systemOverride
+        : "";
+
+    return `[DATE ACTUELLE : ${today}]${searchInstruction}\n\n${CONFIG.systemPrompt}${agentLayer}`;
+}
+
+// ── BADGE AGENT DANS L'UI ─────────────────────────────────
+function updateAgentBadge(agentId) {
+    let badge = document.getElementById("agentBadge");
+    if (!badge) return;
+
+    if (!agentId) {
+        badge.textContent = "🤖 Auto";
+        badge.className = "agent-badge agent-auto";
+        return;
+    }
+    const agent = AGENTS_CONFIG[agentId];
+    if (agent) {
+        badge.textContent = `${agent.icon} ${agent.label}`;
+        badge.className = `agent-badge agent-${agentId}`;
+    }
+}
+
+// ── SÉLECTEUR AGENT UI ───────────────────────────────────
+function initAgentSelector() {
+    const container = document.getElementById("agentSelector");
+    if (!container) return;
+
+    const autoBtn = document.createElement("button");
+    autoBtn.className = "agent-btn agent-btn-auto" + (!activeAgentId ? " active" : "");
+    autoBtn.innerHTML = "🤖 Auto";
+    autoBtn.title = "Détection automatique";
+    autoBtn.addEventListener("click", () => {
+        activeAgentId = null;
+        updateAgentBadge(null);
+        refreshAgentButtons();
+    });
+    container.appendChild(autoBtn);
+
+    Object.values(AGENTS_CONFIG).forEach(agent => {
+        const btn = document.createElement("button");
+        btn.className = "agent-btn agent-btn-" + agent.id + (activeAgentId === agent.id ? " active" : "");
+        btn.innerHTML = `${agent.icon} ${agent.label}`;
+        btn.title = agent.description;
+        btn.dataset.agentId = agent.id;
+        btn.addEventListener("click", () => {
+            activeAgentId = agent.id;
+            updateAgentBadge(agent.id);
+            refreshAgentButtons();
+        });
+        container.appendChild(btn);
+    });
+}
+
+function refreshAgentButtons() {
+    const container = document.getElementById("agentSelector");
+    if (!container) return;
+    container.querySelectorAll(".agent-btn").forEach(btn => {
+        const id = btn.dataset.agentId || null;
+        btn.classList.toggle("active", id === activeAgentId);
+    });
+}
+
+// ── GESTION COMMANDE /agent ──────────────────────────────
+function handleAgentCommand(text) {
+    const match = text.match(/^\/agent\s+(\w+)/i);
+    if (!match) return false;
+
+    const id = match[1].toLowerCase();
+    if (id === "auto" || id === "reset") {
+        activeAgentId = null;
+        addMessage("bot", "🔄 Mode **auto-détection** activé. L'agent sera choisi selon le contenu de chaque message.", true);
+        updateAgentBadge(null);
+        return true;
+    }
+    if (AGENTS_CONFIG[id]) {
+        activeAgentId = id;
+        const agent = AGENTS_CONFIG[id];
+        addMessage("bot", `${agent.icon} Agent **${agent.label}** activé — ${agent.description}.\nTape \`/agent auto\` pour revenir à la détection automatique.`, true);
+        updateAgentBadge(id);
+        return true;
+    }
+
+    const list = Object.values(AGENTS_CONFIG).map(a => `\`/agent ${a.id}\` — ${a.icon} ${a.label} : ${a.description}`).join("\n");
+    addMessage("bot", `Agent inconnu. Agents disponibles :\n\n${list}\n\n\`/agent auto\` — Détection automatique`, true);
+    return true;
+}
+
+// ============================================================
 //  SUPABASE & AUTH (Login / Sign Up)
 // ============================================================
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -766,47 +1007,35 @@ function buildPrompt(userMessage, files, memoryContext = "") {
     const CONTEXT_WINDOW = 20;
     const recent = history.slice(-CONTEXT_WINDOW);
 
-    const today = new Date().toLocaleDateString("fr-FR", {
-        weekday: "long", year: "numeric", month: "long", day: "numeric"
-    });
-    const temporalKeywords = [
-        "aujourd'hui", "ce mois", "cette semaine", "cette ann\u00e9e", "r\u00e9cent", "r\u00e9cente",
-        "derni\u00e8re", "dernier", "maintenant", "actuellement", "actuel", "actuelle",
-        "nouveau", "nouvelle", "nouveaux", "nouvelles", "2025", "2026", "vient de",
-        "derni\u00e8res nouvelles", "quoi de neuf", "tendance", "tendances"
-    ];
-    const needsSearch = temporalKeywords.some(function(kw) { return userMessage.toLowerCase().includes(kw); });
-    const searchInstruction = needsSearch
-        ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualit\u00e9 r\u00e9cente. Tu DOIS utiliser google_search pour r\u00e9pondre. Ne r\u00e9ponds JAMAIS depuis ta m\u00e9moire d'entra\u00eenement sur ce sujet.]\n"
-        : "";
-    let prompt = "[DATE ACTUELLE : " + today + "]" + searchInstruction + "\n\n" + CONFIG.systemPrompt + "\n\n";
+    let userPrompt = "";
 
     if (files && files.length > 0) {
-        prompt += "### FICHIERS JOINTS (PRIORIT\u00c9 HAUTE) :\n\n";
-        files.forEach(function(file) {
+        userPrompt += "### FICHIERS JOINTS (PRIORITÉ HAUTE) :\n\n";
+        files.forEach(file => {
             if (file.content && file.content.type === "text") {
-                prompt += "DOCUMENT : " + file.name + "\nCONTENU :\n" + file.content.data + "\n---\n\n";
+                userPrompt += "DOCUMENT : " + file.name + "\nCONTENU :\n" + file.content.data + "\n---\n\n";
             } else {
-                prompt += "DOCUMENT BINAIRE : " + file.name + " (trait\u00e9 via inline_data)\n---\n\n";
+                userPrompt += "DOCUMENT BINAIRE : " + file.name + " (traité via inline_data)\n---\n\n";
             }
         });
     }
+
     if (memoryContext) {
-        prompt += "### CONTEXTE MÉMOIRE (Informations extraites de la base de données) :\n";
-        prompt += memoryContext + "\n---\n\n";
+        userPrompt += "### CONTEXTE MÉMOIRE :\n" + memoryContext + "\n---\n\n";
     }
 
     if (recent.length > 0) {
-        prompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
-        recent.forEach(function(msg) {
-            const role = msg.role === "user" ? "Utilisateur" : "Pens\u00e9e";
-            prompt += "[" + role + "]: " + msg.content + "\n\n";
+        userPrompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
+        recent.forEach(msg => {
+            const role = msg.role === "user" ? "Utilisateur" : "Pensée";
+            userPrompt += "[" + role + "]: " + msg.content + "\n\n";
         });
     }
 
-    prompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### R\u00c9PONSE :\n";
-    return prompt;
+    userPrompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### RÉPONSE :\n";
+    return userPrompt;
 }
+
 
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
@@ -817,18 +1046,38 @@ async function callAPI(userMessage, files, memoryContext = "") {
         return;
     }
 
-    const prompt = buildPrompt(userMessage, files, memoryContext);
+    // Détermination de l'agent : manuel en priorité, sinon auto-détection
+    const resolvedAgentId = activeAgentId || detectAgent(userMessage);
+
+    // Détection des mots-clés temporels pour forcer la recherche
+    const temporalKeywords = [
+        "aujourd'hui", "ce mois", "cette semaine", "cette année", "récent", "récente",
+        "dernière", "dernier", "maintenant", "actuellement", "actuel", "actuelle",
+        "nouveau", "nouvelle", "nouveaux", "nouvelles", "2025", "2026", "vient de",
+        "dernières nouvelles", "quoi de neuf", "tendance", "tendances"
+    ];
+    const needsSearch = temporalKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+
+    // Construction des deux couches séparées
+    const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch);
+    const userPrompt = buildPrompt(userMessage, files, memoryContext);
+
     const binaryFiles = files
-        .filter(function(f) { return f.content && f.content.type === "binary"; })
-        .map(function(f) { return { name: f.name, mime: f.content.mimeType, base64: f.content.data }; });
+        .filter(f => f.content && f.content.type === "binary")
+        .map(f => ({ name: f.name, mime: f.content.mimeType, base64: f.content.data }));
+
+    // Mise à jour du badge agent dans l'UI
+    updateAgentBadge(resolvedAgentId);
 
     try {
         const response = await fetch("/api/chat", {
-            method:  "POST",
+            method: "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({
-                prompt: prompt,
-                files:  binaryFiles.length > 0 ? binaryFiles : undefined
+            body: JSON.stringify({
+                prompt: userPrompt,
+                systemInstruction: systemInstruction,
+                agentId: resolvedAgentId || "default",
+                files: binaryFiles.length > 0 ? binaryFiles : undefined
             })
         });
 
@@ -838,27 +1087,30 @@ async function callAPI(userMessage, files, memoryContext = "") {
                 const errData = await response.json();
                 errMsg = errData.error || errMsg;
             } catch(e) {}
-            
             addMessage("bot", "❌ Erreur : " + errMsg, false);
             setStatus("err");
             return;
         }
 
         removeTyping();
-        
-        // Création de l'interface de la bulle vide pour le flux
+
+        // Bulle de réponse avec badge agent
         const msgDiv = document.createElement("div");
         msgDiv.className = "msg bot";
         const label = document.createElement("span");
         label.className = "msg-label";
-        label.textContent = "Pensée";
+
+        // On affiche le nom de l'agent actif dans le label
+        const agentMeta = resolvedAgentId && AGENTS_CONFIG[resolvedAgentId];
+        label.textContent = agentMeta ? `Pensée · ${agentMeta.icon} ${agentMeta.label}` : "Pensée";
+
         const bubble = document.createElement("div");
         bubble.className = "bubble";
         msgDiv.appendChild(label);
         msgDiv.appendChild(bubble);
         messagesEl.appendChild(msgDiv);
 
-        // Lecture du flux binaire en direct
+        // Lecture du flux
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let fullReply = "";
@@ -866,21 +1118,19 @@ async function callAPI(userMessage, files, memoryContext = "") {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            
             fullReply += decoder.decode(value, { stream: true });
             bubble.innerHTML = formatResponse(fullReply);
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // Nettoyage et finalisation du message
-        // On coupe SEULEMENT si "[Utilisateur]:" apparaît après au moins 80 chars de contenu réel
-        // (évite de vider la bulle quand le modèle cite la structure du prompt dans sa réponse)
+        // Nettoyage final
         fullReply = fullReply.replace(/^\s*\[Pens[ée]{1,2}e?\s*(?:IA)?\s*\]:\s*/i, "");
         const cutIndex = fullReply.search(/\n\[Utilisateur\]:|\n###\s*NOUVEAU MESSAGE/i);
         if (cutIndex > 80) fullReply = fullReply.substring(0, cutIndex);
         fullReply = fullReply.trim();
         bubble.innerHTML = formatResponse(fullReply);
 
+        // Bouton copier
         const actions = document.createElement("div");
         actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
@@ -889,27 +1139,21 @@ async function callAPI(userMessage, files, memoryContext = "") {
         copyBtn.addEventListener("click", async function() {
             try {
                 await navigator.clipboard.writeText(bubble.innerText);
-                copyBtn.innerHTML  = "✅ Copié !";
+                copyBtn.innerHTML = "✅ Copié !";
                 copyBtn.style.color = "var(--accent)";
-                setTimeout(function() { copyBtn.innerHTML = "📋 Copier"; copyBtn.style.color = ""; }, 2000);
+                setTimeout(() => { copyBtn.innerHTML = "📋 Copier"; copyBtn.style.color = ""; }, 2000);
             } catch(e) { copyBtn.innerHTML = "❌ Erreur"; }
         });
         actions.appendChild(copyBtn);
         msgDiv.appendChild(actions);
 
-        // Mise à jour du contexte local
-        history.push({ role: "user",      content: userMessage });
+        // Mise à jour contexte
+        history.push({ role: "user", content: userMessage });
         history.push({ role: "assistant", content: fullReply });
-        
-        // Sauvegarde de la réponse de l'IA (le message utilisateur est déjà sauvé)
         await saveMessageToDB("assistant", fullReply);
 
-        // 1. On déduit le crédit localement EN PREMIER (20 passe à 19)
         creditsLeft--;
-        
-        // 2. Ensuite on envoie le nouveau calcul à Supabase (20 - 19 = 1 utilisé)
         await useCreditInDB();
-        
         updateCredits();
         if (creditsLeft > 0) setStatus("ok");
 
@@ -962,6 +1206,7 @@ async function sendMessage() {
         }
         return;
     }
+    if (handleAgentCommand(text)) return;
 
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "none";
@@ -1052,6 +1297,7 @@ userInput.addEventListener("input", function() {
 updateCredits();
 setStatus("ok");
 checkLocalAuth();
+initAgentSelector();
 // ============================================================
 //  MOTEUR SANDBOX (Exécution Web)
 // ============================================================
