@@ -152,7 +152,7 @@ async function handleAuth() {
             loginScreen.style.opacity = "0";
             setTimeout(() => { loginScreen.style.display = "none"; }, 300);
             
-            loadCreditsFromStorage();
+            await loadCreditsFromDB(); // ← C'est ici !
             initTabs();
         }
     } catch (error) {
@@ -878,10 +878,12 @@ async function callAPI(userMessage, files) {
         // Sauvegarde de la réponse de l'IA (le message utilisateur est déjà sauvé)
         await saveMessageToDB("assistant", fullReply);
 
-        // Déduction du crédit sur Supabase
+        // 1. On déduit le crédit localement EN PREMIER (20 passe à 19)
+        creditsLeft--;
+        
+        // 2. Ensuite on envoie le nouveau calcul à Supabase (20 - 19 = 1 utilisé)
         await useCreditInDB();
         
-        creditsLeft--;
         updateCredits();
         if (creditsLeft > 0) setStatus("ok");
 
