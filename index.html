@@ -518,6 +518,20 @@
         }
         .agent-badge:hover { border-color: rgba(0,229,160,0.4); }
 
+        .agent-selector-menu {
+            display: none; position: absolute; top: 50px; right: 0;
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: 12px; padding: 8px; flex-direction: column; gap: 4px;
+            box-shadow: var(--shadow); z-index: 200; min-width: 160px;
+        }
+        .agent-selector-menu.visible { display: flex; }
+        .agent-btn {
+            background: transparent; border: none; color: var(--text2); text-align: left;
+            padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.2s;
+        }
+        .agent-btn:hover { background: var(--bg3); color: var(--text); }
+        .agent-btn.active { background: var(--accent-dim); color: var(--accent); }
+
         #clearBtn { display: none; }
 
         /* ============================================================
@@ -1193,9 +1207,12 @@
         <header>
             <button id="sidebarToggle">☰</button>
             <span id="activeConvTitle">Pensée IA</span>
-            <div class="header-right">
+            <div class="header-right" style="position: relative;">
                 <span id="statusBadge"></span>
-                <span id="agentBadge" class="agent-badge" title="Mode agent">🤖 Auto</span>
+                <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
+                
+                <div id="agentSelector" class="agent-selector-menu"></div>
+                
                 <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
             </div>
         </header>
