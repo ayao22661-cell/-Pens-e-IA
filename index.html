@@ -462,7 +462,7 @@
             padding: 13px 16px;
             border-bottom: 1px solid var(--border);
             display: grid;
-            grid-template-columns: 40px 1fr 40px;
+            grid-template-columns: 40px 1fr auto;
             align-items: center;
             background: rgba(8,10,15,0.96);
             backdrop-filter: blur(14px);
@@ -482,6 +482,8 @@
             text-overflow: ellipsis;
             text-align: center;
             letter-spacing: 0.01em;
+            min-width: 0;
+            padding: 0 10px;
         }
 
         /* Droite : badge statut + badge agent */
