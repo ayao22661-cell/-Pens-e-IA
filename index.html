@@ -505,16 +505,20 @@
 
         /* Badge agent — icône fantôme style Claude */
         .agent-badge {
-            width: 34px; height: 34px;
+            height: 34px; 
+            padding: 0 14px;
             background: var(--bg3);
             border: 1px solid var(--border2);
-            border-radius: 50%;
+            border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            gap: 6px;
+            font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap;
             cursor: pointer;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, background 0.2s;
         }
         .agent-badge:hover { border-color: rgba(0,229,160,0.4); }
 
@@ -1208,7 +1212,6 @@
             <button id="sidebarToggle">☰</button>
             <span id="activeConvTitle">Pensée IA</span>
             <div class="header-right" style="position: relative;">
-                <span id="statusBadge"></span>
                 <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
                 
                 <div id="agentSelector" class="agent-selector-menu"></div>
