@@ -616,11 +616,13 @@ function renderTabs() {
     
     tabs.forEach(tab => {
         // Utilise la date de Supabase au lieu de l'ID généré localement
-        const ts = new Date(tab.created_at).getTime();
-        const age = now - ts;
-        if (age < DAY)        groups[0].items.push(tab);
-        else if (age < 2*DAY) groups[1].items.push(tab);
-        else                   groups[2].items.push(tab);
+        const tabDate = new Date(tab.created_at).getTime();
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const yesterdayStart = todayStart - DAY;
+
+    if (tabDate >= todayStart)        groups[0].items.push(tab);
+    else if (tabDate >= yesterdayStart) groups[1].items.push(tab);
+    else                              groups[2].items.push(tab);
     });
 
     groups.forEach(group => {
@@ -860,7 +862,8 @@ function formatResponse(text) {
         const isWeb = ['html', 'css', 'javascript', 'js'].includes(lang);
         const encodedCode = encodeURIComponent(code.trim());
         const runId = 'sandbox_' + Math.random().toString(36).substring(2, 9);
-        const btnHtml = isWeb ? `<button class="run-btn" data-code="${encodedCode}" onclick="executeWebCode(this, '${runId}', '${lang}')">▶ Exécuter</button>` : '';
+        // Ajout des data-attributes au lieu de l'attribut exécutable onclick
+        const btnHtml = isWeb ? `<button class="run-btn" data-code="${encodedCode}" data-runid="${runId}" data-lang="${lang}">▶ Exécuter</button>` : '';
 
         return `
         <div class="code-block-wrapper">
@@ -879,8 +882,8 @@ try {
     
     // On configure DOMPurify pour laisser passer nos attributs vitaux
     return DOMPurify.sanitize(htmlOutput, {
-        ADD_ATTR: ['onclick', 'data-code'], // ✅ Indispensable pour le bouton
-        ADD_TAGS: ['iframe']                // ✅ Indispensable pour l'affichage
+        ADD_ATTR: ['data-code', 'data-runid', 'data-lang'], 
+        ADD_TAGS: ['iframe']
     });
 } catch (e) {
     console.error("Erreur de parsing Markdown:", e);
@@ -1252,8 +1255,8 @@ async function callAPI(userMessage, files, memoryContext = "") {
                 
 
                 try {
-                    // Appel de l'API avec le contexte mémoire
-                    await callAPI(auditPrompt, [], memoryContext);
+                    // Appel pur : l'audit n'utilise pas la mémoire globale, uniquement sa tâche
+                    await callAPI(auditPrompt, [], "");
                 } finally {
                     // Restauration de l'état précédent
                     activeAgentId = originalAgent;
@@ -1424,6 +1427,13 @@ userInput.addEventListener("keydown", function(e) {
 userInput.addEventListener("input", function() {
     this.style.height = "auto";
     this.style.height = Math.min(this.scrollHeight, 120) + "px";
+});
+// Écouteur délégué sécurisé pour l'exécution du code
+document.getElementById("messages").addEventListener("click", function(e) {
+    if (e.target && e.target.classList.contains("run-btn")) {
+        const btn = e.target;
+        executeWebCode(btn, btn.getAttribute("data-runid"), btn.getAttribute("data-lang"));
+    }
 });
 
 // ============================================================
