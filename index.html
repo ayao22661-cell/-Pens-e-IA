@@ -730,77 +730,117 @@
         }
 
         /* ============================================================
-           INPUT AREA
+           INPUT AREA — style Claude mobile
            ============================================================ */
         #inputArea {
-            padding: 14px 22px;
-            border-top: 1px solid var(--border);
-            background: rgba(14,17,24,0.95);
-            backdrop-filter: blur(8px);
-            display: flex;
-            gap: 10px;
-            align-items: flex-end;
+            padding: 12px 16px 16px;
+            background: rgba(8,10,15,0.98);
+            backdrop-filter: blur(12px);
             flex-shrink: 0;
+            /* Pas de border-top : la carte flottante crée la séparation */
         }
 
+        /* Carte flottante principale — reproduit le style Claude mobile */
+        .input-card {
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: 22px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,229,160,0.04) inset;
+            overflow: hidden;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .input-card:focus-within {
+            border-color: rgba(0,229,160,0.3);
+            box-shadow: 0 4px 32px rgba(0,0,0,0.6), 0 0 0 3px rgba(0,229,160,0.06);
+        }
+
+        /* Ligne textarea */
+        .input-text-row {
+            display: flex;
+            align-items: flex-end;
+            padding: 14px 18px 6px;
+        }
+
+        #userInput {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 0;
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            color: var(--text);
+            outline: none;
+            resize: none;
+            max-height: 160px;
+            min-height: 24px;
+            line-height: 1.6;
+        }
+        #userInput::placeholder { color: var(--text3); font-size: 14.5px; }
+        #fileInput { display: none; }
+
+        /* Barre d'actions basse — reproduit le row avec + et envoyer */
+        .input-actions-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 14px 10px;
+        }
+
+        .input-actions-left {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Bouton + (upload) — cercle comme le + de Claude */
         #uploadBtn {
-            background: var(--bg3);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            width: 46px; height: 46px;
+            background: none;
+            border: 1.5px solid var(--border2);
+            border-radius: 50%;
+            width: 36px; height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             font-size: 20px;
+            line-height: 1;
+            color: var(--text2);
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            font-family: 'Syne', sans-serif;
+            font-weight: 300;
+        }
+        #uploadBtn:hover {
+            border-color: rgba(0,229,160,0.5);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* Bouton envoyer — rond sombre avec flèche, style Claude */
+        #sendBtn {
+            background: var(--text);
+            border: none;
+            border-radius: 50%;
+            width: 38px; height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
             transition: all 0.2s ease;
             flex-shrink: 0;
         }
-        #uploadBtn:hover { border-color: rgba(0,229,160,0.4); background: var(--accent-dim); }
-        #fileInput { display: none; }
-
-        #userInput {
-            flex: 1;
-            background: var(--bg3);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 13px 18px;
-            font-family: 'Syne', sans-serif;
-            font-size: 14.5px;
-            color: var(--text);
-            outline: none;
-            resize: none;
-            max-height: 150px;
-            line-height: 1.6;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        #userInput:focus {
-            border-color: rgba(0,229,160,0.4);
-            box-shadow: 0 0 0 3px rgba(0,229,160,0.06);
-        }
-        #userInput::placeholder { color: var(--text3); }
-
-        #sendBtn {
-            background: var(--accent);
-            border: none;
-            border-radius: var(--radius-sm);
-            padding: 13px 24px;
-            font-family: 'Syne', sans-serif;
-            font-size: 13.5px;
-            font-weight: 700;
-            color: #060810;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-            letter-spacing: 0.04em;
+        #sendBtn svg {
+            width: 18px; height: 18px;
+            fill: var(--bg);
         }
         #sendBtn:hover {
-            background: #1dffc0;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(0,229,160,0.22);
+            background: var(--accent);
+            transform: scale(1.08);
+            box-shadow: 0 4px 16px rgba(0,229,160,0.3);
         }
-        #sendBtn:active { transform: translateY(0); box-shadow: none; }
-        #sendBtn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+        #sendBtn:hover svg { fill: #060810; }
+        #sendBtn:active { transform: scale(0.96); box-shadow: none; }
+        #sendBtn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; box-shadow: none; }
 
         /* ============================================================
            DROP OVERLAY
@@ -904,6 +944,12 @@
     /* Zone de message plus large */
     .msg { max-width: 92%; }
     .bubble { padding: 12px 15px; font-size: 13.5px; }
+    
+    #inputArea { padding: 10px 12px 14px; }
+    .input-card { border-radius: 20px; }
+    #userInput { font-size: 15px; }
+    #sendBtn { width: 42px; height: 42px; }
+    #uploadBtn { width: 40px; height: 40px; font-size: 22px; }
     
     /* Ergonomie de la Sidebar */
     .conv-item {
@@ -1109,10 +1155,20 @@
 
         <!-- INPUT -->
         <div id="inputArea">
-            <button id="uploadBtn" title="Joindre un fichier">📎</button>
             <input type="file" id="fileInput" multiple accept="*/*">
-            <textarea id="userInput" rows="1" placeholder="Pose ta question ou dépose un fichier…"></textarea>
-            <button id="sendBtn">Envoyer ›</button>
+            <div class="input-card">
+                <div class="input-text-row">
+                    <textarea id="userInput" rows="1" placeholder="Discuter avec Pensée…"></textarea>
+                </div>
+                <div class="input-actions-row">
+                    <div class="input-actions-left">
+                        <button id="uploadBtn" title="Joindre un fichier">+</button>
+                    </div>
+                    <button id="sendBtn" title="Envoyer">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- FOOTER -->
