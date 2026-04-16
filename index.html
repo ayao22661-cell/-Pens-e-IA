@@ -457,29 +457,45 @@
             overflow: hidden;
         }
 
-        /* Header minimal en haut de la zone chat */
+        /* Header — style Claude mobile : hamburger | titre centré | icône */
         header {
-            padding: 11px 22px;
+            padding: 13px 16px;
             border-bottom: 1px solid var(--border);
-            display: flex;
+            display: grid;
+            grid-template-columns: 40px 1fr 40px;
             align-items: center;
-            gap: 14px;
-            background: rgba(14,17,24,0.92);
-            backdrop-filter: blur(12px);
+            background: rgba(8,10,15,0.96);
+            backdrop-filter: blur(14px);
             flex-shrink: 0;
             z-index: 100;
             position: relative;
         }
+
+        /* Titre centré dans la colonne du milieu */
+        #activeConvTitle {
+            font-family: 'Fraunces', serif;
+            font-size: 16px;
+            font-weight: 400;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+            letter-spacing: 0.01em;
+        }
+
+        /* Droite : badge statut + badge agent */
         .header-right {
-            margin-left: auto;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: flex-end;
+            gap: 6px;
         }
+
         #statusBadge {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            padding: 4px 10px;
+            font-size: 9px;
+            padding: 3px 8px;
             border-radius: 20px;
             display: none;
         }
@@ -487,21 +503,22 @@
         #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
         #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.2); }
 
-        /* Titre de la conversation active */
-        #activeConvTitle {
-            font-family: 'Syne', sans-serif;
-            font-size: 13px;
-            color: var(--text2);
-            font-weight: 400;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 340px;
+        /* Badge agent — icône fantôme style Claude */
+        .agent-badge {
+            width: 34px; height: 34px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            cursor: pointer;
+            transition: border-color 0.2s;
         }
+        .agent-badge:hover { border-color: rgba(0,229,160,0.4); }
 
-        #clearBtn {
-            display: none; /* remplacé par la sidebar */
-        }
+        #clearBtn { display: none; }
 
         /* ============================================================
            BARRE ONGLETS — supprimée (remplacée par sidebar)
@@ -528,23 +545,66 @@
         #alertBanner.empty { display:block; background:rgba(255,95,95,0.07); color:var(--red); border-bottom:1px solid rgba(255,95,95,0.12); }
 
         /* ============================================================
-           MESSAGES
+           ZONE MESSAGES + ÉCRAN D'ACCUEIL
            ============================================================ */
         #messages {
             flex: 1;
             min-height: 0;
             overflow-y: auto;
             overflow-x: hidden;
-            padding: 28px 24px;
+            padding: 0 16px 24px;
             display: flex;
             flex-direction: column;
-            gap: 22px;
+            gap: 20px;
             scroll-behavior: smooth;
+            position: relative;
         }
-        #messages::after { content: ""; display: block; min-height: 12px; flex-shrink: 0; }
+        #messages::after { content: ""; display: block; min-height: 8px; flex-shrink: 0; }
         #messages::-webkit-scrollbar { width: 3px; }
         #messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
         #messages::-webkit-scrollbar-track { background: transparent; }
+
+        /* Écran d'accueil centré — style Claude mobile */
+        #welcomeScreen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 24px 20px;
+            text-align: center;
+            gap: 16px;
+        }
+        #welcomeScreen.hidden { display: none; }
+
+        /* Logo animé — reprend le logo-dot mais agrandi */
+        .welcome-logo {
+            width: 52px; height: 52px;
+            position: relative;
+            margin-bottom: 8px;
+        }
+        .welcome-logo svg {
+            width: 100%;
+            height: 100%;
+            fill: var(--accent);
+            animation: spinSlow 12s linear infinite;
+            filter: drop-shadow(0 0 14px rgba(0,229,160,0.4));
+        }
+        @keyframes spinSlow {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+
+        .welcome-question {
+            font-family: 'Fraunces', serif;
+            font-size: clamp(22px, 5vw, 30px);
+            font-weight: 300;
+            color: var(--text);
+            line-height: 1.3;
+            max-width: 320px;
+            letter-spacing: -0.01em;
+        }
+        .welcome-question em { color: var(--accent); font-style: italic; }
 
         .msg {
             display: flex;
@@ -648,33 +708,37 @@
         .copy-btn:hover { color: var(--accent); }
 
         /* ============================================================
-           SUGGESTIONS
+           SUGGESTIONS — chips horizontales style Claude mobile
            ============================================================ */
         #suggestions {
             display: flex;
             gap: 8px;
-            padding: 0 24px 18px;
-            flex-wrap: wrap;
+            padding: 0 16px 12px;
+            overflow-x: auto;
             flex-shrink: 0;
+            scrollbar-width: none;
         }
+        #suggestions::-webkit-scrollbar { display: none; }
+        #suggestions.hidden { display: none; }
+
         .suggestion {
-            font-size: 11.5px;
+            font-size: 12px;
             font-family: 'JetBrains Mono', monospace;
             color: var(--text2);
             background: var(--bg3);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
             border-radius: 20px;
-            padding: 7px 14px;
+            padding: 8px 16px;
             cursor: pointer;
             transition: all 0.2s ease;
             white-space: nowrap;
             letter-spacing: 0.02em;
+            flex-shrink: 0;
         }
         .suggestion:hover {
-            border-color: rgba(0,229,160,0.4);
+            border-color: rgba(0,229,160,0.45);
             color: var(--accent);
             background: var(--accent-dim);
-            transform: translateY(-1px);
         }
 
         /* ============================================================
@@ -1127,11 +1191,10 @@
         <!-- Header minimal -->
         <header>
             <button id="sidebarToggle">☰</button>
-            <span id="activeConvTitle">Nouvelle conversation</span>
-            <span id="agentBadge" class="agent-badge">🤖 Auto</span>
+            <span id="activeConvTitle">Pensée IA</span>
             <div class="header-right">
                 <span id="statusBadge"></span>
-                <!-- clearBtn caché — remplacé par sidebar -->
+                <span id="agentBadge" class="agent-badge" title="Mode agent">👻</span>
                 <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
             </div>
         </header>
@@ -1139,10 +1202,26 @@
         <!-- ALERTE -->
         <div id="alertBanner"></div>
 
-        <!-- MESSAGES -->
-        <div id="messages"></div>
+        <!-- MESSAGES (avec écran d'accueil intégré) -->
+        <div id="messages">
+            <!-- Écran d'accueil style Claude mobile -->
+            <div id="welcomeScreen">
+                <div class="welcome-logo">
+                    <!-- Astérisque animé façon Claude -->
+                    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <g transform="translate(50,50)">
+                            <rect x="-6" y="-42" width="12" height="84" rx="6"/>
+                            <rect x="-6" y="-42" width="12" height="84" rx="6" transform="rotate(45)"/>
+                            <rect x="-6" y="-42" width="12" height="84" rx="6" transform="rotate(90)"/>
+                            <rect x="-6" y="-42" width="12" height="84" rx="6" transform="rotate(135)"/>
+                        </g>
+                    </svg>
+                </div>
+                <p class="welcome-question">Comment puis-je vous<br>aider ce soir ?</p>
+            </div>
+        </div>
 
-        <!-- SUGGESTIONS -->
+        <!-- SUGGESTIONS — scroll horizontal style Claude mobile -->
         <div id="suggestions">
             <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
             <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
@@ -1179,6 +1258,19 @@
     </div><!-- /mainArea -->
 
     <script type="module" src="ia.js"></script>
+    <script>
+        // Masquer l'écran d'accueil dès qu'un message apparaît
+        const messagesDiv = document.getElementById('messages');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const suggestions = document.getElementById('suggestions');
+
+        const observer = new MutationObserver(() => {
+            const hasMessages = messagesDiv.querySelectorAll('.msg').length > 0;
+            if (welcomeScreen) welcomeScreen.style.display = hasMessages ? 'none' : 'flex';
+            if (suggestions) suggestions.style.display = hasMessages ? 'none' : 'flex';
+        });
+        observer.observe(messagesDiv, { childList: true, subtree: false });
+    </script>
 
 </body>
 </html>
