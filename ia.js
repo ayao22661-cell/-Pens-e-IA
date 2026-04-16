@@ -1394,8 +1394,17 @@ try {
 //  ÉVÉNEMENTS GLOBAUX
 // ============================================================
 
-window.useSuggestion = function(el) { userInput.value = el.textContent; userInput.focus(); };
+document.addEventListener("click", function(e) {
+    const badge = document.getElementById("agentBadge");
+    const menu = document.getElementById("agentSelector");
+    if (menu && menu.classList.contains("visible")) {
+        if (!badge.contains(e.target) && !menu.contains(e.target)) {
+            menu.classList.remove("visible");
+        }
+    }
+});
 
+window.useSuggestion = function(el) { userInput.value = el.textContent; userInput.focus(); };
 uploadBtn.addEventListener("click", function() { fileInput.click(); });
 fileInput.addEventListener("change", function() { if (fileInput.files.length) addFiles(fileInput.files); });
 
