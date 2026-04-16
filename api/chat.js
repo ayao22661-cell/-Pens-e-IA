@@ -47,6 +47,13 @@ const AGENTS = {
         useSearch: true,            // Signaux faibles + tendances
         preferredModel: "gemini-2.5-flash"
     },
+    audit: {
+        temperature: 0.1,
+        topP: 0.85,
+        topK: 32,
+        useSearch: false,
+        preferredModel: null
+    },
     default: {
         temperature: 0.5,
         topP: 0.95,
