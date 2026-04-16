@@ -32,10 +32,14 @@ export default async function handler(req) {
             })
         });
 
-        const data = await response.json();
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`API Google rejetée (${response.status}) : ${errorData.error?.message || "Inconnue"}`);
+        }
         
+        const data = await response.json();
         if (!data.embedding || !data.embedding.values) {
-            throw new Error("Erreur lors de la vectorisation depuis Google");
+            throw new Error("Structure de vecteur invalide retournée par Google.");
         }
 
         return new Response(JSON.stringify({ embedding: data.embedding.values }), {
