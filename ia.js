@@ -1128,10 +1128,17 @@ function buildPrompt(userMessage, files, memoryContext = "") {
 
     if (recent.length > 0) {
         userPrompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
+        let historyText = "";
         recent.forEach(msg => {
             const role = msg.role === "user" ? "Utilisateur" : "Pensée";
-            userPrompt += "[" + role + "]: " + msg.content + "\n\n";
+            historyText += "[" + role + "]: " + msg.content + "\n\n";
         });
+        
+        // Troncation de sécurité (environ 12000 caractères, ~3000 tokens)
+        if (historyText.length > 12000) {
+            historyText = "...[Début de l'historique tronqué pour optimisation mémoire]...\n" + historyText.slice(-12000);
+        }
+        userPrompt += historyText;
     }
 
     userPrompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### RÉPONSE :\n";
@@ -1142,14 +1149,14 @@ function buildPrompt(userMessage, files, memoryContext = "") {
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
 
-async function callAPI(userMessage, files, memoryContext = "") {
+async function callAPI(userMessage, files, memoryContext = "", tempAgentId = null) {
     if (creditsLeft <= 0) {
         addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
         return;
     }
 
-    // Détermination de l'agent : manuel en priorité, sinon auto-détection
-    const resolvedAgentId = activeAgentId || detectAgent(userMessage);
+    // Détermination de l'agent : priorités = 1. Temporaire (Audit), 2. Fixé manuellement, 3. Auto
+    const resolvedAgentId = tempAgentId || activeAgentId || detectAgent(userMessage);
 
     // Détection des mots-clés temporels pour forcer la recherche
     const temporalKeywords = [
@@ -1271,18 +1278,15 @@ async function callAPI(userMessage, files, memoryContext = "") {
                 const auditPrompt = `Analyse cette proposition technique :\n\n${fullReply}\n\nTrouve les bugs, les failles de sécurité, les problèmes d'optimisation ou de logique. Réponds par [VALIDE] si c'est parfait, ou [À CORRIGER] avec un rapport structuré.`;
 
                 // Bascule temporaire sur l'Agent Audit
-                const originalAgent = activeAgentId;
-                activeAgentId = "audit";
+                // Feedback visuel temporaire (optionnel mais propre)
                 updateAgentBadge("audit");
                 
-
                 try {
-                    // Appel pur : l'audit n'utilise pas la mémoire globale, uniquement sa tâche
-                    await callAPI(auditPrompt, [], "");
+                    // Appel pur : passage du tempAgentId "audit" sans toucher à l'état global
+                    await callAPI(auditPrompt, [], "", "audit");
                 } finally {
-                    // Restauration de l'état précédent
-                    activeAgentId = originalAgent;
-                    updateAgentBadge(originalAgent || null);
+                    // Restauration purement visuelle
+                    updateAgentBadge(activeAgentId || null);
                     auditBtn.innerHTML = "⚖️ Auditer";
                     auditBtn.disabled = false;
                 }
@@ -1502,6 +1506,9 @@ window.executeWebCode = function(btn, containerId, lang) {
     if (lang === 'js' || lang === 'javascript') {
         finalCode = `
         <!DOCTYPE html><html>
+        <head>
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+        </head>
         <body style="font-family: monospace; background: #f4f4f5; color: #333; padding: 16px; margin: 0;">
             <div style="color: #888; font-size: 10px; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.1em;">Console :</div>
             <pre id="output" style="white-space: pre-wrap; word-break: break-all; margin: 0; font-size: 13px;"></pre>
