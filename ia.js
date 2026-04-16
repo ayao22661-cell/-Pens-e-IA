@@ -1587,8 +1587,7 @@ window.executeWebCode = function(btn, containerId, lang) {
     }
 
     // Injection dans l'Iframe
-    const blob = new Blob([finalCode], { type: 'text/html;charset=utf-8' });
-    iframe.src = URL.createObjectURL(blob);
+    iframe.srcdoc = finalCode;
 
     // Mise à jour de l'UI
     btn.classList.add('running');
