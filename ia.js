@@ -987,15 +987,16 @@ function addUserMessageWithFiles(text, files) {
     bubble.className  = "bubble";
     
     files.forEach(function(file) {
-        // Transformation en lien cliquable
+        // 1. Création du bouton cliquable
         const chip = document.createElement("a");
         chip.className = "file-chip";
         chip.download = file.name;
         chip.title = "Télécharger " + file.name;
         chip.style.textDecoration = "none";
         chip.style.cursor = "pointer";
+        chip.target = "_blank"; // Sécurité : ouvre dans un autre onglet si le navigateur n'arrive pas à forcer le téléchargement
 
-        // Injection des données pour téléchargement direct hors-ligne (Data URI)
+        // 2. Injection des données locales (pour un téléchargement instantané post-envoi)
         if (file.content.type === 'binary') {
             chip.href = `data:${file.content.mimeType};base64,${file.content.data}`;
         } else {
@@ -1003,6 +1004,7 @@ function addUserMessageWithFiles(text, files) {
             chip.href = `data:text/plain;charset=utf-8,${encoded}`;
         }
 
+        // 3. Rendu visuel propre
         chip.innerHTML = `<span>📄</span>${escapeHtml(file.name)} <span style='opacity:0.6'>(${file.lang})</span> <span style='margin-left:6px; font-size:10px;'>⬇️</span>`;
         bubble.appendChild(chip);
     });
@@ -1367,40 +1369,56 @@ async function sendMessage() {
     if (sug) sug.style.display = "none";
 
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
-
-    // Construction de la trace pour la base de données
     let dbMessageText = messageText;
+
+    // 1. Gestion de l'upload vers Supabase Storage
     if (files.length > 0) {
-        const fileNames = files.map(f => `📄 ${f.name}`).join(" | ");
-        dbMessageText = `*[Fichiers joints : ${fileNames}]*\n\n${messageText}`;
-    }
+        const uploadedLinks = [];
+        for (const f of files) {
+            try {
+                // Création d'un chemin unique par date pour éviter les écrasements
+                // On s'assure d'avoir l'ID de l'utilisateur (à adapter selon comment tu gères ta session)
+    const { data: { user } } = await supabase.auth.getUser(); 
+    const userId = user ? user.id : 'anonyme';
 
-    // 1. Affichage du message utilisateur dans la session active
-    if (files.length > 0) addUserMessageWithFiles(text, files);
-    else addMessage("user", text, false);
+    // Le chemin correspond EXHAUSTIVEMENT à la politique RLS : uploads/ID/...
+    const filePath = `uploads/${userId}/${Date.now()}_${f.name}`;
+                
+                // Préparation du fichier (conversion du Base64 ou texte en Blob)
+                const fileBlob = f.content.type === 'binary' 
+                    ? await (await fetch(`data:${f.content.mimeType};base64,${f.content.data}`)).blob()
+                    : new Blob([f.content.data], { type: 'text/plain' });
 
-    // 2. Mise à jour automatique du titre de l'onglet si nouvelle conversation
-    if (text && activeTabId) {
-        const tab = tabs.find(t => t.id === activeTabId);
-        if (tab && tab.title === 'Nouvelle conv.') {
-            updateTabTitle(activeTabId, text);
+                // Envoi vers le bucket 'attachments'
+                const { data, error } = await supabase.storage
+                    .from('attachments')
+                    .upload(filePath, fileBlob);
+
+                if (error) throw error;
+
+                // Récupération de l'URL publique
+                const { data: { publicUrl } } = supabase.storage
+                    .from('attachments')
+                    .getPublicUrl(filePath);
+                
+                uploadedLinks.push(`[📄 ${f.name}](${publicUrl})`);
+            } catch (err) {
+                console.error("Échec upload storage:", err);
+            }
+        }
+        // Enrichissement du message pour la base de données
+        if (uploadedLinks.length > 0) {
+            dbMessageText = `**Fichiers joints :** ${uploadedLinks.join(" | ")}\n\n${messageText}`;
         }
     }
 
-    // 3. Nettoyage de l'interface
-    userInput.value        = "";
-    userInput.style.height = "auto";
-    attachedFiles          = [];
-    renderUploadPreview();
-    fileInput.value = "";
+    // 2. Affichage visuel (UI)
+    if (files.length > 0) addUserMessageWithFiles(text, files);
+    else addMessage("user", text, false);
 
-    // 4. Verrouillage (Mode attente)
-    sendBtn.disabled   = true;
-    sendBtn.innerHTML  = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:18px;height:18px;fill:var(--bg);animation:spin 1s linear infinite"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" opacity=".3"/><path d="M12 2a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8z"/></svg>';
-    showTyping();
+    // ... (conserve la logique de nettoyage des inputs et de l'agentBadge)
 
-    // SAUVEGARDE IMMÉDIATE DU MESSAGE UTILISATEUR
-    // Enregistre le message enrichi pour que la présence du fichier survive au rechargement
+    // 3. Sauvegarde finale en BDD avec les liens permanents
     await saveMessageToDB("user", dbMessageText);
 
     let memoryContext = "";
