@@ -905,6 +905,7 @@
         #sendBtn:hover svg { fill: #060810; }
         #sendBtn:active { transform: scale(0.96); box-shadow: none; }
         #sendBtn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; box-shadow: none; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
         /* ============================================================
            DROP OVERLAY
@@ -1194,7 +1195,7 @@
             <span id="activeConvTitle">Pensée IA</span>
             <div class="header-right">
                 <span id="statusBadge"></span>
-                <span id="agentBadge" class="agent-badge" title="Mode agent">👻</span>
+                <span id="agentBadge" class="agent-badge" title="Mode agent">🤖 Auto</span>
                 <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
             </div>
         </header>
