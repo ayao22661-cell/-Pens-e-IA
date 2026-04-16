@@ -204,9 +204,12 @@ function detectAgent(message) {
         ]
     };
 
+    const cleanMsg = " " + msg.replace(/[.,!?;:()]/g, " ") + " ";
+
     const scores = {};
     for (const [agentId, keywords] of Object.entries(patterns)) {
-        scores[agentId] = keywords.filter(kw => msg.includes(kw)).length;
+        // Recherche stricte avec espaces pour éviter les faux positifs (ex: "code" dans "encoder")
+        scores[agentId] = keywords.filter(kw => cleanMsg.includes(" " + kw + " ")).length;
     }
 
     const winner = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
@@ -1158,7 +1161,21 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
     }
 
     // Détermination de l'agent : priorités = 1. Temporaire (Audit), 2. Fixé manuellement, 3. Auto
-    const resolvedAgentId = tempAgentId || activeAgentId || detectAgent(userMessage);
+    let resolvedAgentId = tempAgentId || activeAgentId;
+    
+    // Si le système est en "Auto", on tente de détecter le besoin profond.
+    // S'il trouve un agent, il le VERROUILLE pour le reste de la conversation.
+    if (!resolvedAgentId) {
+        const detected = detectAgent(userMessage);
+        if (detected) {
+            activeAgentId = detected; // Verrouillage global
+            resolvedAgentId = detected;
+            refreshAgentButtons();    // Met à jour le menu déroulant
+            
+            // Feedback visuel discret pour l'utilisateur
+            addMessage("bot", `<span style="font-size: 11px; color: var(--text2);"><em>⚡ Pensée a auto-détecté le contexte et verrouillé l'agent <strong>${AGENTS_CONFIG[detected].label}</strong>.</em></span>`, true);
+        }
+    }
 
     // Détection des mots-clés temporels pour forcer la recherche
     const temporalKeywords = [
@@ -1312,9 +1329,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         if (creditsLeft > 0) setStatus("ok");
 
         // Réinitialisation du badge si l'agent était auto-détecté (pas fixé manuellement)
-        if (!activeAgentId) updateAgentBadge(null);
-
-    } catch(error) {
+        } catch(error) {
         removeTyping();
         addMessage("bot", "❌ Erreur réseau : " + error.message, false);
         setStatus("err");
