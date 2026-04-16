@@ -1243,12 +1243,23 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         const decoder = new TextDecoder("utf-8");
         let fullReply = "";
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            fullReply += decoder.decode(value, { stream: true });
-            bubble.innerHTML = formatResponse(fullReply);
-            messagesEl.scrollTop = messagesEl.scrollHeight;
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                fullReply += decoder.decode(value, { stream: true });
+                bubble.innerHTML = formatResponse(fullReply);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+        } catch (streamErr) {
+            console.warn("Stream interrompu (mise en veille du navigateur) :", streamErr);
+            
+            // Sauvegarde gracieuse de ce qui a eu le temps d'être généré
+            if (fullReply.trim().length === 0) {
+                fullReply = "⚠️ *La génération a été coupée par la mise en veille de l'écran ou le changement d'onglet.* Veuillez relancer la question.";
+            } else {
+                fullReply += "\n\n*[⚠️ Génération interrompue par la mise en veille]*";
+            }
         }
 
         // Nettoyage final
