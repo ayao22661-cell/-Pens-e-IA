@@ -1268,7 +1268,6 @@ async function callAPI(userMessage, files, memoryContext = "") {
         // FIN DE L'AJOUT
         // ==========================================
 
-        msgDiv.appendChild(actions); // (Ton code existant)
         msgDiv.appendChild(actions);
 
         // Mise à jour contexte
@@ -1280,6 +1279,9 @@ async function callAPI(userMessage, files, memoryContext = "") {
         await useCreditInDB();
         updateCredits();
         if (creditsLeft > 0) setStatus("ok");
+
+        // Réinitialisation du badge si l'agent était auto-détecté (pas fixé manuellement)
+        if (!activeAgentId) updateAgentBadge(null);
 
     } catch(error) {
         removeTyping();
@@ -1357,8 +1359,8 @@ async function sendMessage() {
     fileInput.value = "";
 
     // 4. Verrouillage (Mode attente)
-    sendBtn.disabled    = true;
-    sendBtn.textContent = "...";
+    sendBtn.disabled   = true;
+    sendBtn.innerHTML  = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:18px;height:18px;fill:var(--bg);animation:spin 1s linear infinite"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" opacity=".3"/><path d="M12 2a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8z"/></svg>';
     showTyping();
 
     // SAUVEGARDE IMMÉDIATE DU MESSAGE UTILISATEUR
@@ -1382,8 +1384,8 @@ try {
     } finally {
         // 6. Rétablissement GARANTI même en cas d'erreur réseau ou exception
         removeTyping();
-        sendBtn.disabled    = false;
-        sendBtn.textContent = "Envoyer ›";
+        sendBtn.disabled  = false;
+        sendBtn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
         userInput.focus();
     }
 }
