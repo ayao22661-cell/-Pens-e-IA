@@ -174,8 +174,8 @@ export default async function handler(req) {
                         let buffer = "";
 
                         // Avertissement silencieux si Gemma (sans révéler le modèle)
-                        if (isGemma) {
-                            controller.enqueue(new TextEncoder().encode("⚠️ *Mode mémoire local activé.*\n\n"));
+                        if (isGemma && agentConfig.useSearch) {
+                            controller.enqueue(new TextEncoder().encode("⚠️ *Action dégradée : Modèle local activé. La recherche web demandée est indisponible.*\n\n"));
                         }
 
                         try {
