@@ -985,13 +985,35 @@ function addUserMessageWithFiles(text, files) {
     label.textContent = "Toi";
     const bubble = document.createElement("div");
     bubble.className  = "bubble";
+    
     files.forEach(function(file) {
-        const chip = document.createElement("div");
+        // Transformation en lien cliquable
+        const chip = document.createElement("a");
         chip.className = "file-chip";
-        chip.innerHTML = "<span>\ud83d\udcc4</span>" + escapeHtml(file.name) + " <span style='opacity:0.6'>(" + file.lang + ")</span>";
+        chip.download = file.name;
+        chip.title = "Télécharger " + file.name;
+        chip.style.textDecoration = "none";
+        chip.style.cursor = "pointer";
+
+        // Injection des données pour téléchargement direct hors-ligne (Data URI)
+        if (file.content.type === 'binary') {
+            chip.href = `data:${file.content.mimeType};base64,${file.content.data}`;
+        } else {
+            const encoded = encodeURIComponent(file.content.data);
+            chip.href = `data:text/plain;charset=utf-8,${encoded}`;
+        }
+
+        chip.innerHTML = `<span>📄</span>${escapeHtml(file.name)} <span style='opacity:0.6'>(${file.lang})</span> <span style='margin-left:6px; font-size:10px;'>⬇️</span>`;
         bubble.appendChild(chip);
     });
-    if (text) { const p = document.createElement("div"); p.textContent = text; bubble.appendChild(p); }
+    
+    if (text) { 
+        const p = document.createElement("div"); 
+        p.textContent = text; 
+        p.style.marginTop = "8px"; // Séparation visuelle propre
+        bubble.appendChild(p); 
+    }
+    
     msgDiv.appendChild(label);
     msgDiv.appendChild(bubble);
     messagesEl.appendChild(msgDiv);
@@ -1342,7 +1364,14 @@ async function sendMessage() {
 
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
 
-    // 1. Affichage du message utilisateur
+    // Construction de la trace pour la base de données
+    let dbMessageText = messageText;
+    if (files.length > 0) {
+        const fileNames = files.map(f => `📄 ${f.name}`).join(" | ");
+        dbMessageText = `*[Fichiers joints : ${fileNames}]*\n\n${messageText}`;
+    }
+
+    // 1. Affichage du message utilisateur dans la session active
     if (files.length > 0) addUserMessageWithFiles(text, files);
     else addMessage("user", text, false);
 
@@ -1367,8 +1396,8 @@ async function sendMessage() {
     showTyping();
 
     // SAUVEGARDE IMMÉDIATE DU MESSAGE UTILISATEUR
-    // C'est cette ligne qui garantit que ton message s'affiche partout !
-    await saveMessageToDB("user", messageText);
+    // Enregistre le message enrichi pour que la présence du fichier survive au rechargement
+    await saveMessageToDB("user", dbMessageText);
 
     let memoryContext = "";
 try {
