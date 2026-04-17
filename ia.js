@@ -808,14 +808,40 @@ async function loadHistoryFromDB() {
 
     history = data; // On charge le contexte pour la fenêtre de l'IA
     
-    data.forEach(msg => {
-        // On formate TOUS les messages pour activer les liens de téléchargement
+    for (const msg of data) {
+        let finalContent = msg.content;
+        
+        // Si le message contient des fichiers sécurisés, on demande les clés temporaires
+        if (finalContent.includes('[SECURE_FILE:')) {
+            const regex = /\[SECURE_FILE:([^\]]+)\]\(([^)]+)\)/g;
+            let match;
+            
+            // On extrait tous les chemins cachés dans le message
+            while ((match = regex.exec(finalContent)) !== null) {
+                const fileName = match[1];
+                const filePath = match[2];
+                
+                // On demande une URL valable seulement 1 heure (3600 secondes)
+                const { data: signedData, error } = await supabase.storage
+                    .from('attachments')
+                    .createSignedUrl(filePath, 3600);
+                    
+                if (!error && signedData) {
+                    // On remplace le marqueur par le vrai lien éphémère pour l'affichage
+                    const secureLink = `[📄 ${fileName}](${signedData.signedUrl})`;
+                    finalContent = finalContent.replace(match[0], secureLink);
+                } else {
+                    finalContent = finalContent.replace(match[0], `[❌ Fichier expiré ou inaccessible]`);
+                }
+            }
+        }
+
         addMessage(
             msg.role === "assistant" ? "bot" : "user",
-            formatResponse(msg.content),
+            formatResponse(finalContent),
             true
         );
-    });
+    }
 
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "none";
@@ -1526,8 +1552,7 @@ async function sendMessage() {
                     throw error;
                 }
                 
-                const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(filePath);
-                uploadedLinks.push(`[📄 ${f.name}](${publicUrl})`);
+                uploadedLinks.push(`[SECURE_FILE:${f.name}](${filePath})`);
             } catch (err) {
                 console.error("Échec upload storage :", err);
             }
