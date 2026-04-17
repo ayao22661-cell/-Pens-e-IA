@@ -945,11 +945,19 @@ function formatResponse(text) {
 try {
     const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
     
-    // On configure DOMPurify pour laisser passer nos attributs vitaux
-    return DOMPurify.sanitize(htmlOutput, {
-        ADD_ATTR: ['data-code', 'data-runid', 'data-lang'], 
+    // 1. On autorise les attributs de liens (download, target, href)
+    let sanitized = DOMPurify.sanitize(htmlOutput, {
+        ADD_ATTR: ['data-code', 'data-runid', 'data-lang', 'target', 'download'], 
         ADD_TAGS: ['iframe']
     });
+
+    // 2. RECONSTRUCTION : On intercepte les liens Supabase et on les transforme en boutons verts interactifs
+    sanitized = sanitized.replace(/<a[^>]+href="(https:\/\/[^"]+supabase\.co\/storage[^"]+)"[^>]*>(?:📄\s*)?([^<]+)<\/a>/gi, (match, url, fileName) => {
+        const cleanName = fileName.trim();
+        return `<a href="${url}" download="${cleanName}" target="_blank" class="file-chip" title="Télécharger ${cleanName}" style="text-decoration:none; cursor:pointer; display:inline-flex;"><span>📄</span>${cleanName} <span style="margin-left:6px; font-size:10px;">⬇️</span></a>`;
+    });
+
+    return sanitized;
 } catch (e) {
     console.error("Erreur de parsing Markdown:", e);
     return cleanText.replace(/\n/g, "<br>");
@@ -985,10 +993,7 @@ async function addFiles(fileList) {
             const content = await readFileAsData(file);
             attachedFiles.push({ name: file.name, lang: getLang(file.name), content: content });
             renderUploadPreview();
-        } catch(err) {
-            // Feedback explicite par fichier — les autres fichiers continuent d'être traités
-            addMessage("bot", "⚠️ Impossible de charger **" + file.name + "** : " + err, true);
-        }
+        } catch(err) { addMessage("bot", "\u26a0\ufe0f " + err, false); }
     }
 }
 
@@ -1461,6 +1466,7 @@ async function sendMessage() {
     if (sug) sug.style.display = "none";
 
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
+    let dbMessageText = messageText;
 
     // ==========================================
     // 1. VERROUILLAGE IMMÉDIAT DE L'INTERFACE
@@ -1491,42 +1497,48 @@ async function sendMessage() {
     // ==========================================
     // 2. BACKGROUND : UPLOAD & BASE DE DONNÉES
     // ==========================================
-
-    // L'upload Supabase est lancé en arrière-plan SANS bloquer l'appel API.
-    // La sauvegarde DB est faite après l'upload (avec les liens publics si dispo).
+    
     if (files.length > 0) {
-        (async () => {
-            const uploadedLinks = [];
-            for (const f of files) {
-                try {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    const userId = user ? user.id : 'anonyme';
-                    const filePath = `uploads/${userId}/${Date.now()}_${f.name}`;
-                    let fileBlob;
-                    if (f.content.type === 'binary') {
-                        const byteChars = atob(f.content.data);
-                        const byteArr = new Uint8Array(byteChars.length);
-                        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-                        fileBlob = new Blob([byteArr], { type: f.content.mimeType });
-                    } else {
-                        fileBlob = new Blob([f.content.data], { type: 'text/plain' });
-                    }
-                    const { error } = await supabase.storage.from('attachments').upload(filePath, fileBlob);
-                    if (error) throw error;
-                    const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(filePath);
-                    uploadedLinks.push(`[📄 ${f.name}](${publicUrl})`);
-                } catch (err) {
-                    console.error("Échec upload storage (non-bloquant) :", f.name, err);
+        const uploadedLinks = [];
+        for (const f of files) {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                const userId = user ? user.id : 'anonyme';
+                
+                // Nettoyage du nom pour éviter les bugs d'URL (espaces, accents)
+                const safeName = f.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+                const filePath = `uploads/${userId}/${Date.now()}_${safeName}`;
+                
+                let fileBlob;
+                if (f.content.type === 'binary') {
+                    const byteChars = atob(f.content.data);
+                    const byteArr = new Uint8Array(byteChars.length);
+                    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+                    fileBlob = new Blob([byteArr], { type: f.content.mimeType });
+                } else {
+                    fileBlob = new Blob([f.content.data], { type: 'text/plain' });
                 }
+                
+                const { error } = await supabase.storage.from('attachments').upload(filePath, fileBlob);
+                
+                if (error) {
+                    addMessage("bot", `❌ **Erreur d'upload (${f.name})** : ${error.message}`, false);
+                    throw error;
+                }
+                
+                const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(filePath);
+                uploadedLinks.push(`[📄 ${f.name}](${publicUrl})`);
+            } catch (err) {
+                console.error("Échec upload storage :", err);
             }
-            const finalDbText = uploadedLinks.length > 0
-                ? `**Fichiers joints :** ${uploadedLinks.join(" | ")}\n\n${messageText}`
-                : messageText;
-            await saveMessageToDB("user", finalDbText);
-        })();
-    } else {
-        await saveMessageToDB("user", messageText);
+        }
+        if (uploadedLinks.length > 0) {
+            dbMessageText = `**Fichiers joints :** ${uploadedLinks.join(" | ")}\n\n${messageText}`;
+        }
     }
+
+    // Sauvegarde en DB
+    await saveMessageToDB("user", dbMessageText);
 
     // ==========================================
     // 3. RECHERCHE RAG & APPEL API
