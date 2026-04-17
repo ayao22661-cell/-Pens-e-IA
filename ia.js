@@ -1613,7 +1613,7 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 
 if (SpeechRecognition && micBtn) {
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
+    recognition.continuous = true;     // Maintient le micro ouvert même pendant les silences
     recognition.interimResults = true; // Permet de voir le texte s'écrire en direct
     recognition.lang = 'fr-FR';
 
