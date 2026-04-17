@@ -1027,6 +1027,7 @@ function renderUploadPreview() {
     uploadPreview.innerHTML = "";
     if (!attachedFiles.length) { uploadPreview.classList.remove("visible"); return; }
     uploadPreview.classList.add("visible");
+    toggleSendButton();
     attachedFiles.forEach(function(file, i) {
         const chip = document.createElement("div");
         chip.className = "attached-chip";
@@ -1035,8 +1036,7 @@ function renderUploadPreview() {
     });
 }
 
-window.removeFile = function(i) { attachedFiles.splice(i, 1); renderUploadPreview(); };
-
+window.removeFile = function(i) { attachedFiles.splice(i, 1); renderUploadPreview(); toggleSendButton(); };
 // ============================================================
 //  AFFICHAGE MESSAGES
 // ============================================================
@@ -1514,6 +1514,7 @@ async function sendMessage() {
     attachedFiles          = [];
     renderUploadPreview();
     fileInput.value = "";
+    toggleSendButton();
 
     // D. Animation Bouton + Indicateur de frappe
     sendBtn.disabled   = true;
@@ -1594,6 +1595,73 @@ async function sendMessage() {
 }
 
 // ============================================================
+//  DICTÉE VOCALE & UI DYNAMIQUE
+// ============================================================
+
+function toggleSendButton() {
+    if (sendBtn.disabled) return; // Priorité au blocage des crédits
+    const hasContent = userInput.value.trim().length > 0 || attachedFiles.length > 0;
+    if (hasContent) {
+        sendBtn.classList.remove("hidden-action");
+    } else {
+        sendBtn.classList.add("hidden-action");
+    }
+}
+
+const micBtn = document.getElementById("micBtn");
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechRecognition && micBtn) {
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true; // Permet de voir le texte s'écrire en direct
+    recognition.lang = 'fr-FR';
+
+    let isRecording = false;
+    let initialText = "";
+
+    micBtn.addEventListener("click", () => {
+        if (isRecording) {
+            recognition.stop();
+        } else {
+            initialText = userInput.value.trim() ? userInput.value.trim() + " " : "";
+            recognition.start();
+        }
+    });
+
+    recognition.onstart = () => {
+        isRecording = true;
+        micBtn.classList.add("recording");
+        userInput.placeholder = "Écoute en cours...";
+    };
+
+    recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+        }
+        userInput.value = initialText + transcript;
+        userInput.style.height = "auto";
+        userInput.style.height = Math.min(userInput.scrollHeight, 120) + "px";
+        toggleSendButton();
+    };
+
+    recognition.onerror = (event) => {
+        console.error("Erreur micro:", event.error);
+        recognition.stop();
+    };
+
+    recognition.onend = () => {
+        isRecording = false;
+        micBtn.classList.remove("recording");
+        userInput.placeholder = "Discuter avec Pensée…";
+        toggleSendButton();
+    };
+} else if (micBtn) {
+    micBtn.style.display = "none"; // Masque le bouton si le navigateur ne supporte pas l'API
+}
+
+// ============================================================
 //  ÉVÉNEMENTS GLOBAUX
 // ============================================================
 
@@ -1627,6 +1695,7 @@ userInput.addEventListener("keydown", function(e) {
 userInput.addEventListener("input", function() {
     this.style.height = "auto";
     this.style.height = Math.min(this.scrollHeight, 120) + "px";
+    toggleSendButton();
 });
 // Écouteur délégué sécurisé pour l'exécution du code
 document.getElementById("messages").addEventListener("click", function(e) {
