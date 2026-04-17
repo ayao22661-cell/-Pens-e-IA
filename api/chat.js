@@ -135,10 +135,10 @@ export default async function handler(req) {
             ];
         }
 
-        // ── Activation de la recherche web ────────────────────────────
-        // Gemma ne supporte PAS google_search
-        // On respecte aussi le flag useSearch de l'agent
+        // ── Configuration des outils (Search & Code Interpreter) ──────
         const canUseSearch = !isGemma && agentConfig.useSearch;
+        // Activation de l'exécution de code pour les profils techniques et analytiques
+        const canUseCodeExecution = !isGemma && ["code", "audit", "strategie", "default"].includes(agentId);
 
         const body = {
             ...((!isGemma && systemInstruction) && {
@@ -153,8 +153,12 @@ export default async function handler(req) {
             }
         };
 
-        if (canUseSearch) {
-            body.tools = [{ google_search: {} }];
+        let activeTools = [];
+        if (canUseSearch) activeTools.push({ google_search: {} });
+        if (canUseCodeExecution) activeTools.push({ codeExecution: {} });
+
+        if (activeTools.length > 0) {
+            body.tools = activeTools;
         }
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
