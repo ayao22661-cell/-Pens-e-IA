@@ -1412,7 +1412,23 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                 addMessage("user", "Lance un audit strict sur ta dernière proposition.", false);
                 showTyping();
 
-                const auditPrompt = `Analyse cette proposition technique :\n\n${fullReply}\n\nTrouve les bugs, les failles de sécurité, les problèmes d'optimisation ou de logique. Réponds par [VALIDE] si c'est parfait, ou [À CORRIGER] avec un rapport structuré.`;
+                // Récupération de la demande originale de l'utilisateur (message avant cette réponse)
+                const lastUserMsg = history.length >= 2
+                    ? history[history.length - 2]?.content || ""
+                    : "";
+
+                // On passe EXPLICITEMENT les deux contextes à l'agent Audit :
+                // 1. La demande initiale (pour qu'il sache ce qui était attendu)
+                // 2. La proposition générée (ce qu'il doit auditer)
+                const auditPrompt = [
+                    "### DEMANDE ORIGINALE DE L'UTILISATEUR :",
+                    lastUserMsg || "(non disponible)",
+                    "",
+                    "### PROPOSITION À AUDITER :",
+                    fullReply,
+                    "",
+                    "Audite cette proposition par rapport à la demande originale. Vérifie : bugs, sécurité, logique, performance, cohérence avec la demande. Réponds par [VALIDE] si parfait et prêt pour la production, ou [À CORRIGER] avec un rapport structuré et chirurgical."
+                ].join("\n");
 
                 // Bascule temporaire sur l'Agent Audit
                 // Feedback visuel temporaire (optionnel mais propre)
