@@ -907,6 +907,23 @@
             background: var(--accent-dim);
         }
 
+        /* Bouton Micro */
+        #micBtn {
+            background: none; border: 1.5px solid var(--border2); border-radius: 50%;
+            width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--text2); transition: all 0.2s ease; flex-shrink: 0;
+        }
+        #micBtn:hover { border-color: rgba(0,229,160,0.5); color: var(--accent); background: var(--accent-dim); }
+        #micBtn.recording {
+            color: #ff5f5f; border-color: rgba(255,95,95,0.5); background: rgba(255,95,95,0.1);
+            animation: pulseRecord 1.5s infinite;
+        }
+        @keyframes pulseRecord {
+            0% { box-shadow: 0 0 0 0 rgba(255,95,95,0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255,95,95,0); }
+            100% { box-shadow: 0 0 0 0 rgba(255,95,95,0); }
+        }
+
         /* Bouton envoyer — rond sombre avec flèche, style Claude */
         #sendBtn {
             background: var(--text);
@@ -919,6 +936,13 @@
             cursor: pointer;
             transition: all 0.2s ease;
             flex-shrink: 0;
+        }
+
+        /* État masqué du bouton envoyer */
+        #sendBtn.hidden-action {
+            opacity: 0.2; 
+            pointer-events: none; 
+            transform: scale(0.9);
         }
         #sendBtn svg {
             width: 18px; height: 18px;
@@ -1304,8 +1328,11 @@
                 <div class="input-actions-row">
                     <div class="input-actions-left">
                         <button id="uploadBtn" title="Joindre un fichier" aria-label="Joindre un fichier">+</button>
+                        <button id="micBtn" title="Dicter un message" aria-label="Dicter un message">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                        </button>
                     </div>
-                    <button id="sendBtn" title="Envoyer">
+                    <button id="sendBtn" title="Envoyer" class="hidden-action">
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
                 </div>
