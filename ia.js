@@ -327,6 +327,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 let currentUser = null;
 let isSignUpMode = false;
+let isResetMode = false;
+let isRecoveryMode = false;
 
 // Éléments DOM
 const loginScreen       = document.getElementById("loginScreen");
@@ -337,11 +339,33 @@ const loginError        = document.getElementById("loginError");
 const loginSuccess      = document.getElementById("loginSuccess");
 const toggleAuthModeBtn = document.getElementById("toggleAuthMode");
 const logoutBtn         = document.getElementById("logoutBtn");
+const forgotPassBtn     = document.getElementById("forgotPassBtn");
+const emailGroup        = document.getElementById("emailGroup");
+const passwordGroup     = document.getElementById("passwordGroup");
+const authInstruction   = document.getElementById("authInstruction");
+
+// Gestion du mode Reset (Mot de passe oublié)
+if (forgotPassBtn) {
+    forgotPassBtn.addEventListener("click", () => {
+        isResetMode = true;
+        isSignUpMode = false;
+        passwordGroup.style.display = "none";
+        authInstruction.textContent = "Saisis ton email pour réinitialiser ton mot de passe.";
+        loginBtn.textContent = "Envoyer le lien de récupération";
+        toggleAuthModeBtn.textContent = "Retour à la connexion";
+        loginError.style.display = "none";
+        if(loginSuccess) loginSuccess.style.display = "none";
+    });
+}
 
 // Basculer entre Connexion et Inscription
 if (toggleAuthModeBtn) {
     toggleAuthModeBtn.addEventListener("click", () => {
+        isResetMode = false;
         isSignUpMode = !isSignUpMode;
+        passwordGroup.style.display = "block";
+        emailGroup.style.display = "block";
+        authInstruction.textContent = isSignUpMode ? "Crée un compte pour accéder à ton espace." : "Connecte-toi pour accéder à ton espace.";
         loginBtn.textContent = isSignUpMode ? "Créer mon compte ›" : "Se connecter ›";
         toggleAuthModeBtn.textContent = isSignUpMode ? "Déjà un compte ? Se connecter" : "Pas encore de compte ? S'inscrire";
         loginError.style.display = "none";
@@ -351,9 +375,21 @@ if (toggleAuthModeBtn) {
 
 // Vérification de la session au chargement
 async function checkLocalAuth() {
-    // 1. Écouter les changements d'état (connexion, déconnexion, clic email)
+    // 1. Écouter les changements d'état
     supabase.auth.onAuthStateChange((event, session) => {
-        if (session) {
+        if (event === 'PASSWORD_RECOVERY') {
+            isRecoveryMode = true;
+            loginScreen.style.display = "flex";
+            emailGroup.style.display = "none";
+            passwordGroup.style.display = "block";
+            forgotPassBtn.style.display = "none";
+            toggleAuthModeBtn.style.display = "none";
+            authInstruction.textContent = "Saisis ton NOUVEAU mot de passe.";
+            loginBtn.textContent = "Mettre à jour le mot de passe";
+            return; // On bloque la connexion automatique pour forcer la mise à jour
+        }
+
+        if (session && !isRecoveryMode) {
             currentUser = session.user;
             loginScreen.style.display = "none";
             
@@ -395,7 +431,31 @@ async function handleAuth() {
     if(loginSuccess) loginSuccess.style.display = "none";
 
     try {
-        if (isSignUpMode) {
+        if (isRecoveryMode) {
+            // --- ÉTAPE 2 RESET : METTRE À JOUR LE MOT DE PASSE ---
+            const { error } = await supabase.auth.updateUser({ password: password });
+            if (error) throw error;
+            
+            isRecoveryMode = false;
+            if(loginSuccess) {
+                loginSuccess.style.display = "block";
+                loginSuccess.innerHTML = "✅ Mot de passe mis à jour !";
+            }
+            setTimeout(() => location.reload(), 2000); // Recharge pour nettoyer l'URL et reconnecter proprement
+
+        } else if (isResetMode) {
+            // --- ÉTAPE 1 RESET : ENVOYER LE LIEN ---
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin + window.location.pathname
+            });
+            if (error) throw error;
+            
+            if(loginSuccess) {
+                loginSuccess.style.display = "block";
+                loginSuccess.innerHTML = "✅ Lien de récupération envoyé !<br>Vérifie tes emails.";
+            }
+
+        } else if (isSignUpMode) {
             // --- SIGN UP ---
             const { data, error } = await supabase.auth.signUp({ email, password });
             if (error) throw error;
@@ -404,6 +464,7 @@ async function handleAuth() {
                 loginSuccess.style.display = "block";
                 loginSuccess.innerHTML = "✅ Compte créé !<br>Vérifie tes emails pour confirmer.";
             }
+
         } else {
             // --- LOGIN ---
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -413,7 +474,7 @@ async function handleAuth() {
             loginScreen.style.opacity = "0";
             setTimeout(() => { loginScreen.style.display = "none"; }, 300);
             
-            await loadCreditsFromDB(); // ← C'est ici !
+            await loadCreditsFromDB();
             initTabs();
         }
     } catch (error) {
