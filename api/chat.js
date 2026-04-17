@@ -16,20 +16,23 @@ const AGENTS = {
         temperature: 0.2,
         topP: 0.90,
         topK: 40,
-        useSearch: false,           // Le code ne nécessite pas de recherche web
-        preferredModel: null        // Utilise la cascade normale
+        maxOutputTokens: 32768,     // Fichiers complets, fonctions longues
+        useSearch: false,
+        preferredModel: null
     },
     recherche: {
         temperature: 0.6,
         topP: 0.95,
         topK: 64,
-        useSearch: true,            // Recherche web forcée
-        preferredModel: "gemini-2.5-flash"  // Toujours le plus capable pour la synthèse
+        maxOutputTokens: 8192,      // Synthèse dense, pas de roman
+        useSearch: true,
+        preferredModel: "gemini-2.5-flash"
     },
     creatif: {
         temperature: 1.0,
         topP: 0.98,
         topK: 64,
+        maxOutputTokens: 32768,     // Scripts longs, romans, scénarios complets
         useSearch: false,
         preferredModel: null
     },
@@ -37,20 +40,23 @@ const AGENTS = {
         temperature: 0.7,
         topP: 0.95,
         topK: 64,
-        useSearch: true,            // Données marché récentes utiles
+        maxOutputTokens: 8192,
+        useSearch: true,
         preferredModel: null
     },
     visionnaire: {
         temperature: 0.9,
         topP: 0.97,
         topK: 64,
-        useSearch: true,            // Signaux faibles + tendances
+        maxOutputTokens: 6144,      // Insight concentré, pas de digression infinie
+        useSearch: true,
         preferredModel: "gemini-2.5-flash"
     },
     audit: {
         temperature: 0.1,
         topP: 0.85,
         topK: 32,
+        maxOutputTokens: 8192,      // Rapport structuré, pas un roman
         useSearch: false,
         preferredModel: null
     },
@@ -58,10 +64,7 @@ const AGENTS = {
         temperature: 0.5,
         topP: 0.95,
         topK: 64,
-        useSearch: false,
-        preferredModel: null
-    }
-};
+        maxOutputTokens: 16384,
 
 export default async function handler(req) {
     if (req.method !== "POST") {
@@ -140,13 +143,23 @@ export default async function handler(req) {
         // Activation de l'exécution de code pour les profils techniques et analytiques
         const canUseCodeExecution = !isGemma && ["code", "audit", "strategie", "default"].includes(agentId);
 
+        // Sur Gemma : on neutralise l'instruction google_search dans le system prompt
+        // pour éviter la contradiction "tu DOIS chercher" sur un modèle sans accès web
+        let finalSystemInstruction = systemInstruction;
+        if (isGemma && systemInstruction) {
+            finalSystemInstruction = systemInstruction
+                .replace(/\[INSTRUCTION CRITIQUE[^\]]*\][^\n]*/gi, "")
+                .replace(/Tu DOIS utiliser google_search[^.]*\./gi, "")
+                .trim();
+        }
+
         const body = {
-            ...((!isGemma && systemInstruction) && {
-                systemInstruction: { parts: [{ text: systemInstruction }] }
+            ...((!isGemma && finalSystemInstruction) && {
+                systemInstruction: { parts: [{ text: finalSystemInstruction }] }
             }),
             contents: [{ role: "user", parts: finalParts }],
             generationConfig: {
-                maxOutputTokens: 65536,
+                maxOutputTokens: agentConfig.maxOutputTokens || 8192,
                 temperature: agentConfig.temperature,
                 topP: agentConfig.topP,
                 topK: agentConfig.topK
