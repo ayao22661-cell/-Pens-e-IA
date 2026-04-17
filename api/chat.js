@@ -65,6 +65,10 @@ const AGENTS = {
         topP: 0.95,
         topK: 64,
         maxOutputTokens: 16384,
+        useSearch: false,
+        preferredModel: null
+    }
+};
 
 export default async function handler(req) {
     if (req.method !== "POST") {
