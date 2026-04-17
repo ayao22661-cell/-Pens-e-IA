@@ -809,10 +809,11 @@ async function loadHistoryFromDB() {
     history = data; // On charge le contexte pour la fenêtre de l'IA
     
     data.forEach(msg => {
+        // On formate TOUS les messages pour activer les liens de téléchargement
         addMessage(
             msg.role === "assistant" ? "bot" : "user",
-            msg.role === "assistant" ? formatResponse(msg.content) : msg.content,
-            msg.role === "assistant"
+            formatResponse(msg.content),
+            true
         );
     });
 
