@@ -24,12 +24,53 @@
             --text3:       #44495a;
             --user-bg:     #0f2019;
             --user-border: rgba(0,229,160,0.20);
-            --code-bg:     #060810;
+            --code-bg:     #0a0d16;
             --red:         #ff5f5f;
             --yellow:      #f0c040;
             --shadow:      0 32px 80px rgba(0,0,0,0.7);
             --radius:      20px;
             --radius-sm:   12px;
+        }
+
+        /* ============================================================
+           MODE CLAIR — miroir inversé de l'identité dark
+           ============================================================ */
+        body[data-theme="light"] {
+            --bg:          #f4f5f7;
+            --bg2:         #eceef2;
+            --bg3:         #e3e6ec;
+            --bg4:         #d8dce6;
+            --border:      rgba(0,0,0,0.07);
+            --border2:     rgba(0,0,0,0.12);
+            --accent:      #00a372;
+            --accent2:     #008a60;
+            --accent-dim:  rgba(0,163,114,0.10);
+            --accent-glow: rgba(0,163,114,0.18);
+            --text:        #1a1e2a;
+            --text2:       #4a5068;
+            --text3:       #9098b0;
+            --user-bg:     #dff4ec;
+            --user-border: rgba(0,163,114,0.22);
+            --code-bg:     #dde0e8;
+            --red:         #d63c3c;
+            --yellow:      #b5850a;
+            --shadow:      0 32px 80px rgba(0,0,0,0.12);
+        }
+
+        body[data-theme="light"] header {
+            background: rgba(244,245,247,0.96);
+        }
+        body[data-theme="light"] #inputArea {
+            background: rgba(244,245,247,0.98);
+        }
+        body[data-theme="light"] #loginScreen {
+            background: var(--bg);
+        }
+        body[data-theme="light"] .bubble pre {
+            color: #2a5a3a;
+        }
+        body[data-theme="light"] body::before {
+            opacity: 0.15;
         }
 
         body {
@@ -538,7 +579,28 @@
         .agent-btn:hover { background: var(--bg3); color: var(--text); }
         .agent-btn.active { background: var(--accent-dim); color: var(--accent); }
 
-        #clearBtn { display: none; }
+        /* Bouton toggle thème */
+        #themeToggle {
+            width: 34px; height: 34px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s, transform 0.3s ease;
+            flex-shrink: 0;
+            font-size: 15px;
+            line-height: 1;
+        }
+        #themeToggle:hover {
+            border-color: rgba(0,229,160,0.4);
+            background: var(--accent-dim);
+            transform: rotate(20deg);
+        }
+
+
 
         /* ============================================================
            BARRE ONGLETS — supprimée (remplacée par sidebar)
@@ -629,7 +691,7 @@
         .msg {
             display: flex;
             flex-direction: column;
-            max-width: 82%;
+            max-width: 86%;
             min-width: 0;
             overflow: hidden;
             animation: msgIn 0.3s cubic-bezier(0.2,0.8,0.2,1);
@@ -918,6 +980,14 @@
             color: #ff5f5f; border-color: rgba(255,95,95,0.5); background: rgba(255,95,95,0.1);
             animation: pulseRecord 1.5s infinite;
         }
+        #micBtn.unsupported {
+            opacity: 0.28;
+            cursor: not-allowed;
+            border-color: var(--border);
+            color: var(--text3);
+            pointer-events: none;
+        }
+        #micBtn.unsupported:hover { background: none; border-color: var(--border); color: var(--text3); }
         @keyframes pulseRecord {
             0% { box-shadow: 0 0 0 0 rgba(255,95,95,0.4); }
             70% { box-shadow: 0 0 0 10px rgba(255,95,95,0); }
@@ -993,9 +1063,9 @@
         .typing-bubble span {
             width: 6px; height: 6px;
             border-radius: 50%;
-            background: var(--accent);
+            background: var(--text2);
             animation: typingBlink 1.4s infinite;
-            opacity: 0.3;
+            opacity: 0.45;
         }
         .typing-bubble span:nth-child(2) { animation-delay: 0.2s; }
         .typing-bubble span:nth-child(3) { animation-delay: 0.4s; }
@@ -1037,8 +1107,21 @@
         }
         #sidebarToggle:hover { color: var(--accent); border-color: rgba(0,229,160,0.3); }
 
-@media (max-width: 680px) {
+/* ============================================================
+   TABLETTE — sidebar plus étroite, layout équilibré
+   ============================================================ */
+@media (min-width: 681px) and (max-width: 1024px) {
     #sidebar {
+        width: 200px;
+        min-width: 200px;
+    }
+    .msg { max-width: 88%; }
+    .bubble { font-size: 13.5px; }
+    #inputArea { padding: 12px 14px 16px; }
+    .welcome-question { font-size: clamp(20px, 4vw, 26px); }
+}
+
+@media (max-width: 680px) {
         position: fixed;
         left: 0; top: 0; bottom: 0;
         transform: translateX(-100%);
@@ -1174,6 +1257,24 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0,229,160,0.1);
         }
+        /* ============================================================
+           ACCESSIBILITÉ — Respect des préférences de mouvement
+           ============================================================ */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            .welcome-logo svg { animation: none; }
+            .logo-dot, .login-logo-dot { animation: none; opacity: 1; box-shadow: 0 0 10px var(--accent); }
+            #loginScreen::before { animation: none; }
+            .login-card { animation: none; }
+            .msg { animation: none; opacity: 1; transform: none; }
+            .typing-bubble span { animation: none; opacity: 0.6; }
+            #micBtn.recording { animation: none; }
+        }
+
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
@@ -1277,6 +1378,7 @@
             <button id="sidebarToggle">☰</button>
             <span id="activeConvTitle">Pensée IA</span>
             <div class="header-right" style="position: relative;">
+                <button id="themeToggle" title="Changer le thème" aria-label="Basculer mode clair/sombre">🌙</button>
                 <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
                 
                 <div id="agentSelector" class="agent-selector-menu"></div>
@@ -1328,7 +1430,7 @@
                 <div class="input-actions-row">
                     <div class="input-actions-left">
                         <button id="uploadBtn" title="Joindre un fichier" aria-label="Joindre un fichier">+</button>
-                        <button id="micBtn" title="Dicter un message" aria-label="Dicter un message">
+        <button id="micBtn" title="Dicter un message" aria-label="Dicter un message" data-unsupported-title="Dictée non supportée par ce navigateur">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
                         </button>
                     </div>
@@ -1359,6 +1461,49 @@
             if (suggestions) suggestions.style.display = hasMessages ? 'none' : 'flex';
         });
         observer.observe(messagesDiv, { childList: true, subtree: false });
+
+        // ── Theme toggle ──────────────────────────────────────────
+        const _themeBtn = document.getElementById('themeToggle');
+        const _savedTheme = localStorage.getItem('pensee_theme') || 'dark';
+        if (_savedTheme === 'light') {
+            document.body.setAttribute('data-theme', 'light');
+            _themeBtn.textContent = '☀️';
+        }
+        _themeBtn.addEventListener('click', () => {
+            const isLight = document.body.getAttribute('data-theme') === 'light';
+            if (isLight) {
+                document.body.removeAttribute('data-theme');
+                _themeBtn.textContent = '🌙';
+                localStorage.setItem('pensee_theme', 'dark');
+            } else {
+                document.body.setAttribute('data-theme', 'light');
+                _themeBtn.textContent = '☀️';
+                localStorage.setItem('pensee_theme', 'light');
+            }
+        });
+
+ : remplace display:none par .unsupported
+        // (ia.js utilise micBtn.style.display = "none" si SpeechRecognition absent)
+        const _micBtn = document.getElementById('micBtn');
+        if (_micBtn) {
+            const _origDescriptor = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'display');
+            const _origSet = _origDescriptor.set;
+            const _micStyle = _micBtn.style;
+            Object.defineProperty(_micStyle, 'display', {
+                set(val) {
+                    if (val === 'none') {
+                        _micBtn.classList.add('unsupported');
+                        _micBtn.title = _micBtn.dataset.unsupportedTitle || 'Dictée non supportée';
+                        _micBtn.setAttribute('aria-disabled', 'true');
+                        // Ne pas cacher : on montre le bouton grisé
+                    } else {
+                        _origSet.call(_micStyle, val);
+                    }
+                },
+                get() { return _origDescriptor.get.call(_micStyle); },
+                configurable: true
+            });
+        }
     </script>
 
 </body>
