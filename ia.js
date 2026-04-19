@@ -1377,8 +1377,31 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         const cutIndex = fullReply.search(/\n\[Utilisateur\]:|\n###\s*NOUVEAU MESSAGE/i);
         if (cutIndex > 80) fullReply = fullReply.substring(0, cutIndex);
         fullReply = fullReply.trim();
-        bubble.innerHTML = formatResponse(fullReply);
 
+        // ==========================================
+        // INTERCEPTEUR DE COMMANDE TERMINAL
+        // ==========================================
+        const commandMatch = fullReply.match(/\[TERMINAL_CMD:\s*(.*?)\]/);
+        
+        if (commandMatch && typeof localSocket !== 'undefined' && localSocket && localSocket.readyState === WebSocket.OPEN) {
+            const commandToRun = commandMatch[1].trim(); // Extrait la commande
+            
+            // Envoi furtif au Daemon via WebSocket
+            localSocket.send(JSON.stringify({
+                action: 'run_command',
+                cmd: commandToRun
+            }));
+
+            // Remplacement visuel propre pour l'utilisateur
+            fullReply = fullReply.replace(commandMatch[0], `<br><em style="color: var(--accent);">⚙️ Exécution en cours : <code>${commandToRun}</code>...</em>`);
+            
+        } else if (commandMatch) {
+            // L'IA a tenté d'exécuter, mais le tunnel n'est pas ouvert
+            fullReply = fullReply.replace(commandMatch[0], `<br><em style="color: var(--red);">❌ Exécution échouée : Terminal non connecté.</em>`);
+        }
+        // ==========================================
+
+        bubble.innerHTML = formatResponse(fullReply);
         // Bouton copier (Ton code existant)
         const actions = document.createElement("div");
         actions.className = "msg-actions";
