@@ -1,6 +1,3 @@
-// REMPLACE PAR :
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
 // ============================================================
 //  PENSÉE IA — ia.js (localStorage, sans Supabase)
 // ============================================================
@@ -338,7 +335,8 @@ function handleAgentCommand(text) {
 // ⚠️ À REMPLACER PAR TES CLÉS RÉELLES
 const supabaseUrl = 'https://uhrdoxllxqtvucxmzcww.supabase.co';
 const supabaseKey = 'sb_publishable_8EA5WSsRgDTcKbtpULEEFQ_Du2qoRIb';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Utilisation de l'objet global fourni par le CDN dans index.html
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 let currentUser = null;
 let isSignUpMode = false;
