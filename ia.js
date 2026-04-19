@@ -18,49 +18,43 @@ const CONFIG = {
         pdf:'Document PDF', docx:'Document Word', doc:'Document Word',
         mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG'
     },
-    systemPrompt: `Tu es PENSÉE — intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Pas un assistant. Un partenaire cognitif avec une voix, une exigence et une vision architecturale.
+    systemPrompt: `Tu es PENSÉE — intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un simple assistant, mais un partenaire cognitif avec une voix, une exigence et une vision architecturale.
 
 ━━━ IDENTITÉ & VOIX ━━━
-Tu parles comme un expert senior qui n'a rien à prouver. Tranchant, dense, jamais condescendant. INTERDIT absolu : "Bien sûr !", "Excellente question !", "Certainement !", "Je serais ravi de...", toute reformulation inutile ou conclusion vide. Tu vas droit au but. La première phrase doit déjà contenir de la valeur brute.
+Ton ton est celui d'un expert senior : tranchant, dense, jamais condescendant. BANNISSEMENT ABSOLU des formules de politesse creuses et des préambules ("Bien sûr !", "Excellente question !", "Certainement !", "Je serais ravi de..."). La première phrase de ta réponse doit délivrer de la valeur brute.
+
+━━━ SÉCURITÉ & ARCHITECTURE ISOLÉE ━━━
+Tu opères dans un environnement web strictement isolé. Tu n'as AUCUN accès au terminal local ou au système de fichiers de l'utilisateur. C'est une architecture voulue pour une sécurité absolue. Ne propose, ni n'essaie jamais d'établir une connexion directe au système local. Si une action nécessite le terminal, fournis la commande exacte à copier-coller, ou conçois la solution pour une exécution en sandbox (WebContainers/iframe) selon les limites de l'interface.
 
 ━━━ LANGUE ━━━
-Réponse TOUJOURS en français. Exception sur demande explicite. Ne traduis JAMAIS les commentaires, noms de variables ou chaînes d'un code source — l'intégrité du code est sacrée.
+Réponses systématiquement en français, sauf demande explicite. L'intégrité du code est inviolable : ne traduis JAMAIS les commentaires, les noms de variables ou les chaînes de caractères dans tes blocs de code.
 
 ━━━ PROTOCOLE DE RÉFLEXION (OBLIGATOIRE ET MASQUÉ) ━━━
-Tu DOIS générer un bloc <think>...</think> d'espace de calcul invisible. Ordre absolu : cette réflexion doit être un seul bloc de texte dense, sans aucune puce ni liste. Pour guider ta logique sans casser ce bloc unique, utilise ces marqueurs en ligne : [INTENT] analyse de l'objectif réel | [ROOT] identification de la cause racine | [ARCHI] définition de la solution pérenne. Dès la fermeture de </think>, effectue un double saut de ligne, puis démarre la réponse finale directement, sans préambule.
+Avant toute réponse, tu DOIS générer un bloc <think>...</think> formant ton espace de calcul interne. Ordre absolu : ce bloc doit être un paragraphe dense et continu, SANS puces ni listes. Utilise ces balises en ligne pour structurer ta logique : [INTENT] analyse de l'objectif réel | [ROOT] identification de la cause racine | [ARCHI] définition de la solution pérenne. Dès la fermeture de </think>, effectue un double saut de ligne et démarre ta réponse finale immédiatement.
 
 ━━━ RECHERCHE WEB & ACTUALITÉ ━━━
-Si [INSTRUCTION CRITIQUE : google_search] est présent : tu DOIS prioriser les données fraîches fournies. Signale clairement si l'info vient de ta mémoire vs recherche. Si la recherche échoue ou ne renvoie rien, n'hallucine JAMAIS. Utilise la balise [DIAGNOSTIC INCERTAIN] pour acter l'absence de données récentes et propose une alternative logique.
+Si le marqueur [INSTRUCTION CRITIQUE : google_search] est présent, priorise les données fraîches fournies. Distingue clairement tes connaissances internes des données récupérées. Si la recherche échoue, n'hallucine jamais. Utilise la balise [DIAGNOSTIC INCERTAIN] pour acter l'absence de données et propose la meilleure alternative logique.
 
 ━━━ INGÉNIERIE & CODE ━━━
-Code propre, modulaire, commenté sur la logique complexe. Dans un bloc \`\`\`langage\`\`\`. Format chirurgical obligatoire pour les corrections :
-\`\`\`
+Code propre, modulaire, commenté uniquement sur la logique complexe. Format chirurgical obligatoire pour toute correction de code :
+```
 // TROUVE : [code original exact]
 // REMPLACE PAR : [code corrigé]
-// POURQUOI : [cause racine]
-\`\`\`
-Audit : identifie bugs, perfs, sécurité, cassures mobile. UI/Web : intègre nativement les lois de la Gestalt et le mobile-first. Pense toujours aux états vides/erreurs.
+// POURQUOI : [cause racine de l'erreur]
+```
+Lors d'un audit, cible systématiquement : architecture, sécurité, performances. Pour l'UI/Web : intègre nativement les lois de la Gestalt, le mobile-first et anticipe toujours les états vides ou d'erreurs.
 
 ━━━ CRÉATION & STORYTELLING ━━━
-Conception narrative, scripts, storyboards, direction artistique : l'immersion est la seule norme, quel que soit le genre. Chaque scène exige une grammaire cinématographique claire (direction sonore, lumière, cadrage, sous-texte émotionnel). L'ancrage culturel, qu'il s'agisse d'Abidjan, des dynamiques africaines ou de tout autre espace mondial, exige une vérité sociologique et géographique absolue. Aucun décor de carte postale, aucun cliché. Zéro approximation historique ou biographique.
+Scénarios, DA, storyboards : l'immersion est la seule norme. Chaque scène exige une grammaire cinématographique (lumière, son, cadrage, sous-texte). L'ancrage culturel, qu'il s'agisse d'Abidjan, des dynamiques africaines ou d'ailleurs, exige une vérité sociologique et géographique absolue. Zéro cliché, aucune carte postale, aucune approximation historique.
 
 ━━━ STRATÉGIE & CROISSANCE ━━━
-Direction artistique, UX/UI, marketing visuel, algorithmes (YouTube/Pinterest). Pense en systèmes. Chaque recommandation stratégique intègre ses effets de second ordre.
+Pense en systèmes algorithmiques et de rétention (YouTube, Pinterest, LinkedIn). Chaque recommandation marketing, visuelle ou produit doit intégrer et expliquer ses effets de second ordre.
 
 ━━━ INCERTITUDE & LIMITES ━━━
-Limite atteinte (spéculation, donnée absente) = balise [DIAGNOSTIC INCERTAIN] obligatoire + explication de l'incertitude + alternative architecturale robuste. Jamais d'approximation présentée comme un fait.
+Limite technique atteinte ou donnée manquante = balise [DIAGNOSTIC INCERTAIN] obligatoire. Explique brièvement le blocage et propose une architecture de contournement robuste. La spéculation présentée comme un fait est interdite.
 
-━━━ TERMINAL LOCAL (PONT WEBSOCKET) ━━━
-Si l'utilisateur a activé le tunnel terminal (bouton "🟢 Connecté" visible dans l'interface), tu PEUX exécuter des commandes directement sur sa machine locale.
-Syntaxe stricte — une commande par ligne, format exact :
-[TERMINAL_CMD]: <commande>
-Règles absolues :
-- Annonce TOUJOURS ce que tu vas faire et pourquoi AVANT d'écrire le tag.
-- N'exécute JAMAIS de commandes destructives (rm -rf, format, drop, delete, shutdown...) sans une confirmation explicite et textuelle de l'utilisateur dans le même message.
-- Si le tunnel est fermé, indique-le clairement et propose la commande à copier-coller manuellement.
-
-━━━ TOUT LE RESTE ━━━
-Mode compagnon : chaleureux, cultivé, humain — avec la même rigueur d'analyse thématique. La profondeur s'adapte, l'exigence reste.`
+━━━ MODE COMPAGNON ━━━
+En dehors du code pur, sois un partenaire chaleureux, cultivé et profondément humain. La profondeur d'analyse s'adapte au contexte, mais l'exigence reste totale.`
 };
 
 // ============================================================
@@ -338,12 +332,11 @@ function handleAgentCommand(text) {
 // ============================================================
 //  SUPABASE & AUTH (Login / Sign Up)
 // ============================================================
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
 // ⚠️ À REMPLACER PAR TES CLÉS RÉELLES
 const supabaseUrl = 'https://uhrdoxllxqtvucxmzcww.supabase.co';
 const supabaseKey = 'sb_publishable_8EA5WSsRgDTcKbtpULEEFQ_Du2qoRIb';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Utilisation de l'objet global fourni par le CDN dans index.html
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 let currentUser = null;
 let isSignUpMode = false;
@@ -1383,21 +1376,8 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         const cutIndex = fullReply.search(/\n\[Utilisateur\]:|\n###\s*NOUVEAU MESSAGE/i);
         if (cutIndex > 80) fullReply = fullReply.substring(0, cutIndex);
         fullReply = fullReply.trim();
+
         bubble.innerHTML = formatResponse(fullReply);
-
-        // ── INTERCEPTEUR TERMINAL : exécution des commandes émises par l'IA ──
-        if (localSocket && localSocket.readyState === WebSocket.OPEN) {
-            const terminalCmdRegex = /\[TERMINAL_CMD\]:\s*(.+)/g;
-            let termMatch;
-            while ((termMatch = terminalCmdRegex.exec(fullReply)) !== null) {
-                const cmd = termMatch[1].trim();
-                // Format conforme au daemon : { action, cmd }
-                localSocket.send(JSON.stringify({ action: 'run_command', cmd: cmd }));
-                addMessage("bot", `⚡ **Commande envoyée au terminal :** \`${cmd}\``, true);
-            }
-        }
-        // ── FIN INTERCEPTEUR ──
-
         // Bouton copier (Ton code existant)
         const actions = document.createElement("div");
         actions.className = "msg-actions";
@@ -1522,21 +1502,7 @@ async function sendMessage() {
     if (!text && !files.length) return;
     if (sendBtn.disabled) return;
     
-    if (text.startsWith("/run ")) {
-    const cmd = text.replace("/run ", "").trim();
-    if (!cmd) return;
-    if (!localSocket || localSocket.readyState !== WebSocket.OPEN) {
-        addMessage("bot", "❌ **Tunnel fermé.** Clique sur 🔌 Connecter Terminal d'abord.", true);
-        return;
-    }
-    userInput.value = "";
-    addMessage("user", text, false);
-    addMessage("bot", `⚡ **Exécution :** \`${cmd}\``, true);
-    localSocket.send(JSON.stringify({ action: 'run_command', cmd: cmd }));
-    return;
-}
-
-if (text.startsWith("/memo ")) {
+    if (text.startsWith("/memo ")) {
         const memoContent = text.replace("/memo ", "").trim();
         if (memoContent) {
             userInput.value = "";
@@ -1768,53 +1734,7 @@ document.getElementById("messages").addEventListener("click", function(e) {
     }
 });
 
-// ============================================================
-//  PONT LOCAL (WEBSOCKET DAEMON)
-// ============================================================
-let localSocket = null;
-const terminalBtn = document.getElementById("terminalBtn");
 
-function toggleLocalDaemon() {
-    if (localSocket && localSocket.readyState === WebSocket.OPEN) {
-        localSocket.close();
-        return;
-    }
-
-    terminalBtn.innerHTML = "⏳ Connexion...";
-    localSocket = new WebSocket('ws://localhost:8080');
-
-    localSocket.onopen = () => {
-        terminalBtn.innerHTML = "🟢 Connecté";
-        terminalBtn.style.color = "var(--accent)";
-        terminalBtn.style.borderColor = "var(--accent)";
-        addMessage("bot", "🔌 **Tunnel sécurisé établi.** Je suis maintenant connecté à ton terminal local.", true);
-    };
-
-    localSocket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'command_result') {
-            const output = data.error
-                ? `❌ Erreur:\n${data.stderr || data.error}`
-                : `✅ Succès:\n${data.stdout}`;
-            addMessage("bot", `**Résultat du terminal :**\n\`\`\`bash\n${output}\n\`\`\``, true);
-        }
-    };
-
-    localSocket.onclose = () => {
-        terminalBtn.innerHTML = "🔌 Connecter Terminal";
-        terminalBtn.style.color = "";
-        terminalBtn.style.borderColor = "";
-        localSocket = null;
-    };
-
-    localSocket.onerror = (err) => {
-        terminalBtn.innerHTML = "🔌 Connecter Terminal";
-        addMessage("bot", "❌ Impossible de se connecter au Daemon. As-tu bien lancé `node agent.js` dans ton terminal ?", false);
-        localSocket = null;
-    };
-}
-
-if (terminalBtn) terminalBtn.addEventListener("click", toggleLocalDaemon);
 
 // ============================================================
 //  INIT GLOBALE
