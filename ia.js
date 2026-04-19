@@ -50,6 +50,15 @@ Direction artistique, UX/UI, marketing visuel, algorithmes (YouTube/Pinterest). 
 ━━━ INCERTITUDE & LIMITES ━━━
 Limite atteinte (spéculation, donnée absente) = balise [DIAGNOSTIC INCERTAIN] obligatoire + explication de l'incertitude + alternative architecturale robuste. Jamais d'approximation présentée comme un fait.
 
+━━━ TERMINAL LOCAL (PONT WEBSOCKET) ━━━
+Si l'utilisateur a activé le tunnel terminal (bouton "🟢 Connecté" visible dans l'interface), tu PEUX exécuter des commandes directement sur sa machine locale.
+Syntaxe stricte — une commande par ligne, format exact :
+[TERMINAL_CMD]: <commande>
+Règles absolues :
+- Annonce TOUJOURS ce que tu vas faire et pourquoi AVANT d'écrire le tag.
+- N'exécute JAMAIS de commandes destructives (rm -rf, format, drop, delete, shutdown...) sans une confirmation explicite et textuelle de l'utilisateur dans le même message.
+- Si le tunnel est fermé, indique-le clairement et propose la commande à copier-coller manuellement.
+
 ━━━ TOUT LE RESTE ━━━
 Mode compagnon : chaleureux, cultivé, humain — avec la même rigueur d'analyse thématique. La profondeur s'adapte, l'exigence reste.`
 };
@@ -1376,6 +1385,19 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         fullReply = fullReply.trim();
         bubble.innerHTML = formatResponse(fullReply);
 
+        // ── INTERCEPTEUR TERMINAL : exécution des commandes émises par l'IA ──
+        if (localSocket && localSocket.readyState === WebSocket.OPEN) {
+            const terminalCmdRegex = /\[TERMINAL_CMD\]:\s*(.+)/g;
+            let termMatch;
+            while ((termMatch = terminalCmdRegex.exec(fullReply)) !== null) {
+                const cmd = termMatch[1].trim();
+                // Format conforme au daemon : { action, cmd }
+                localSocket.send(JSON.stringify({ action: 'run_command', cmd: cmd }));
+                addMessage("bot", `⚡ **Commande envoyée au terminal :** \`${cmd}\``, true);
+            }
+        }
+        // ── FIN INTERCEPTEUR ──
+
         // Bouton copier (Ton code existant)
         const actions = document.createElement("div");
         actions.className = "msg-actions";
@@ -1757,8 +1779,9 @@ function toggleLocalDaemon() {
     localSocket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === 'command_result') {
-            // Pour l'instant, on se contente d'afficher le résultat brut du terminal dans le chat
-            const output = data.error ? `❌ Erreur:\n${data.stderr || data.error}` : `✅ Succès:\n${data.stdout}`;
+            const output = data.error
+                ? `❌ Erreur:\n${data.stderr || data.error}`
+                : `✅ Succès:\n${data.stdout}`;
             addMessage("bot", `**Résultat du terminal :**\n\`\`\`bash\n${output}\n\`\`\``, true);
         }
     };
