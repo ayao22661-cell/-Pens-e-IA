@@ -471,20 +471,15 @@
             position: relative;
         }
 
-        /* Titre centré dans la colonne du milieu */
+        /* Logo centré dans la colonne du milieu */
         #activeConvTitle {
-            font-family: 'Fraunces', serif;
-            font-size: 16px;
-            font-weight: 400;
-            color: var(--text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-align: center;
-            letter-spacing: 0.01em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             min-width: 0;
-            padding: 0 10px;
+            padding: 0 8px;
         }
+        #headerLogo { display: block; }
 
         /* Droite : badge statut + badge agent */
         .header-right {
@@ -1174,104 +1169,6 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0,229,160,0.1);
         }
-
-        /* ============================================================
-           CORRECTIFS DESIGN — rapport rouge/jaune
-           ============================================================ */
-
-        /* [JAUNE] code-bg plus distinct du fond */
-        :root { --code-bg: #0a0d16; }
-
-        /* [JAUNE] typing dots : couleur plus contrastée sur fond sombre */
-        .typing-bubble span { background: var(--text2); opacity: 0.55; }
-
-        /* [JAUNE] bulles messages légèrement plus larges */
-        .msg { max-width: 86%; }
-
-        /* [ROUGE] micBtn fallback gracieux quand SpeechRecognition absent */
-        #micBtn.unsupported {
-            opacity: 0.28;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-
-        /* [ROUGE] breakpoint tablette manquant */
-        @media (min-width: 681px) and (max-width: 1024px) {
-            #sidebar { width: 200px; min-width: 200px; }
-            .msg { max-width: 88%; }
-            .bubble { font-size: 13.5px; }
-            #inputArea { padding: 12px 14px 16px; }
-            .welcome-question { font-size: clamp(20px, 4vw, 26px); }
-        }
-
-        /* [ROUGE] prefers-reduced-motion */
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-            .welcome-logo svg,
-            .logo-dot,
-            .login-logo-dot { animation: none; }
-            #loginScreen::before { animation: none; }
-            .login-card { animation: none; opacity: 1; transform: none; }
-            .msg { animation: none; opacity: 1; transform: none; }
-            .typing-bubble span { animation: none; opacity: 0.6; }
-            #micBtn.recording { animation: none; }
-        }
-
-        /* ============================================================
-           MODE CLAIR — miroir inversé de l'identité dark
-           ============================================================ */
-        body[data-theme="light"] {
-            --bg:          #f4f5f7;
-            --bg2:         #eceef2;
-            --bg3:         #e3e6ec;
-            --bg4:         #d8dce6;
-            --border:      rgba(0,0,0,0.07);
-            --border2:     rgba(0,0,0,0.12);
-            --accent:      #00a372;
-            --accent2:     #008a60;
-            --accent-dim:  rgba(0,163,114,0.10);
-            --accent-glow: rgba(0,163,114,0.18);
-            --text:        #1a1e2a;
-            --text2:       #4a5068;
-            --text3:       #9098b0;
-            --user-bg:     #dff4ec;
-            --user-border: rgba(0,163,114,0.22);
-            --code-bg:     #dde0e8;
-            --red:         #d63c3c;
-            --yellow:      #b5850a;
-            --shadow:      0 32px 80px rgba(0,0,0,0.12);
-        }
-        body[data-theme="light"] header {
-            background: rgba(244,245,247,0.96);
-        }
-        body[data-theme="light"] #inputArea {
-            background: rgba(244,245,247,0.98);
-        }
-        body[data-theme="light"] .bubble pre {
-            color: #2a5a3a;
-        }
-
-        /* Bouton toggle thème dans le header */
-        #themeToggle {
-            width: 34px; height: 34px;
-            background: var(--bg3);
-            border: 1px solid var(--border2);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            font-size: 15px; line-height: 1;
-            transition: border-color 0.2s, background 0.2s, transform 0.3s ease;
-            flex-shrink: 0;
-        }
-        #themeToggle:hover {
-            border-color: rgba(0,229,160,0.4);
-            background: var(--accent-dim);
-            transform: rotate(20deg);
-        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
@@ -1373,9 +1270,20 @@
         <!-- Header minimal -->
         <header>
             <button id="sidebarToggle">☰</button>
-            <span id="activeConvTitle">Pensée IA</span>
+            <div id="activeConvTitle" style="display:flex;align-items:center;justify-content:center;">
+                <svg id="headerLogo" width="110" height="36" viewBox="0 0 110 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+                    <!-- Ligne verticale avec points -->
+                    <line x1="10" y1="2" x2="10" y2="34" stroke="#0e8fa3" stroke-width="1.5" stroke-linecap="round"/>
+                    <circle cx="10" cy="2" r="2.5" fill="#0e8fa3"/>
+                    <circle cx="10" cy="34" r="2.5" fill="#0e8fa3"/>
+                    <!-- Lettre p -->
+                    <text x="8" y="30" font-family="Arial Black, Arial, sans-serif" font-size="30" font-weight="900" fill="#0e8fa3" letter-spacing="-1">p</text>
+                    <!-- Logotype -->
+                    <text x="44" y="17" font-family="Fraunces, serif" font-size="13" font-weight="300" fill="#dde2ee" letter-spacing="0.04em">pensée</text>
+                    <text x="44" y="30" font-family="JetBrains Mono, monospace" font-size="8.5" font-weight="400" fill="#0e8fa3" letter-spacing="0.22em">IA</text>
+                </svg>
+            </div>
             <div class="header-right" style="position: relative;">
-                <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">🌙</button>
                 <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
                 
                 <div id="agentSelector" class="agent-selector-menu"></div>
@@ -1445,6 +1353,21 @@
 
     </div><!-- /mainArea -->
 
+    <script>
+        const _titleEl = document.getElementById('activeConvTitle');
+        const _logoSVG = document.getElementById('headerLogo');
+        const titleObserver = new MutationObserver(() => {
+            const txt = (_titleEl.innerText || '').replace('pensée\nIA','').trim();
+            if (txt && txt !== '') {
+                if (_logoSVG) _logoSVG.style.display = 'none';
+                _titleEl.style.cssText = "display:block;text-align:center;font-family:'Fraunces',serif;font-size:16px;font-weight:400;color:var(--text);letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 10px;";
+            } else {
+                if (_logoSVG) _logoSVG.style.display = 'block';
+                _titleEl.style.cssText = "display:flex;align-items:center;justify-content:center;padding:0 8px;";
+            }
+        });
+        if (_titleEl) titleObserver.observe(_titleEl, { childList: true, subtree: true, characterData: true });
+    </script>
     <script type="module" src="ia.js"></script>
     <script>
         // Masquer l'écran d'accueil dès qu'un message apparaît
@@ -1460,49 +1383,5 @@
         observer.observe(messagesDiv, { childList: true, subtree: false });
     </script>
 
-    <script>
-        /* ── Theme toggle ─────────────────────────────────────── */
-        (function() {
-            const btn = document.getElementById('themeToggle');
-            const ICONS = { dark: '🌙', light: '☀️' };
-            const saved = localStorage.getItem('pensee_theme') || 'dark';
-            if (saved === 'light') {
-                document.body.setAttribute('data-theme', 'light');
-                btn.textContent = ICONS.light;
-            }
-            btn.addEventListener('click', function() {
-                const isLight = document.body.getAttribute('data-theme') === 'light';
-                if (isLight) {
-                    document.body.removeAttribute('data-theme');
-                    btn.textContent = ICONS.dark;
-                    localStorage.setItem('pensee_theme', 'dark');
-                } else {
-                    document.body.setAttribute('data-theme', 'light');
-                    btn.textContent = ICONS.light;
-                    localStorage.setItem('pensee_theme', 'light');
-                }
-            });
-        })();
-
-        /* ── micBtn fallback gracieux (si ia.js fait display:none) ── */
-        (function() {
-            const mic = document.getElementById('micBtn');
-            if (!mic) return;
-            const orig = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'display');
-            Object.defineProperty(mic.style, 'display', {
-                set: function(v) {
-                    if (v === 'none') {
-                        mic.classList.add('unsupported');
-                        mic.setAttribute('title', 'Dictée non supportée par ce navigateur');
-                        mic.setAttribute('aria-disabled', 'true');
-                    } else {
-                        orig.set.call(mic.style, v);
-                    }
-                },
-                get: function() { return orig.get.call(mic.style); },
-                configurable: true
-            });
-        })();
-    </script>
 </body>
 </html>
