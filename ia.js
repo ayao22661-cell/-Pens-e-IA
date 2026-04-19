@@ -1522,7 +1522,21 @@ async function sendMessage() {
     if (!text && !files.length) return;
     if (sendBtn.disabled) return;
     
-    if (text.startsWith("/memo ")) {
+    if (text.startsWith("/run ")) {
+    const cmd = text.replace("/run ", "").trim();
+    if (!cmd) return;
+    if (!localSocket || localSocket.readyState !== WebSocket.OPEN) {
+        addMessage("bot", "❌ **Tunnel fermé.** Clique sur 🔌 Connecter Terminal d'abord.", true);
+        return;
+    }
+    userInput.value = "";
+    addMessage("user", text, false);
+    addMessage("bot", `⚡ **Exécution :** \`${cmd}\``, true);
+    localSocket.send(JSON.stringify({ action: 'run_command', cmd: cmd }));
+    return;
+}
+
+if (text.startsWith("/memo ")) {
         const memoContent = text.replace("/memo ", "").trim();
         if (memoContent) {
             userInput.value = "";
