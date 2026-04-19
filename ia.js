@@ -335,8 +335,6 @@ function handleAgentCommand(text) {
 // ============================================================
 //  SUPABASE & AUTH (Login / Sign Up)
 // ============================================================
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
 // ⚠️ À REMPLACER PAR TES CLÉS RÉELLES
 const supabaseUrl = 'https://uhrdoxllxqtvucxmzcww.supabase.co';
 const supabaseKey = 'sb_publishable_8EA5WSsRgDTcKbtpULEEFQ_Du2qoRIb';
