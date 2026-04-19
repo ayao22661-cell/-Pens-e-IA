@@ -1380,7 +1380,7 @@
         <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">🌙</button>
         
         <!-- NOUVEAU : Bouton Terminal -->
-        <button id="terminalBtn" class="agent-badge" title="Connecter au terminal de l'ordinateur" style="background: rgba(0,0,0,0.2);">🔌 Terminal</button>
+
 
         <!-- Badge Agent existant -->
         <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
@@ -1452,7 +1452,10 @@
 
     </div><!-- /mainArea -->
 
+    <!-- Chargement de Supabase en version globale (UMD) pour éviter les erreurs CORS locales -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module" src="ia.js"></script>
+    
     <script>
         // Masquer l'écran d'accueil dès qu'un message apparaît
         const messagesDiv = document.getElementById('messages');
