@@ -1733,6 +1733,53 @@ document.getElementById("messages").addEventListener("click", function(e) {
 });
 
 // ============================================================
+//  PONT LOCAL (WEBSOCKET DAEMON)
+// ============================================================
+let localSocket = null;
+const terminalBtn = document.getElementById("terminalBtn");
+
+function toggleLocalDaemon() {
+    if (localSocket && localSocket.readyState === WebSocket.OPEN) {
+        localSocket.close();
+        return;
+    }
+
+    terminalBtn.innerHTML = "⏳ Connexion...";
+    localSocket = new WebSocket('ws://localhost:8080');
+
+    localSocket.onopen = () => {
+        terminalBtn.innerHTML = "🟢 Connecté";
+        terminalBtn.style.color = "var(--accent)";
+        terminalBtn.style.borderColor = "var(--accent)";
+        addMessage("bot", "🔌 **Tunnel sécurisé établi.** Je suis maintenant connecté à ton terminal local.", true);
+    };
+
+    localSocket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'command_result') {
+            // Pour l'instant, on se contente d'afficher le résultat brut du terminal dans le chat
+            const output = data.error ? `❌ Erreur:\n${data.stderr || data.error}` : `✅ Succès:\n${data.stdout}`;
+            addMessage("bot", `**Résultat du terminal :**\n\`\`\`bash\n${output}\n\`\`\``, true);
+        }
+    };
+
+    localSocket.onclose = () => {
+        terminalBtn.innerHTML = "🔌 Connecter Terminal";
+        terminalBtn.style.color = "";
+        terminalBtn.style.borderColor = "";
+        localSocket = null;
+    };
+
+    localSocket.onerror = (err) => {
+        terminalBtn.innerHTML = "🔌 Connecter Terminal";
+        addMessage("bot", "❌ Impossible de se connecter au Daemon. As-tu bien lancé `node agent.js` dans ton terminal ?", false);
+        localSocket = null;
+    };
+}
+
+if (terminalBtn) terminalBtn.addEventListener("click", toggleLocalDaemon);
+
+// ============================================================
 //  INIT GLOBALE
 // ============================================================
 updateCredits();
