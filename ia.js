@@ -1,3 +1,6 @@
+// REMPLACE PAR :
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
 // ============================================================
 //  PENSÉE IA — ia.js (localStorage, sans Supabase)
 // ============================================================
