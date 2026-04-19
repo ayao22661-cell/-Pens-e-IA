@@ -1373,17 +1373,23 @@
 
         <!-- Header minimal -->
         <header>
-            <button id="sidebarToggle">☰</button>
-            <span id="activeConvTitle">Pensée IA</span>
-            <div class="header-right" style="position: relative;">
-                <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">🌙</button>
-                <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
-                
-                <div id="agentSelector" class="agent-selector-menu"></div>
-                
-                <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
-            </div>
-        </header>
+    <button id="sidebarToggle">☰</button>
+    <span id="activeConvTitle">Pensée IA</span>
+    <div class="header-right" style="position: relative;">
+        <!-- Bouton Thème existant -->
+        <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">🌙</button>
+        
+        <!-- NOUVEAU : Bouton Terminal -->
+        <button id="terminalBtn" class="agent-badge" title="Connecter au terminal de l'ordinateur" style="background: rgba(0,0,0,0.2);">🔌 Terminal</button>
+
+        <!-- Badge Agent existant -->
+        <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
+        
+        <div id="agentSelector" class="agent-selector-menu"></div>
+        
+        <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
+    </div>
+</header>
 
         <!-- ALERTE -->
         <div id="alertBanner"></div>
