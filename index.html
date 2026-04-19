@@ -1452,7 +1452,10 @@
 
     </div><!-- /mainArea -->
 
-    <script type="module" src="ia.js"></script>
+    <!-- Chargement de Supabase en version globale (UMD) pour éviter les erreurs CORS locales -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="ia.js"></script>
+    
     <script>
         // Masquer l'écran d'accueil dès qu'un message apparaît
         const messagesDiv = document.getElementById('messages');
