@@ -76,11 +76,9 @@ export default async function handler(req) {
     }
 
     const bodyReq = await req.json().catch(() => ({}));
-    // conversationHistory : tableau [{role:"user"|"assistant", content:"..."}]
-    // envoyé depuis buildPromptMultiTurn() dans ia.js
-    const { prompt, files, systemInstruction, agentId, conversationHistory } = bodyReq;
+    const { prompt, files, systemInstruction, agentId } = bodyReq;
 
-    if (!prompt && (!conversationHistory || conversationHistory.length === 0)) {
+    if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
     }
 
@@ -93,9 +91,7 @@ export default async function handler(req) {
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
     // Modèles : si l'agent préfère un modèle, on le met en tête de cascade
-    // gemini-2.5-pro en tête : raisonnement nettement supérieur, 60 req/jour gratuit
     const baseModels = [
-        "gemini-2.5-pro",
         "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
@@ -133,41 +129,17 @@ export default async function handler(req) {
             });
         }
 
-        // ── Construction du tableau contents[] multi-tour natif ──────────
-        // Si un historique est fourni, on l'injecte comme turns séparés.
-        // Le dernier message utilisateur porte les fichiers binaires.
-        let contents;
-
-        if (conversationHistory && conversationHistory.length > 0 && !isGemma) {
-            // Multi-tour natif Gemini : chaque échange = un turn {role, parts}
-            contents = conversationHistory.map((turn, idx) => {
-                const isLast = idx === conversationHistory.length - 1;
-                const turnParts = [{ text: turn.content }];
-
-                // Fichiers binaires attachés uniquement au dernier message user
-                if (isLast && turn.role === "user" && files && files.length > 0) {
-                    files.forEach(file => {
-                        if (file.base64) {
-                            turnParts.push({ inline_data: { mime_type: file.mime, data: file.base64 } });
-                        }
-                    });
-                }
-
-                return {
-                    role: turn.role === "assistant" ? "model" : "user",
-                    parts: turnParts
-                };
-            });
-        } else {
-            // Fallback : prompt monolithique (Gemma ou pas d'historique)
-            let finalParts = parts;
-            if (isGemma && systemInstruction) {
-                finalParts = [
-                    { text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text },
-                    ...parts.slice(1)
-                ];
-            }
-            contents = [{ role: "user", parts: finalParts }];
+        // ── Gestion du systemInstruction selon le modèle ──────────────
+        // Gemma ne supporte PAS systemInstruction → on réinjecte dans le message
+        // Gemini supporte le canal natif → on l'utilise
+        let finalParts = parts;
+        if (isGemma && systemInstruction) {
+            finalParts = [
+                {
+                    text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text
+                },
+                ...parts.slice(1) // Fichiers binaires intacts
+            ];
         }
 
         // ── Configuration des outils (Search & Code Interpreter) ──────
@@ -189,7 +161,7 @@ export default async function handler(req) {
             ...((!isGemma && finalSystemInstruction) && {
                 systemInstruction: { parts: [{ text: finalSystemInstruction }] }
             }),
-            contents: contents,
+            contents: [{ role: "user", parts: finalParts }],
             generationConfig: {
                 maxOutputTokens: agentConfig.maxOutputTokens || 8192,
                 temperature: agentConfig.temperature,
