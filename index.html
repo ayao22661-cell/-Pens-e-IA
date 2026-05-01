@@ -1273,6 +1273,105 @@
             background: var(--accent-dim);
             transform: rotate(20deg);
         }
+
+        /* ============================================================
+           BLOC <think> RÉTRACTABLE — Analyse interne de Pensée
+           ============================================================ */
+        .think-block {
+            margin: 0 0 12px 0;
+            border: 1px solid var(--border);
+            border-left: 2px solid var(--text3);
+            border-radius: 10px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.02);
+            transition: border-color 0.2s;
+        }
+        .think-block[open] {
+            border-left-color: var(--accent);
+        }
+
+        .think-summary {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text3);
+            user-select: none;
+            list-style: none;
+            transition: color 0.15s, background 0.15s;
+        }
+        .think-summary::-webkit-details-marker { display: none; }
+        .think-summary:hover {
+            color: var(--text2);
+            background: rgba(255,255,255,0.025);
+        }
+        /* Chevron animé à droite */
+        .think-summary::after {
+            content: "›";
+            margin-left: auto;
+            font-size: 15px;
+            font-weight: 300;
+            transition: transform 0.22s cubic-bezier(0.2,0.8,0.2,1);
+            color: var(--text3);
+            opacity: 0.6;
+        }
+        .think-block[open] .think-summary {
+            color: var(--text2);
+            border-bottom: 1px solid var(--border);
+        }
+        .think-block[open] .think-summary::after {
+            transform: rotate(90deg);
+        }
+
+        .think-body {
+            padding: 12px 16px 14px;
+            font-size: 12px;
+            line-height: 1.7;
+            color: var(--text2);
+            font-family: 'Syne', sans-serif;
+            font-style: italic;
+            opacity: 0.75;
+        }
+
+        /* Mode clair — think block */
+        body[data-theme="light"] .think-block {
+            background: rgba(0,0,0,0.025);
+            border-color: var(--border);
+            border-left-color: var(--text3);
+        }
+        body[data-theme="light"] .think-block[open] {
+            border-left-color: var(--accent);
+        }
+        body[data-theme="light"] .think-summary:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        /* ============================================================
+           CITATIONS SOURCES — Agent Recherche
+           ============================================================ */
+        /* Badge [SOURCE N] → balise <strong> précédant une <em> */
+        .bubble p > strong:first-child {
+            display: inline-block;
+            background: var(--accent-dim);
+            border: 1px solid rgba(0,229,160,0.2);
+            color: var(--accent);
+            font-size: 9.5px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 1px 8px 1px 7px;
+            border-radius: 5px;
+            margin-right: 6px;
+            vertical-align: middle;
+            transition: background 0.2s;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
@@ -1380,7 +1479,7 @@
         <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">🌙</button>
         
         <!-- NOUVEAU : Bouton Terminal -->
-
+        <button id="terminalBtn" class="agent-badge" title="Connecter au terminal de l'ordinateur" style="background: rgba(0,0,0,0.2);">🔌 Terminal</button>
 
         <!-- Badge Agent existant -->
         <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
