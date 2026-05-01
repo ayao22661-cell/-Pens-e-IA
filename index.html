@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pensée — IA Personnelle</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='white' stroke='%230e8fa3' stroke-width='1.2'/%3E%3Ccircle cx='17' cy='17' r='9' fill='%230e8fa3'/%3E%3C/svg%3E">    
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:          #080a0f;
+            --bg2:         #0e1118;
+            --bg3:         #151a24;
+            --bg4:         #1c2230;
+            --border:      rgba(255,255,255,0.06);
+            --border2:     rgba(255,255,255,0.11);
+            --accent:      #00e5a0;
+            --accent2:     #00b87d;
+            --accent-dim:  rgba(0,229,160,0.10);
+            --accent-glow: rgba(0,229,160,0.18);
+            --text:        #dde2ee;
+            --text2:       #7a8099;
+            --text3:       #44495a;
+            --user-bg:     #0f2019;
+            --user-border: rgba(0,229,160,0.20);
+            --code-bg:     #060810;
+            --red:         #ff5f5f;
+            --yellow:      #f0c040;
+            --shadow:      0 32px 80px rgba(0,0,0,0.7);
+            --radius:      20px;
+            --radius-sm:   12px;
+        }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100dvh;
+            display: flex;
+            flex-direction: row;
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.4;
+        }
+
+        /* ============================================================
+           ÉCRAN DE CONNEXION — mot de passe uniquement
+           ============================================================ */
+        #loginScreen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            padding: 20px;
+            transition: opacity 0.5s ease;
+        }
+
+        #loginScreen::before {
+            content: '';
+            position: absolute;
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(0,229,160,0.06) 0%, transparent 70%);
+            border-radius: 50%;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            animation: breathe 6s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes breathe {
+            0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.6; }
+            50%      { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
+        }
+
+        .login-card {
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            padding: 52px 44px 44px;
+            border-radius: 28px;
+            width: 100%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: var(--shadow), 0 0 0 1px rgba(0,229,160,0.04) inset;
+            animation: slideUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 10%; right: 10%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(40px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .login-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .login-logo-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 16px var(--accent);
+            animation: pulse 2s infinite;
+        }
+
+        .login-logo-name {
+            font-family: 'Fraunces', serif;
+            font-size: 26px;
+            font-weight: 300;
+            letter-spacing: 0.02em;
+            color: var(--text);
+        }
+        .login-logo-name em { color: var(--accent); font-style: italic; }
+
+        .login-card p {
+            color: var(--text2);
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 32px;
+            font-family: 'Syne', sans-serif;
+        }
+
+        .login-group {
+            margin-bottom: 12px;
+            text-align: left;
+        }
+
+        .login-group label {
+            display: block;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text3);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+        }
+
+        .login-input {
+            width: 100%;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 15px 18px;
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            letter-spacing: 0.12em;
+            outline: none;
+            transition: all 0.25s ease;
+            text-align: center;
+        }
+        .login-input::placeholder { color: var(--text3); letter-spacing: 0.08em; }
+        .login-input:focus {
+            border-color: rgba(0,229,160,0.5);
+            background: rgba(0,229,160,0.03);
+            box-shadow: 0 0 0 3px rgba(0,229,160,0.07);
+        }
+
+        #loginBtn {
+            width: 100%;
+            background: var(--accent);
+            color: #060810;
+            border: none;
+            padding: 16px;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            margin-top: 20px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        #loginBtn:hover {
+            background: #1dffc0;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(0,229,160,0.25);
+        }
+        #loginBtn:active { transform: translateY(0); box-shadow: none; }
+
+        #loginError {
+            color: var(--red);
+            font-size: 11px;
+            margin-top: 14px;
+            display: none;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.06em;
+        }
+
+        .shake { animation: shake 0.4s ease-in-out; }
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            20%      { transform: translateX(-8px); }
+            40%      { transform: translateX(8px); }
+            60%      { transform: translateX(-8px); }
+            80%      { transform: translateX(8px); }
+        }
+
+        /* ============================================================
+           SIDEBAR
+           ============================================================ */
+        #sidebar {
+            width: 240px;
+            min-width: 240px;
+            background: var(--bg2);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            flex-shrink: 0;
+            z-index: 50;
+        }
+
+        /* Logo dans la sidebar */
+        #sidebar-header {
+            padding: 18px 16px 14px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .logo-mark { display: flex; align-items: center; gap: 9px; }
+
+        .logo-dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+            animation: pulse 2s infinite;
+            flex-shrink: 0;
+        }
+        @keyframes pulse {
+            0%,100% { opacity:1; box-shadow: 0 0 10px var(--accent); }
+            50%      { opacity:0.5; box-shadow: 0 0 4px var(--accent); }
+        }
+        .logo-text { display: flex; flex-direction: column; }
+        .logo-text h1 {
+            font-family: 'Fraunces', serif;
+            font-size: 17px;
+            font-weight: 300;
+            letter-spacing: 0.01em;
+            line-height: 1;
+        }
+        .logo-text h1 em { color: var(--accent); font-style: italic; }
+        .creator-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text3);
+            letter-spacing: 0.12em;
+            margin-top: 3px;
+        }
+
+        /* Bouton nouveau */
+        #newConvSideBtn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 12px 12px 8px;
+            padding: 9px 14px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(0,229,160,0.2);
+            border-radius: 10px;
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+        #newConvSideBtn:hover {
+            background: rgba(0,229,160,0.18);
+            border-color: rgba(0,229,160,0.4);
+            transform: translateY(-1px);
+        }
+        #newConvSideBtn .btn-icon { font-size: 14px; }
+
+        /* Liste conversations */
+        #convList {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        #convList::-webkit-scrollbar { width: 3px; }
+        #convList::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+        .conv-section-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            padding: 10px 8px 4px;
+        }
+
+        .conv-item {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.15s;
+            padding: 0;
+            min-height: 36px;
+            position: relative;
+            overflow: hidden;
+        }
+        .conv-item:hover { background: var(--bg3); }
+        .conv-item.active { background: var(--bg4); }
+        .conv-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 20%; bottom: 20%;
+            width: 2px;
+            background: var(--accent);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .conv-item-title {
+            flex: 1;
+            font-family: 'Syne', sans-serif;
+            font-size: 12.5px;
+            color: var(--text2);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 8px 10px;
+            line-height: 1.3;
+        }
+        .conv-item.active .conv-item-title { color: var(--text); }
+
+        .conv-item-del {
+            opacity: 0;
+            background: none;
+            border: none;
+            color: var(--red); /* Rouge par défaut */
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 0 8px 8px 0;
+            transition: opacity 0.15s, transform 0.15s;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .conv-item-del svg {
+            width: 15px;
+            height: 15px;
+            fill: currentColor;
+            opacity: 0.6;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        .conv-item:hover .conv-item-del { opacity: 1; }
+        .conv-item-del:hover svg { opacity: 1; transform: scale(1.15); }
+
+        /* Footer sidebar */
+        #sidebar-footer {
+            padding: 12px 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        /* Crédits dans la sidebar */
+        #creditBar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .credit-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text3);
+            white-space: nowrap;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .credit-track {
+            flex: 1;
+            height: 3px;
+            background: var(--bg4);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        #creditFill {
+            height: 100%;
+            width: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.5s cubic-bezier(0.4,0,0.2,1), background 0.4s ease;
+        }
+        #creditCount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--text2);
+            white-space: nowrap;
+        }
+
+        #logoutBtn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text3);
+            padding: 7px 13px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 10px;
+            transition: 0.2s;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            width: 100%;
+        }
+        #logoutBtn:hover { color: var(--red); border-color: rgba(255,95,95,0.4); background: rgba(255,95,95,0.05); }
+
+        /* ============================================================
+           ZONE PRINCIPALE (droite)
+           ============================================================ */
+        #mainArea {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        /* Header — style Claude mobile : hamburger | titre centré | icône */
+        header {
+            padding: 13px 16px;
+            border-bottom: 1px solid var(--border);
+            display: grid;
+            grid-template-columns: 40px 1fr auto;
+            align-items: center;
+            background: rgba(8,10,15,0.96);
+            backdrop-filter: blur(14px);
+            flex-shrink: 0;
+            z-index: 100;
+            position: relative;
+        }
+
+        /* Titre centré dans la colonne du milieu */
+        #activeConvTitle {
+            font-family: 'Fraunces', serif;
+            font-size: 16px;
+            font-weight: 400;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+            letter-spacing: 0.01em;
+            min-width: 0;
+            padding: 0 10px;
+        }
+
+        /* Droite : badge statut + badge agent */
+        .header-right {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+
+        #statusBadge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            display: none;
+        }
+        #statusBadge.ok   { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.15); }
+        #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
+        #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.2); }
+
+        /* Badge agent — icône fantôme style Claude */
+        .agent-badge {
+            height: 34px; 
+            padding: 0 14px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .agent-badge:hover { border-color: rgba(0,229,160,0.4); }
+
+        .agent-selector-menu {
+            display: none; position: absolute; top: 50px; right: 0;
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: 12px; padding: 8px; flex-direction: column; gap: 4px;
+            box-shadow: var(--shadow); z-index: 200; min-width: 160px;
+        }
+        .agent-selector-menu.visible { display: flex; }
+        .agent-btn {
+            background: transparent; border: none; color: var(--text2); text-align: left;
+            padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.2s;
+        }
+        .agent-btn:hover { background: var(--bg3); color: var(--text); }
+        .agent-btn.active { background: var(--accent-dim); color: var(--accent); }
+
+        #clearBtn { display: none; }
+
+        /* ============================================================
+           BARRE ONGLETS — supprimée (remplacée par sidebar)
+           ============================================================ */
+        #tabsBar { display: none; }
+
+        /* ============================================================
+           BARRE CRÉDITS (ancienne, cachée — dans sidebar maintenant)
+           ============================================================ */
+
+        /* ============================================================
+           BANNIÈRE ALERTE
+           ============================================================ */
+        #alertBanner {
+            display: none;
+            padding: 9px 22px;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            text-align: center;
+            flex-shrink: 0;
+            letter-spacing: 0.04em;
+        }
+        #alertBanner.low   { display:block; background:rgba(240,192,64,0.07); color:var(--yellow); border-bottom:1px solid rgba(240,192,64,0.12); }
+        #alertBanner.empty { display:block; background:rgba(255,95,95,0.07); color:var(--red); border-bottom:1px solid rgba(255,95,95,0.12); }
+
+        /* ============================================================
+           ZONE MESSAGES + ÉCRAN D'ACCUEIL
+           ============================================================ */
+        #messages {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 0 16px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+            position: relative;
+        }
+        #messages::after { content: ""; display: block; min-height: 8px; flex-shrink: 0; }
+        #messages::-webkit-scrollbar { width: 3px; }
+        #messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+        #messages::-webkit-scrollbar-track { background: transparent; }
+
+        /* Écran d'accueil centré — style Claude mobile */
+        #welcomeScreen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 24px 20px;
+            text-align: center;
+            gap: 16px;
+        }
+        #welcomeScreen.hidden { display: none; }
+
+        /* Logo animé — reprend le logo-dot mais agrandi */
+        .welcome-logo {
+            width: 52px; height: 52px;
+            position: relative;
+            margin-bottom: 8px;
+        }
+        .welcome-logo svg {
+            width: 100%;
+            height: 100%;
+            fill: var(--accent);
+            animation: spinSlow 12s linear infinite;
+            filter: drop-shadow(0 0 14px rgba(0,229,160,0.4));
+        }
+        @keyframes spinSlow {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+
+        .welcome-question {
+            font-family: 'Fraunces', serif;
+            font-size: clamp(22px, 5vw, 30px);
+            font-weight: 300;
+            color: var(--text);
+            line-height: 1.3;
+            max-width: 320px;
+            letter-spacing: -0.01em;
+        }
+        .welcome-question em { color: var(--accent); font-style: italic; }
+
+        .msg {
+            display: flex;
+            flex-direction: column;
+            max-width: 82%;
+            min-width: 0;
+            overflow: hidden;
+            animation: msgIn 0.3s cubic-bezier(0.2,0.8,0.2,1);
+            flex-shrink: 0;
+        }
+        @keyframes msgIn {
+            from { opacity:0; transform:translateY(14px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+
+        .msg.user { align-self: flex-end; align-items: flex-end; }
+        .msg.bot  { align-self: flex-start; align-items: flex-start; }
+
+        .msg-label {
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text3);
+            margin-bottom: 7px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+
+        .bubble {
+            padding: 14px 20px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.75;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            position: relative;
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .user .bubble {
+            background: var(--user-bg);
+            border: 1px solid var(--user-border);
+            border-bottom-right-radius: 5px;
+        }
+
+        .bot .bubble {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 5px;
+        }
+
+        .bot .bubble::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 16px; bottom: 16px;
+            width: 2px;
+            background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+            border-radius: 1px;
+            opacity: 0.3;
+        }
+
+        .bubble pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            margin: 12px 0;
+            overflow-x: auto;
+            max-width: 100%;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11.5px;
+            line-height: 1.65;
+            color: #88c8a8;
+        }
+        .bubble code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            background: rgba(0,229,160,0.08);
+            color: var(--accent);
+            padding: 2px 7px;
+            border-radius: 5px;
+            word-break: break-all;
+        }
+        .bubble pre code { background:none; color:inherit; padding:0; word-break:normal; }
+
+        .msg-actions { display:flex; gap:10px; margin-top:8px; align-self:flex-start; }
+        .copy-btn {
+            background: none;
+            border: none;
+            color: var(--text3);
+            cursor: pointer;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: color 0.2s;
+            letter-spacing: 0.06em;
+            padding: 2px 0;
+        }
+        .copy-btn:hover { color: var(--accent); }
+
+        /* ============================================================
+           SUGGESTIONS — chips horizontales style Claude mobile
+           ============================================================ */
+        #suggestions {
+            display: flex;
+            gap: 8px;
+            padding: 0 16px 12px;
+            overflow-x: auto;
+            flex-shrink: 0;
+            scrollbar-width: none;
+        }
+        #suggestions::-webkit-scrollbar { display: none; }
+        #suggestions.hidden { display: none; }
+
+        .suggestion {
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text2);
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+            flex-shrink: 0;
+        }
+        .suggestion:hover {
+            border-color: rgba(0,229,160,0.45);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* ============================================================
+           FICHIERS ATTACHÉS
+           ============================================================ */
+        #uploadPreview {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            background: var(--bg2);
+            border-top: 1px solid var(--border);
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        #uploadPreview.visible { display: flex; }
+
+        .attached-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg3);
+            border: 1px solid rgba(0,229,160,0.2);
+            border-radius: 8px;
+            padding: 5px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+        }
+        .attached-chip button {
+            background: none;
+            border: none;
+            color: var(--text3);
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+        .attached-chip button:hover { color: var(--red); }
+
+        .file-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(0,229,160,0.07);
+            border: 1px solid rgba(0,229,160,0.18);
+            border-radius: 7px;
+            padding: 5px 11px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+            margin-bottom: 7px;
+            transition: all 0.2s ease;
+        }
+        a.file-chip:hover {
+            background: rgba(0,229,160,0.15);
+            border-color: rgba(0,229,160,0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,229,160,0.1);
+        }
+
+        /* ============================================================
+           INPUT AREA — style Claude mobile
+           ============================================================ */
+        #inputArea {
+            padding: 12px 16px 16px;
+            background: rgba(8,10,15,0.98);
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+            /* Pas de border-top : la carte flottante crée la séparation */
+        }
+
+        /* Carte flottante principale — reproduit le style Claude mobile */
+        .input-card {
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: 22px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,229,160,0.04) inset;
+            overflow: hidden;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .input-card:focus-within {
+            border-color: rgba(0,229,160,0.3);
+            box-shadow: 0 4px 32px rgba(0,0,0,0.6), 0 0 0 3px rgba(0,229,160,0.06);
+        }
+
+        /* Ligne textarea */
+        .input-text-row {
+            display: flex;
+            align-items: flex-end;
+            padding: 14px 18px 6px;
+        }
+
+        #userInput {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 0;
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            color: var(--text);
+            outline: none;
+            resize: none;
+            max-height: 160px;
+            min-height: 24px;
+            line-height: 1.6;
+        }
+        #userInput::placeholder { color: var(--text3); font-size: 14.5px; }
+        #fileInput { display: none; }
+
+        /* Barre d'actions basse — reproduit le row avec + et envoyer */
+        .input-actions-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 14px 10px;
+        }
+
+        .input-actions-left {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Bouton + (upload) — cercle comme le + de Claude */
+        #uploadBtn {
+            background: none;
+            border: 1.5px solid var(--border2);
+            border-radius: 50%;
+            width: 36px; height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+            color: var(--text2);
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            font-family: 'Syne', sans-serif;
+            font-weight: 300;
+        }
+        #uploadBtn:hover {
+            border-color: rgba(0,229,160,0.5);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* Bouton Micro */
+        #micBtn {
+            background: none; border: 1.5px solid var(--border2); border-radius: 50%;
+            width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--text2); transition: all 0.2s ease; flex-shrink: 0;
+        }
+        #micBtn:hover { border-color: rgba(0,229,160,0.5); color: var(--accent); background: var(--accent-dim); }
+        #micBtn.recording {
+            color: #ff5f5f; border-color: rgba(255,95,95,0.5); background: rgba(255,95,95,0.1);
+            animation: pulseRecord 1.5s infinite;
+        }
+        @keyframes pulseRecord {
+            0% { box-shadow: 0 0 0 0 rgba(255,95,95,0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255,95,95,0); }
+            100% { box-shadow: 0 0 0 0 rgba(255,95,95,0); }
+        }
+
+        /* Bouton envoyer — rond sombre avec flèche, style Claude */
+        #sendBtn {
+            background: var(--text);
+            border: none;
+            border-radius: 50%;
+            width: 38px; height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        /* État masqué du bouton envoyer */
+        #sendBtn.hidden-action {
+            opacity: 0.2; 
+            pointer-events: none; 
+            transform: scale(0.9);
+        }
+        #sendBtn svg {
+            width: 18px; height: 18px;
+            fill: var(--bg);
+        }
+        #sendBtn:hover {
+            background: var(--accent);
+            transform: scale(1.08);
+            box-shadow: 0 4px 16px rgba(0,229,160,0.3);
+        }
+        #sendBtn:hover svg { fill: #060810; }
+        #sendBtn:active { transform: scale(0.96); box-shadow: none; }
+        #sendBtn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; box-shadow: none; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* ============================================================
+           DROP OVERLAY
+           ============================================================ */
+        #dropOverlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0,229,160,0.05);
+            border: 2px dashed rgba(0,229,160,0.4);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            color: var(--accent);
+            pointer-events: none;
+        }
+        #dropOverlay.visible { display: flex; }
+
+        /* ============================================================
+           TYPING INDICATOR
+           ============================================================ */
+        .typing-bubble {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            border-bottom-left-radius: 5px;
+            padding: 16px 22px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .typing-bubble span {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: typingBlink 1.4s infinite;
+            opacity: 0.3;
+        }
+        .typing-bubble span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-bubble span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBlink {
+            0%,100% { opacity:0.3; transform:scale(1); }
+            50%      { opacity:1; transform:scale(1.35); }
+        }
+
+        /* ============================================================
+           FOOTER
+           ============================================================ */
+        footer {
+            padding: 9px 22px;
+            text-align: center;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text3);
+            border-top: 1px solid var(--border);
+            background: var(--bg);
+            flex-shrink: 0;
+            letter-spacing: 0.06em;
+        }
+        footer em { color: var(--accent); font-style: normal; font-weight: 700; }
+
+        /* ============================================================
+           MOBILE — sidebar en overlay
+           ============================================================ */
+        #sidebarToggle {
+            display: none;
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text2);
+            border-radius: 7px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            transition: 0.2s;
+        }
+        #sidebarToggle:hover { color: var(--accent); border-color: rgba(0,229,160,0.3); }
+
+@media (max-width: 680px) {
+    #sidebar {
+        position: fixed;
+        left: 0; top: 0; bottom: 0;
+        transform: translateX(-100%);
+        transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1);
+        z-index: 200;
+        box-shadow: 4px 0 32px rgba(0,0,0,0.5);
+    }
+    #sidebar.open { transform: translateX(0); }
+    #sidebarOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        z-index: 199;
+    }
+    #sidebarOverlay.visible { display: block; }
+    #sidebarToggle { display: flex; align-items: center; justify-content: center; }
+    
+    /* Zone de message plus large */
+    .msg { max-width: 92%; }
+    .bubble { padding: 12px 15px; font-size: 13.5px; }
+    
+    #inputArea { padding: 10px 12px 14px; }
+    .input-card { border-radius: 20px; }
+    #userInput { font-size: 15px; }
+    #sendBtn { width: 42px; height: 42px; }
+    #uploadBtn { width: 40px; height: 40px; font-size: 22px; }
+    
+    /* Ergonomie de la Sidebar */
+    .conv-item {
+        min-height: 56px; /* Plus haut pour un défilement au doigt sans erreur */
+    }
+    
+    .conv-item-title {
+        font-size: 14px; /* Plus lisible */
+        padding: 12px 15px;
+    }
+
+    /* Augmentation de la spécificité pour outrepasser la règle desktop sans !important */
+    #sidebar .conv-item .conv-item-del { 
+        opacity: 1; 
+        min-width: 52px; /* Largeur fixe pour le pouce */
+        min-height: 56px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 95, 95, 0.05); /* Léger fond pour délimiter la zone */
+    }
+
+    .conv-item-del svg {
+        width: 20px; /* Icône plus grande pour la visibilité */
+        height: 20px;
+    }
+
+    #newConvSideBtn {
+        padding: 16px; 
+        font-size: 13px;
+        margin: 15px 12px;
+    }
+}
+/* ============================================================
+           CODE SANDBOX
+           ============================================================ */
+        .code-block-wrapper {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin: 12px 0;
+            overflow: hidden;
+        }
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 14px;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid var(--border);
+        }
+        .code-lang {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--text3);
+            letter-spacing: 0.1em;
+        }
+        .run-btn {
+            background: rgba(0, 229, 160, 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(0, 229, 160, 0.2);
+            padding: 4px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            transition: 0.2s;
+            text-transform: uppercase;
+        }
+        .run-btn:hover { background: rgba(0, 229, 160, 0.2); }
+        .run-btn.running { 
+            background: rgba(255, 95, 95, 0.1); 
+            color: var(--red); 
+            border-color: rgba(255, 95, 95, 0.2); 
+        }
+        .code-block-wrapper pre {
+            margin: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+        }
+        .sandbox-container { display: none; background: #fff; }
+        .sandbox-container iframe { width: 100%; height: 350px; border: none; display: block; }
+        /* AJOUTE CE CODE : Rendu des liens Supabase générés par le Markdown */
+        .bubble a[href*="supabase.co/storage"] {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(0,229,160,0.07);
+            border: 1px solid rgba(0,229,160,0.18);
+            border-radius: 7px;
+            padding: 5px 11px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+            text-decoration: none;
+            margin-top: 6px;
+            margin-bottom: 2px;
+            word-break: break-all;
+            transition: all 0.2s ease;
+        }
+
+        .bubble a[href*="supabase.co/storage"]:hover {
+            background: rgba(0,229,160,0.15);
+            border-color: rgba(0,229,160,0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,229,160,0.1);
+        }
+
+        /* ============================================================
+           CORRECTIFS DESIGN — rapport rouge/jaune
+           ============================================================ */
+
+        /* [JAUNE] code-bg plus distinct du fond */
+        :root { --code-bg: #0a0d16; }
+
+        /* [JAUNE] typing dots : couleur plus contrastée sur fond sombre */
+        .typing-bubble span { background: var(--text2); opacity: 0.55; }
+
+        /* [JAUNE] bulles messages légèrement plus larges */
+        .msg { max-width: 86%; }
+
+        /* [ROUGE] micBtn fallback gracieux quand SpeechRecognition absent */
+        #micBtn.unsupported {
+            opacity: 0.28;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /* [ROUGE] breakpoint tablette manquant */
+        @media (min-width: 681px) and (max-width: 1024px) {
+            #sidebar { width: 200px; min-width: 200px; }
+            .msg { max-width: 88%; }
+            .bubble { font-size: 13.5px; }
+            #inputArea { padding: 12px 14px 16px; }
+            .welcome-question { font-size: clamp(20px, 4vw, 26px); }
+        }
+
+        /* [ROUGE] prefers-reduced-motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            .welcome-logo svg,
+            .logo-dot,
+            .login-logo-dot { animation: none; }
+            #loginScreen::before { animation: none; }
+            .login-card { animation: none; opacity: 1; transform: none; }
+            .msg { animation: none; opacity: 1; transform: none; }
+            .typing-bubble span { animation: none; opacity: 0.6; }
+            #micBtn.recording { animation: none; }
+        }
+
+        /* ============================================================
+           MODE CLAIR — miroir inversé de l'identité dark
+           ============================================================ */
+        body[data-theme="light"] {
+            --bg:          #f4f5f7;
+            --bg2:         #eceef2;
+            --bg3:         #e3e6ec;
+            --bg4:         #d8dce6;
+            --border:      rgba(0,0,0,0.07);
+            --border2:     rgba(0,0,0,0.12);
+            --accent:      #00a372;
+            --accent2:     #008a60;
+            --accent-dim:  rgba(0,163,114,0.10);
+            --accent-glow: rgba(0,163,114,0.18);
+            --text:        #1a1e2a;
+            --text2:       #4a5068;
+            --text3:       #9098b0;
+            --user-bg:     #dff4ec;
+            --user-border: rgba(0,163,114,0.22);
+            --code-bg:     #dde0e8;
+            --red:         #d63c3c;
+            --yellow:      #b5850a;
+            --shadow:      0 32px 80px rgba(0,0,0,0.12);
+        }
+        body[data-theme="light"] header {
+            background: rgba(244,245,247,0.96);
+        }
+        body[data-theme="light"] #inputArea {
+            background: rgba(244,245,247,0.98);
+        }
+        body[data-theme="light"] .bubble pre {
+            color: #2a5a3a;
+        }
+
+        /* Bouton toggle thème dans le header */
+        #themeToggle {
+            width: 34px; height: 34px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            font-size: 15px; line-height: 1;
+            transition: border-color 0.2s, background 0.2s, transform 0.3s ease;
+            flex-shrink: 0;
+        }
+        #themeToggle:hover {
+            border-color: rgba(0,229,160,0.4);
+            background: var(--accent-dim);
+            transform: rotate(20deg);
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
+</head>
+<body>
+
+    <!-- ============================================================
+         ÉCRAN DE CONNEXION — mot de passe uniquement
+         ============================================================ -->
+    <div id="loginScreen">
+    <div class="login-card">
+        <div class="login-logo">
+            <div class="login-logo-dot"></div>
+            <span class="login-logo-name"><em>Pensée</em> IA</span>
+        </div>
+
+        <p id="authInstruction">Connecte-toi ou crée un compte pour accéder à ton espace.</p>
+
+        <div class="login-group">
+            <div id="emailGroup">
+                <label>Email</label>
+                <input 
+                    type="email" 
+                    id="loginEmail" 
+                    class="login-input" 
+                    placeholder="nom@exemple.com" 
+                    style="margin-bottom: 12px;"
+                >
+            </div>
+            
+            <div id="passwordGroup">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                    <label style="margin-bottom: 0;">Mot de passe</label>
+                    <span id="forgotPassBtn" style="font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--text2); cursor: pointer; text-decoration: underline; transition: color 0.2s;">Oublié ?</span>
+                </div>
+                <input 
+                    type="password" 
+                    id="loginPassword" 
+                    class="login-input" 
+                    placeholder="••••••••" 
+                    autocomplete="current-password"
+                >
+            </div>
+        </div>
+
+        <button id="loginBtn">Se connecter ›</button>
+        
+        <div id="toggleAuthMode" style="margin-top: 16px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text2); cursor: pointer; text-decoration: underline; transition: color 0.2s;">
+            Pas encore de compte ? S'inscrire
+        </div>
+        
+        <div id="loginError" style="color: var(--red); font-size: 11px; margin-top: 14px; display: none; font-family: 'JetBrains Mono', monospace;"></div>
+        <div id="loginSuccess" style="color: var(--accent); font-size: 11px; margin-top: 14px; display: none; font-family: 'JetBrains Mono', monospace; line-height: 1.5;"></div>
+    </div>
+</div>
+
+    <!-- DROP OVERLAY -->
+    <div id="dropOverlay">⬇ Dépose ton fichier ici</div>
+    <!-- SIDEBAR OVERLAY mobile -->
+    <div id="sidebarOverlay"></div>
+
+    <!-- ============================================================
+         SIDEBAR GAUCHE
+         ============================================================ -->
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <div class="logo-mark">
+                <div class="logo-dot"></div>
+                <div class="logo-text">
+                    <h1><em>Pensée</em> IA</h1>
+                    <div class="creator-tag">by Yao Baba Ange Emmanuel</div>
+                </div>
+            </div>
+        </div>
+
+        <button id="newConvSideBtn">
+            <span class="btn-icon">＋</span> Nouvelle conv.
+        </button>
+
+        <div id="convList">
+            <!-- Rempli dynamiquement par ia.js -->
+        </div>
+
+        <div id="sidebar-footer">
+            <div id="creditBar">
+                <span class="credit-label">Crédits</span>
+                <div class="credit-track"><div id="creditFill"></div></div>
+                <span id="creditCount">20 / 20</span>
+            </div>
+            <button id="logoutBtn">Déconnexion</button>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         ZONE PRINCIPALE DROITE
+         ============================================================ -->
+    <div id="mainArea">
+
+        <!-- Header minimal -->
+        <header>
+    <button id="sidebarToggle">☰</button>
+    <span id="activeConvTitle">Pensée IA</span>
+    <div class="header-right" style="position: relative;">
+        <!-- Bouton Thème existant -->
+        <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">🌙</button>
+        
+        <!-- NOUVEAU : Bouton Terminal -->
+        <button id="terminalBtn" class="agent-badge" title="Connecter au terminal de l'ordinateur" style="background: rgba(0,0,0,0.2);">🔌 Terminal</button>
+
+        <!-- Badge Agent existant -->
+        <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
+        
+        <div id="agentSelector" class="agent-selector-menu"></div>
+        
+        <button id="clearBtn" title="Nouvelle conversation" style="display:none">+ Nouveau</button>
+    </div>
+</header>
+
+        <!-- ALERTE -->
+        <div id="alertBanner"></div>
+
+        <!-- MESSAGES (avec écran d'accueil intégré) -->
+        <div id="messages">
+            <!-- Écran d'accueil style Claude mobile -->
+            <div id="welcomeScreen">
+                <div class="welcome-logo">
+                    <!-- Astérisque animé façon Claude -->
+                    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <g transform="translate(50,50)">
+                            <rect x="-6" y="-42" width="12" height="84" rx="6"/>
+                            <rect x="-6" y="-42" width="12" height="84" rx="6" transform="rotate(45)"/>
+                            <rect x="-6" y="-42" width="12" height="84" rx="6" transform="rotate(90)"/>
+                            <rect x="-6" y="-42" width="12" height="84" rx="6" transform="rotate(135)"/>
+                        </g>
+                    </svg>
+                </div>
+                <p class="welcome-question">Comment puis-je vous<br>aider ce soir ?</p>
+            </div>
+        </div>
+
+        <!-- SUGGESTIONS — scroll horizontal style Claude mobile -->
+        <div id="suggestions">
+            <span class="suggestion" onclick="useSuggestion(this)">Trier une liste en Python</span>
+            <span class="suggestion" onclick="useSuggestion(this)">Créer une API REST en JS</span>
+            <span class="suggestion" onclick="useSuggestion(this)">Expliquer la récursivité</span>
+            <span class="suggestion" onclick="useSuggestion(this)">Déboguer mon code</span>
+        </div>
+
+        <!-- FICHIERS ATTACHÉS -->
+        <div id="uploadPreview"></div>
+
+        <!-- INPUT -->
+        <div id="inputArea">
+            <input type="file" id="fileInput" multiple accept="*/*">
+            <div class="input-card">
+                <div class="input-text-row">
+                    <textarea id="userInput" rows="1" placeholder="Discuter avec Pensée…"></textarea>
+                </div>
+                <div class="input-actions-row">
+                    <div class="input-actions-left">
+                        <button id="uploadBtn" title="Joindre un fichier" aria-label="Joindre un fichier">+</button>
+                        <button id="micBtn" title="Dicter un message" aria-label="Dicter un message">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                        </button>
+                    </div>
+                    <button id="sendBtn" title="Envoyer" class="hidden-action">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <footer>
+            <small><em>Pensée IA</em> · Codage & Intelligence · Créé par <em>Yao Baba Ange Emmanuel</em></small>
+        </footer>
+
+    </div><!-- /mainArea -->
+
+    <!-- Chargement de Supabase en version globale (UMD) pour éviter les erreurs CORS locales -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="ia.js"></script>
+    
+    <script>
+        // Masquer l'écran d'accueil dès qu'un message apparaît
+        const messagesDiv = document.getElementById('messages');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const suggestions = document.getElementById('suggestions');
+
+        const observer = new MutationObserver(() => {
+            const hasMessages = messagesDiv.querySelectorAll('.msg').length > 0;
+            if (welcomeScreen) welcomeScreen.style.display = hasMessages ? 'none' : 'flex';
+            if (suggestions) suggestions.style.display = hasMessages ? 'none' : 'flex';
+        });
+        observer.observe(messagesDiv, { childList: true, subtree: false });
+    </script>
+
+    <script>
+        /* ── Theme toggle ─────────────────────────────────────── */
+        (function() {
+            const btn = document.getElementById('themeToggle');
+            const ICONS = { dark: '🌙', light: '☀️' };
+            const saved = localStorage.getItem('pensee_theme') || 'dark';
+            if (saved === 'light') {
+                document.body.setAttribute('data-theme', 'light');
+                btn.textContent = ICONS.light;
+            }
+            btn.addEventListener('click', function() {
+                const isLight = document.body.getAttribute('data-theme') === 'light';
+                if (isLight) {
+                    document.body.removeAttribute('data-theme');
+                    btn.textContent = ICONS.dark;
+                    localStorage.setItem('pensee_theme', 'dark');
+                } else {
+                    document.body.setAttribute('data-theme', 'light');
+                    btn.textContent = ICONS.light;
+                    localStorage.setItem('pensee_theme', 'light');
+                }
+            });
+        })();
+
+        /* ── micBtn fallback gracieux (si ia.js fait display:none) ── */
+        (function() {
+            const mic = document.getElementById('micBtn');
+            if (!mic) return;
+            const orig = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'display');
+            Object.defineProperty(mic.style, 'display', {
+                set: function(v) {
+                    if (v === 'none') {
+                        mic.classList.add('unsupported');
+                        mic.setAttribute('title', 'Dictée non supportée par ce navigateur');
+                        mic.setAttribute('aria-disabled', 'true');
+                    } else {
+                        orig.set.call(mic.style, v);
+                    }
+                },
+                get: function() { return orig.get.call(mic.style); },
+                configurable: true
+            });
+        })();
+    </script>
+</body>
+</html>
