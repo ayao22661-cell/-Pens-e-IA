@@ -176,6 +176,23 @@ Tu as accès à un environnement d'exécution Python natif.
 - Avant de déclarer un algorithme "VALIDE" ou "[À CORRIGER]", génère un script Python pour simuler plusieurs centaines d'itérations (Monte Carlo) ou tester les cas extrêmes (edge cases) de la logique proposée.
 - Exécute le test en silence. Base ton verdict uniquement sur les résultats mathématiques retournés par l'interpréteur.
 - Reste factuel, froid et professionnel. Traque la faille par la preuve, pas par l'opinion.`
+    },
+
+    // ── AGENT IMAGE ─────────────────────────────────────────
+    image: {
+        id: "image",
+        label: "Image",
+        icon: "🎨",
+        description: "Génération d'images IA (Imagen 3)",
+        systemOverride: `
+━━━ MODE AGENT : GÉNÉRATION D'IMAGE ━━━
+L'utilisateur veut générer une image. Ton rôle est d'optimiser la demande avant envoi à Imagen 3.
+RÈGLES STRICTES :
+- Ne génère AUCUNE réponse texte longue. Sois direct et efficace.
+- Si le prompt est vague, demande UN seul paramètre de clarification (style ? sujet précis ? ambiance ?).
+- Rappelle discrètement les limites de sécurité si le contenu est ambigu.
+- Après génération réussie, propose 2 variations rapides (même sujet, style différent).
+- Formats disponibles : carré (1:1), portrait (9:16), paysage (16:9), bannière (3:1).`
     }
 };
 
@@ -215,6 +232,12 @@ function detectAgent(message) {
             "pourquoi vraiment", "profondément", "fondamentalement", "ce que personne",
             "big picture", "macro", "tendances profondes", "second ordre", "analyse",
             "comprends pas", "sens de", "impact réel", "vraie question"
+        ],
+        image: [
+            "génère une image", "génère", "crée une image", "dessine", "illustration",
+            "illustre", "visualise", "génère moi", "fais une image", "crée moi",
+            "photo de", "portrait de", "image de", "visuel de", "affiche", "logo",
+            "artwork", "concept art", "render", "imagine", "représente"
         ]
     };
 
@@ -938,11 +961,13 @@ function formatResponse(text) {
     if (typeof marked === 'undefined') return text.replace(/\n/g, "<br>");
 
     // 1. GESTION DU BLOC <think>
+    // Le bloc est masqué de la réponse finale mais mémorisé pour un éventuel tooltip
     const isThinking = /<think>(?!.*<\/think>)/is.test(text);
     let thinkContent = "";
     const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
     if (thinkMatch) thinkContent = thinkMatch[1].trim();
 
+    // SUPPRESSION COMPLÈTE du bloc <think> du rendu final (masquage total)
     let cleanText = isThinking
         ? text.replace(/<think>[\s\S]*$/i, "")
         : text.replace(/<think>[\s\S]*?<\/think>/gi, "");
@@ -1260,6 +1285,141 @@ function buildPrompt(userMessage, files, memoryContext = "") {
 }
 
 
+// ============================================================
+//  GÉNÉRATION D'IMAGE — Agent 🎨 Image (Imagen 3 / Gemini Flash)
+// ============================================================
+
+async function callImageAPI(userMessage) {
+    if (creditsLeft <= 0) {
+        addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
+        return;
+    }
+
+    updateAgentBadge("image");
+
+    // Bulle de réponse immédiate avec indicateur de génération
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg bot";
+    const label = document.createElement("span");
+    label.className = "msg-label";
+    label.textContent = "Pensée · 🎨 Image";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = `<span style="color:var(--text2);font-style:italic;font-size:13px;">🎨 Génération en cours…</span>`;
+    msgDiv.appendChild(label);
+    msgDiv.appendChild(bubble);
+    messagesEl.appendChild(msgDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+        const response = await fetch("/api/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: userMessage })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            bubble.innerHTML = `<span style="color:var(--red);">❌ ${data.error || "Erreur de génération."}</span>`;
+            return;
+        }
+
+        const { base64, mimeType, model, enrichedPrompt } = data;
+        const imgSrc = `data:${mimeType};base64,${base64}`;
+
+        // ── Rendu de l'image dans la bulle ─────────────────────────────
+        const imgEl = document.createElement("img");
+        imgEl.src = imgSrc;
+        imgEl.alt = userMessage;
+        imgEl.style.cssText = `
+            max-width: 100%; border-radius: 12px; display: block;
+            margin: 0 0 10px 0; cursor: pointer;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+            transition: transform 0.2s ease;
+        `;
+        imgEl.addEventListener("mouseenter", () => imgEl.style.transform = "scale(1.01)");
+        imgEl.addEventListener("mouseleave", () => imgEl.style.transform = "scale(1)");
+
+        // Clic → téléchargement direct
+        imgEl.addEventListener("click", () => {
+            const a = document.createElement("a");
+            a.href = imgSrc;
+            a.download = `pensee-ia-${Date.now()}.png`;
+            a.click();
+        });
+
+        const modelBadge = document.createElement("div");
+        modelBadge.style.cssText = `font-size:11px;color:var(--text3);margin-top:6px;letter-spacing:0.05em;`;
+        modelBadge.textContent = `✦ ${model === "imagen-3" ? "Imagen 3" : "Gemini 2.0 Flash"} · Cliquer pour télécharger`;
+
+        // Prompt enrichi affiché en détail collapsible
+        const detailEl = document.createElement("details");
+        detailEl.style.cssText = `margin-top:8px;font-size:11px;color:var(--text3);`;
+        const summaryEl = document.createElement("summary");
+        summaryEl.style.cssText = `cursor:pointer;color:var(--text2);font-size:11px;`;
+        summaryEl.textContent = "Voir le prompt enrichi";
+        const promptEl = document.createElement("p");
+        promptEl.style.cssText = `margin-top:6px;font-style:italic;line-height:1.5;`;
+        promptEl.textContent = enrichedPrompt;
+        detailEl.appendChild(summaryEl);
+        detailEl.appendChild(promptEl);
+
+        bubble.innerHTML = "";
+        bubble.appendChild(imgEl);
+        bubble.appendChild(modelBadge);
+        bubble.appendChild(detailEl);
+
+        // ── Actions : Télécharger + Variante ───────────────────────────
+        const actions = document.createElement("div");
+        actions.className = "msg-actions";
+
+        const dlBtn = document.createElement("button");
+        dlBtn.className = "copy-btn";
+        dlBtn.innerHTML = "⬇️ Télécharger";
+        dlBtn.addEventListener("click", () => {
+            const a = document.createElement("a");
+            a.href = imgSrc;
+            a.download = `pensee-ia-${Date.now()}.png`;
+            a.click();
+        });
+
+        const variantBtn = document.createElement("button");
+        variantBtn.className = "copy-btn";
+        variantBtn.innerHTML = "🔄 Variante";
+        variantBtn.title = "Générer une variante avec un style différent";
+        variantBtn.addEventListener("click", () => {
+            userInput.value = `Même sujet, style différent : ${userMessage}`;
+            userInput.focus();
+        });
+
+        actions.appendChild(dlBtn);
+        actions.appendChild(variantBtn);
+        msgDiv.appendChild(actions);
+
+        // ── Sauvegarde en base ─────────────────────────────────────────
+        // On sauvegarde un marqueur texte (l'image base64 serait trop lourde pour Supabase)
+        const saveContent = `[IMAGE GÉNÉRÉE] Prompt : ${userMessage}\nModèle : ${model}`;
+        history.push({ role: "user", content: userMessage });
+        history.push({ role: "assistant", content: saveContent });
+        await saveMessageToDB("assistant", saveContent);
+
+        creditsLeft--;
+        await useCreditInDB();
+        updateCredits();
+        if (creditsLeft > 0) setStatus("ok");
+
+    } catch (err) {
+        bubble.innerHTML = `<span style="color:var(--red);">❌ Erreur réseau : ${err.message}</span>`;
+        setStatus("err");
+    } finally {
+        removeTyping();
+        sendBtn.disabled  = false;
+        sendBtn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+        userInput.focus();
+    }
+}
+
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
 
@@ -1284,6 +1444,13 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             // Feedback visuel discret pour l'utilisateur
             addMessage("bot", `<span style="font-size: 11px; color: var(--text2);"><em>⚡ Pensée a auto-détecté le contexte et verrouillé l'agent <strong>${AGENTS_CONFIG[detected].label}</strong>.</em></span>`, true);
         }
+    }
+
+    // ── COURT-CIRCUIT AGENT IMAGE ─────────────────────────────────────────
+    // Si l'agent résolu est "image", on bypass /api/chat et on appelle /api/image
+    if (resolvedAgentId === "image") {
+        await callImageAPI(userMessage);
+        return;
     }
 
     // Détection des mots-clés temporels pour forcer la recherche
