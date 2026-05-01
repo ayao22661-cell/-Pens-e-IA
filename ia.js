@@ -531,9 +531,9 @@ logoutBtn.addEventListener("click", async () => {
 //  ⚠️  Déclarés AVANT tout appel qui les utilise
 // ============================================================
 
-let creditsLeft   = CONFIG.maxCredits;
-let history       = [];
-let attachedFiles = [];
+let creditsLeft          = CONFIG.maxCredits;
+let conversationLog      = [];   // Renommé : évite le conflit avec window.history (objet navigation)
+let attachedFiles        = [];
 
 const messagesEl    = document.getElementById("messages");
 const userInput     = document.getElementById("userInput");
@@ -669,7 +669,7 @@ async function deleteTab(id) {
 function switchTab(id) {
     activeTabId = id;
     sessionStorage.setItem('pensee_ia_active_tab', id);
-    history = [];
+    conversationLog = [];
     CONFIG.storageKey = getHistoryKey(id);
     loadHistoryFromDB();
     renderTabs();
@@ -814,7 +814,7 @@ function showWelcome() {
 
 async function loadHistoryFromDB() {
     messagesEl.innerHTML = "";
-    history = []; // On réinitialise l'historique local du contexte
+    conversationLog = []; // On réinitialise l'historique local du contexte
 
     if (!activeTabId || !currentUser) {
         showWelcome();
@@ -832,7 +832,7 @@ async function loadHistoryFromDB() {
         return;
     }
 
-    history = data; // On charge le contexte pour la fenêtre de l'IA
+    conversationLog = data; // On charge le contexte pour la fenêtre de l'IA
     
     for (const msg of data) {
         let finalContent = msg.content;
@@ -889,7 +889,7 @@ async function saveMessageToDB(role, content) {
 }
 
 function saveHistoryToStorage() {
-    localStorage.setItem(CONFIG.storageKey, JSON.stringify(history.slice(-100)));
+    localStorage.setItem(CONFIG.storageKey, JSON.stringify(conversationLog.slice(-100)));
 }
 
 function clearHistory() {
@@ -1276,7 +1276,7 @@ function buildPrompt(userMessage, files, memoryContext = "") {
 // Format : [{role: "user"|"assistant", content: "..."}]
 function buildConversationHistory(userMessage, files, memoryContext = "") {
     const CONTEXT_WINDOW = 20; // 10 échanges max → cohérence sans exploser les tokens
-    const recent = history.slice(-CONTEXT_WINDOW);
+    const recent = conversationLog.slice(-CONTEXT_WINDOW);
 
     // Préambule mémoire + fichiers texte injecté dans le premier message user
     // (ou dans le dernier si on veut cibler)
@@ -1497,8 +1497,8 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                 showTyping();
 
                 // Récupération de la demande originale de l'utilisateur (message avant cette réponse)
-                const lastUserMsg = history.length >= 2
-                    ? history[history.length - 2]?.content || ""
+                const lastUserMsg = conversationLog.length >= 2
+                    ? conversationLog[conversationLog.length - 2]?.content || ""
                     : "";
 
                 // On passe EXPLICITEMENT les deux contextes à l'agent Audit :
@@ -1537,8 +1537,8 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         msgDiv.appendChild(actions);
 
         // Mise à jour contexte
-        history.push({ role: "user", content: userMessage });
-        history.push({ role: "assistant", content: fullReply });
+        conversationLog.push({ role: "user", content: userMessage });
+        conversationLog.push({ role: "assistant", content: fullReply });
         await saveMessageToDB("assistant", fullReply);
 
         creditsLeft--;
