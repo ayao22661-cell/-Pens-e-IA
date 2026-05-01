@@ -98,20 +98,7 @@ RÈGLES STRICTES :
 - Croise au moins 2 angles différents avant de conclure.
 - Si les résultats sont contradictoires, expose la contradiction — ne tranche pas arbitrairement.
 - Utilise [DIAGNOSTIC INCERTAIN] si les données manquent ou sont trop anciennes.
-
-━━━ FORMAT DE RÉPONSE OBLIGATOIRE ━━━
-Structure chaque réponse ainsi :
-
-**[SOURCE 1]** — *domaine ou titre de la source*
-→ Fait principal extrait
-
-**[SOURCE 2]** — *domaine ou titre de la source*
-→ Fait principal extrait
-
-**SYNTHÈSE**
-Contexte → Faits clés → Implications → Ce que ça change concrètement
-
-**FIABILITÉ** : Évalue de 1 à 5 la fraîcheur et la solidité des données trouvées.`
+- Format de synthèse : contexte → faits clés → implications → ce que ça change.`
     },
 
     creatif: {
@@ -531,9 +518,9 @@ logoutBtn.addEventListener("click", async () => {
 //  ⚠️  Déclarés AVANT tout appel qui les utilise
 // ============================================================
 
-let creditsLeft          = CONFIG.maxCredits;
-let conversationLog      = [];   // Renommé : évite le conflit avec window.history (objet navigation)
-let attachedFiles        = [];
+let creditsLeft   = CONFIG.maxCredits;
+let history       = [];
+let attachedFiles = [];
 
 const messagesEl    = document.getElementById("messages");
 const userInput     = document.getElementById("userInput");
@@ -669,7 +656,7 @@ async function deleteTab(id) {
 function switchTab(id) {
     activeTabId = id;
     sessionStorage.setItem('pensee_ia_active_tab', id);
-    conversationLog = [];
+    history = [];
     CONFIG.storageKey = getHistoryKey(id);
     loadHistoryFromDB();
     renderTabs();
@@ -814,7 +801,7 @@ function showWelcome() {
 
 async function loadHistoryFromDB() {
     messagesEl.innerHTML = "";
-    conversationLog = []; // On réinitialise l'historique local du contexte
+    history = []; // On réinitialise l'historique local du contexte
 
     if (!activeTabId || !currentUser) {
         showWelcome();
@@ -832,7 +819,7 @@ async function loadHistoryFromDB() {
         return;
     }
 
-    conversationLog = data; // On charge le contexte pour la fenêtre de l'IA
+    history = data; // On charge le contexte pour la fenêtre de l'IA
     
     for (const msg of data) {
         let finalContent = msg.content;
@@ -889,7 +876,7 @@ async function saveMessageToDB(role, content) {
 }
 
 function saveHistoryToStorage() {
-    localStorage.setItem(CONFIG.storageKey, JSON.stringify(conversationLog.slice(-100)));
+    localStorage.setItem(CONFIG.storageKey, JSON.stringify(history.slice(-100)));
 }
 
 function clearHistory() {
@@ -950,7 +937,7 @@ function formatResponse(text) {
     // Sécurité si Marked n'est pas chargé
     if (typeof marked === 'undefined') return text.replace(/\n/g, "<br>");
 
-    // 1. GESTION DU BLOC <think> — Affichage rétractable élégant
+    // 1. GESTION DU BLOC <think>
     const isThinking = /<think>(?!.*<\/think>)/is.test(text);
     let thinkContent = "";
     const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
@@ -962,25 +949,8 @@ function formatResponse(text) {
 
     if (cleanText.trim() === "") {
         if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
-        if (thinkContent) {
-            // Bloc rétractable pour le think complet mais sans réponse finale
-            const uid = "think_" + Math.random().toString(36).slice(2, 8);
-            return `<details class="think-block" id="${uid}">
-  <summary class="think-summary">🧠 <span>Analyse interne</span></summary>
-  <div class="think-body">${thinkContent.replace(/\n/g, "<br>")}</div>
-</details>`;
-        }
+        if (thinkContent) return `<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>${thinkContent}`;
         return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'>✍️ Rédaction en cours...</span>";
-    }
-
-    // Si une réflexion a eu lieu, on l'affiche en détails rétractables AVANT la réponse
-    let thinkHtml = "";
-    if (thinkContent) {
-        const uid = "think_" + Math.random().toString(36).slice(2, 8);
-        thinkHtml = `<details class="think-block" id="${uid}">
-  <summary class="think-summary">🧠 <span>Voir l'analyse interne</span></summary>
-  <div class="think-body">${thinkContent.replace(/\n/g, "<br>")}</div>
-</details>\n`;
     }
 
     // 2. CONFIGURATION DU RENDU (Compatibilité v11+)
@@ -1015,9 +985,9 @@ try {
     const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
     
     // 1. On autorise les attributs de liens (download, target, href)
-    let sanitized = DOMPurify.sanitize(thinkHtml + htmlOutput, {
-        ADD_ATTR: ['data-code', 'data-runid', 'data-lang', 'target', 'download', 'open'], 
-        ADD_TAGS: ['iframe', 'details', 'summary']
+    let sanitized = DOMPurify.sanitize(htmlOutput, {
+        ADD_ATTR: ['data-code', 'data-runid', 'data-lang', 'target', 'download'], 
+        ADD_TAGS: ['iframe']
     });
 
     // 2. RECONSTRUCTION : On intercepte les liens Supabase et on les transforme en boutons verts interactifs
@@ -1246,11 +1216,13 @@ async function memorizeText(content) {
 }
 
 // ============================================================
-//  CONSTRUCTION DU PROMPT — multi-tour natif + fenêtre glissante
+//  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
 // ============================================================
 
 function buildPrompt(userMessage, files, memoryContext = "") {
-    // Utilisé uniquement pour Gemma (fallback) ou cas sans historique
+    const CONTEXT_WINDOW = 20;
+    const recent = history.slice(-CONTEXT_WINDOW);
+
     let userPrompt = "";
 
     if (files && files.length > 0) {
@@ -1265,51 +1237,26 @@ function buildPrompt(userMessage, files, memoryContext = "") {
     }
 
     if (memoryContext) {
-        userPrompt += "### CONTEXTE MÉMOIRE (souvenirs pertinents) :\n" + memoryContext + "\n---\n\n";
+        userPrompt += "### CONTEXTE MÉMOIRE :\n" + memoryContext + "\n---\n\n";
     }
 
-    userPrompt += userMessage;
-    return userPrompt;
-}
-
-// Construit le tableau conversationHistory pour le multi-tour natif Gemini
-// Format : [{role: "user"|"assistant", content: "..."}]
-function buildConversationHistory(userMessage, files, memoryContext = "") {
-    const CONTEXT_WINDOW = 20; // 10 échanges max → cohérence sans exploser les tokens
-    const recent = conversationLog.slice(-CONTEXT_WINDOW);
-
-    // Préambule mémoire + fichiers texte injecté dans le premier message user
-    // (ou dans le dernier si on veut cibler)
-    let userContent = "";
-
-    if (files && files.length > 0) {
-        userContent += "### FICHIERS JOINTS :\n\n";
-        files.forEach(file => {
-            if (file.content && file.content.type === "text") {
-                userContent += "DOCUMENT : " + file.name + "\nCONTENU :\n" + file.content.data + "\n---\n\n";
-            } else {
-                userContent += "DOCUMENT BINAIRE : " + file.name + " (traité via inline_data)\n---\n\n";
-            }
+    if (recent.length > 0) {
+        userPrompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
+        let historyText = "";
+        recent.forEach(msg => {
+            const role = msg.role === "user" ? "Utilisateur" : "Pensée";
+            historyText += "[" + role + "]: " + msg.content + "\n\n";
         });
+        
+        // Troncation de sécurité (environ 12000 caractères, ~3000 tokens)
+        if (historyText.length > 12000) {
+            historyText = "...[Début de l'historique tronqué pour optimisation mémoire]...\n" + historyText.slice(-12000);
+        }
+        userPrompt += historyText;
     }
 
-    if (memoryContext) {
-        userContent += "### CONTEXTE MÉMOIRE (souvenirs pertinents) :\n" + memoryContext + "\n---\n\n";
-    }
-
-    // Reconstitution des turns précédents
-    const turns = recent.map(msg => ({
-        role: msg.role === "user" ? "user" : "assistant",
-        content: msg.content
-    }));
-
-    // Dernier message : message actuel avec préambule mémoire/fichiers
-    turns.push({
-        role: "user",
-        content: userContent + userMessage
-    });
-
-    return turns;
+    userPrompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### RÉPONSE :\n";
+    return userPrompt;
 }
 
 
@@ -1350,11 +1297,6 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
 
     // Construction des deux couches séparées
     const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch);
-
-    // Multi-tour natif : tableau de turns pour Gemini
-    // buildPrompt reste disponible en fallback pour l'agent Audit (appel direct)
-    const conversationHistory = buildConversationHistory(userMessage, files, memoryContext);
-    // Fallback monolithique pour Gemma (chat.js le détecte automatiquement)
     const userPrompt = buildPrompt(userMessage, files, memoryContext);
 
     const binaryFiles = files
@@ -1369,8 +1311,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                prompt: userPrompt,                              // fallback Gemma
-                conversationHistory: conversationHistory,        // multi-tour natif Gemini
+                prompt: userPrompt,
                 systemInstruction: systemInstruction,
                 agentId: resolvedAgentId || "default",
                 files: binaryFiles.length > 0 ? binaryFiles : undefined
@@ -1497,8 +1438,8 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                 showTyping();
 
                 // Récupération de la demande originale de l'utilisateur (message avant cette réponse)
-                const lastUserMsg = conversationLog.length >= 2
-                    ? conversationLog[conversationLog.length - 2]?.content || ""
+                const lastUserMsg = history.length >= 2
+                    ? history[history.length - 2]?.content || ""
                     : "";
 
                 // On passe EXPLICITEMENT les deux contextes à l'agent Audit :
@@ -1537,8 +1478,8 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         msgDiv.appendChild(actions);
 
         // Mise à jour contexte
-        conversationLog.push({ role: "user", content: userMessage });
-        conversationLog.push({ role: "assistant", content: fullReply });
+        history.push({ role: "user", content: userMessage });
+        history.push({ role: "assistant", content: fullReply });
         await saveMessageToDB("assistant", fullReply);
 
         creditsLeft--;
