@@ -98,7 +98,20 @@ RÈGLES STRICTES :
 - Croise au moins 2 angles différents avant de conclure.
 - Si les résultats sont contradictoires, expose la contradiction — ne tranche pas arbitrairement.
 - Utilise [DIAGNOSTIC INCERTAIN] si les données manquent ou sont trop anciennes.
-- Format de synthèse : contexte → faits clés → implications → ce que ça change.`
+
+━━━ FORMAT DE RÉPONSE OBLIGATOIRE ━━━
+Structure chaque réponse ainsi :
+
+**[SOURCE 1]** — *domaine ou titre de la source*
+→ Fait principal extrait
+
+**[SOURCE 2]** — *domaine ou titre de la source*
+→ Fait principal extrait
+
+**SYNTHÈSE**
+Contexte → Faits clés → Implications → Ce que ça change concrètement
+
+**FIABILITÉ** : Évalue de 1 à 5 la fraîcheur et la solidité des données trouvées.`
     },
 
     creatif: {
@@ -937,7 +950,7 @@ function formatResponse(text) {
     // Sécurité si Marked n'est pas chargé
     if (typeof marked === 'undefined') return text.replace(/\n/g, "<br>");
 
-    // 1. GESTION DU BLOC <think>
+    // 1. GESTION DU BLOC <think> — Affichage rétractable élégant
     const isThinking = /<think>(?!.*<\/think>)/is.test(text);
     let thinkContent = "";
     const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
@@ -949,8 +962,25 @@ function formatResponse(text) {
 
     if (cleanText.trim() === "") {
         if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
-        if (thinkContent) return `<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>${thinkContent}`;
+        if (thinkContent) {
+            // Bloc rétractable pour le think complet mais sans réponse finale
+            const uid = "think_" + Math.random().toString(36).slice(2, 8);
+            return `<details class="think-block" id="${uid}">
+  <summary class="think-summary">🧠 <span>Analyse interne</span></summary>
+  <div class="think-body">${thinkContent.replace(/\n/g, "<br>")}</div>
+</details>`;
+        }
         return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'>✍️ Rédaction en cours...</span>";
+    }
+
+    // Si une réflexion a eu lieu, on l'affiche en détails rétractables AVANT la réponse
+    let thinkHtml = "";
+    if (thinkContent) {
+        const uid = "think_" + Math.random().toString(36).slice(2, 8);
+        thinkHtml = `<details class="think-block" id="${uid}">
+  <summary class="think-summary">🧠 <span>Voir l'analyse interne</span></summary>
+  <div class="think-body">${thinkContent.replace(/\n/g, "<br>")}</div>
+</details>\n`;
     }
 
     // 2. CONFIGURATION DU RENDU (Compatibilité v11+)
@@ -985,9 +1015,9 @@ try {
     const htmlOutput = marked.parse(cleanText, { renderer: renderer, breaks: true });
     
     // 1. On autorise les attributs de liens (download, target, href)
-    let sanitized = DOMPurify.sanitize(htmlOutput, {
-        ADD_ATTR: ['data-code', 'data-runid', 'data-lang', 'target', 'download'], 
-        ADD_TAGS: ['iframe']
+    let sanitized = DOMPurify.sanitize(thinkHtml + htmlOutput, {
+        ADD_ATTR: ['data-code', 'data-runid', 'data-lang', 'target', 'download', 'open'], 
+        ADD_TAGS: ['iframe', 'details', 'summary']
     });
 
     // 2. RECONSTRUCTION : On intercepte les liens Supabase et on les transforme en boutons verts interactifs
@@ -1216,13 +1246,11 @@ async function memorizeText(content) {
 }
 
 // ============================================================
-//  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
+//  CONSTRUCTION DU PROMPT — multi-tour natif + fenêtre glissante
 // ============================================================
 
 function buildPrompt(userMessage, files, memoryContext = "") {
-    const CONTEXT_WINDOW = 20;
-    const recent = history.slice(-CONTEXT_WINDOW);
-
+    // Utilisé uniquement pour Gemma (fallback) ou cas sans historique
     let userPrompt = "";
 
     if (files && files.length > 0) {
@@ -1237,26 +1265,51 @@ function buildPrompt(userMessage, files, memoryContext = "") {
     }
 
     if (memoryContext) {
-        userPrompt += "### CONTEXTE MÉMOIRE :\n" + memoryContext + "\n---\n\n";
+        userPrompt += "### CONTEXTE MÉMOIRE (souvenirs pertinents) :\n" + memoryContext + "\n---\n\n";
     }
 
-    if (recent.length > 0) {
-        userPrompt += "### HISTORIQUE DE LA CONVERSATION :\n\n";
-        let historyText = "";
-        recent.forEach(msg => {
-            const role = msg.role === "user" ? "Utilisateur" : "Pensée";
-            historyText += "[" + role + "]: " + msg.content + "\n\n";
-        });
-        
-        // Troncation de sécurité (environ 12000 caractères, ~3000 tokens)
-        if (historyText.length > 12000) {
-            historyText = "...[Début de l'historique tronqué pour optimisation mémoire]...\n" + historyText.slice(-12000);
-        }
-        userPrompt += historyText;
-    }
-
-    userPrompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### RÉPONSE :\n";
+    userPrompt += userMessage;
     return userPrompt;
+}
+
+// Construit le tableau conversationHistory pour le multi-tour natif Gemini
+// Format : [{role: "user"|"assistant", content: "..."}]
+function buildConversationHistory(userMessage, files, memoryContext = "") {
+    const CONTEXT_WINDOW = 20; // 10 échanges max → cohérence sans exploser les tokens
+    const recent = history.slice(-CONTEXT_WINDOW);
+
+    // Préambule mémoire + fichiers texte injecté dans le premier message user
+    // (ou dans le dernier si on veut cibler)
+    let userContent = "";
+
+    if (files && files.length > 0) {
+        userContent += "### FICHIERS JOINTS :\n\n";
+        files.forEach(file => {
+            if (file.content && file.content.type === "text") {
+                userContent += "DOCUMENT : " + file.name + "\nCONTENU :\n" + file.content.data + "\n---\n\n";
+            } else {
+                userContent += "DOCUMENT BINAIRE : " + file.name + " (traité via inline_data)\n---\n\n";
+            }
+        });
+    }
+
+    if (memoryContext) {
+        userContent += "### CONTEXTE MÉMOIRE (souvenirs pertinents) :\n" + memoryContext + "\n---\n\n";
+    }
+
+    // Reconstitution des turns précédents
+    const turns = recent.map(msg => ({
+        role: msg.role === "user" ? "user" : "assistant",
+        content: msg.content
+    }));
+
+    // Dernier message : message actuel avec préambule mémoire/fichiers
+    turns.push({
+        role: "user",
+        content: userContent + userMessage
+    });
+
+    return turns;
 }
 
 
@@ -1297,6 +1350,11 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
 
     // Construction des deux couches séparées
     const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch);
+
+    // Multi-tour natif : tableau de turns pour Gemini
+    // buildPrompt reste disponible en fallback pour l'agent Audit (appel direct)
+    const conversationHistory = buildConversationHistory(userMessage, files, memoryContext);
+    // Fallback monolithique pour Gemma (chat.js le détecte automatiquement)
     const userPrompt = buildPrompt(userMessage, files, memoryContext);
 
     const binaryFiles = files
@@ -1311,7 +1369,8 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                prompt: userPrompt,
+                prompt: userPrompt,                              // fallback Gemma
+                conversationHistory: conversationHistory,        // multi-tour natif Gemini
                 systemInstruction: systemInstruction,
                 agentId: resolvedAgentId || "default",
                 files: binaryFiles.length > 0 ? binaryFiles : undefined
