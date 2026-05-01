@@ -80,7 +80,7 @@ export default async function handler(req) {
     // envoyé depuis buildPromptMultiTurn() dans ia.js
     const { prompt, files, systemInstruction, agentId, conversationHistory } = bodyReq;
 
-    if (!prompt) {
+    if (!prompt && (!conversationHistory || conversationHistory.length === 0)) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
     }
 
