@@ -1,10 +1,17 @@
 // ============================================================
 //  PENSÉE IA — api/image.js (Vercel Edge)
-//  Génération d'images via Imagen 3 (Google Cloud Vertex AI)
-//  + fallback Gemini 2.0 Flash si Vertex indisponible
+//  Cascade : Imagen 4 Fast → Imagen 4 → Imagen 4 Ultra
+//  Tous via l'API Gemini (même clé GEMINI_API_KEY)
 // ============================================================
 
 export const config = { runtime: 'edge' };
+
+// Cascade des modèles image par ordre de vitesse/qualité
+const IMAGE_MODELS = [
+    { id: "imagen-4.0-fast-generate-preview-06-05", label: "Imagen 4 Fast" },
+    { id: "imagen-4.0-generate-preview-06-05",      label: "Imagen 4"      },
+    { id: "imagen-4.0-ultra-generate-preview-06-05",label: "Imagen 4 Ultra"}
+];
 
 export default async function handler(req) {
     if (req.method !== "POST") {
@@ -23,85 +30,37 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
-    // ── Enrichissement automatique du prompt ──────────────────────────────
-    // On améliore le prompt brut pour maximiser la qualité Imagen 3
     const enrichedPrompt = await enrichPrompt(prompt, GEMINI_API_KEY);
+    const aspectRatio    = detectAspectRatio(prompt);
 
-    // ── Tentative 1 : Imagen 3 via Gemini API (endpoint stable) ──────────
-    try {
-        const imagenUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${GEMINI_API_KEY}`;
+    // ── Cascade Imagen 4 Fast → Imagen 4 → Imagen 4 Ultra ────────────────
+    for (const model of IMAGE_MODELS) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.id}:predict?key=${GEMINI_API_KEY}`;
 
-        const imagenBody = {
-            instances: [{ prompt: enrichedPrompt }],
-            parameters: {
-                sampleCount: 1,
-                aspectRatio: detectAspectRatio(prompt),
-                safetyFilterLevel: "BLOCK_SOME",
-                personGeneration: "ALLOW_ADULT"
-            }
-        };
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    instances: [{ prompt: enrichedPrompt }],
+                    parameters: {
+                        sampleCount: 1,
+                        aspectRatio,
+                        safetyFilterLevel: "BLOCK_SOME",
+                        personGeneration: "ALLOW_ADULT"
+                    }
+                })
+            });
 
-        const imagenRes = await fetch(imagenUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(imagenBody)
-        });
+            if (res.ok) {
+                const data = await res.json();
+                const base64 = data.predictions?.[0]?.bytesBase64Encoded;
 
-        if (imagenRes.ok) {
-            const imagenData = await imagenRes.json();
-            const base64 = imagenData.predictions?.[0]?.bytesBase64Encoded;
-
-            if (base64) {
-                return new Response(JSON.stringify({
-                    base64,
-                    mimeType: "image/png",
-                    model: "imagen-3",
-                    enrichedPrompt
-                }), {
-                    status: 200,
-                    headers: { "Content-Type": "application/json" }
-                });
-            }
-        }
-
-        // Si Imagen retourne une erreur non critique, on log et on cascade
-        const errText = await imagenRes.text().catch(() => "");
-        console.warn(`Imagen 3 rejeté (${imagenRes.status}) :`, errText);
-
-    } catch (e) {
-        console.warn("Imagen 3 inaccessible, cascade vers Gemini Flash :", e.message);
-    }
-
-    // ── Tentative 2 : Gemini 2.0 Flash (génération d'image native) ────────
-    try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${GEMINI_API_KEY}`;
-
-        const geminiBody = {
-            contents: [{
-                role: "user",
-                parts: [{ text: `Generate an image: ${enrichedPrompt}` }]
-            }],
-            generationConfig: {
-                responseModalities: ["IMAGE", "TEXT"]
-            }
-        };
-
-        const geminiRes = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(geminiBody)
-        });
-
-        if (geminiRes.ok) {
-            const geminiData = await geminiRes.json();
-            const parts = geminiData.candidates?.[0]?.content?.parts || [];
-
-            for (const part of parts) {
-                if (part.inlineData?.mimeType?.startsWith("image/")) {
+                if (base64) {
                     return new Response(JSON.stringify({
-                        base64: part.inlineData.data,
-                        mimeType: part.inlineData.mimeType,
-                        model: "gemini-2.0-flash",
+                        base64,
+                        mimeType: "image/png",
+                        model: model.label,
                         enrichedPrompt
                     }), {
                         status: 200,
@@ -109,24 +68,28 @@ export default async function handler(req) {
                     });
                 }
             }
-        }
 
-    } catch (e) {
-        console.warn("Gemini Flash image échoué :", e.message);
+            const errBody = await res.text().catch(() => "");
+            console.warn(`[${model.label}] ${res.status} :`, errBody.slice(0, 200));
+
+            // Quota épuisé → inutile d'essayer les suivants
+            if (res.status === 429) break;
+
+        } catch (e) {
+            console.warn(`[${model.label}] fetch échoué :`, e.message);
+        }
     }
 
-    // ── Aucun modèle n'a répondu ──────────────────────────────────────────
     return new Response(JSON.stringify({
-        error: "La génération d'image est temporairement indisponible. Réessaie dans quelques secondes."
+        error: "Quota image épuisé pour aujourd'hui (25 images/jour sur le plan gratuit Google AI Studio)."
     }), { status: 503 });
 }
 
-// ── Enrichissement du prompt via Gemini ───────────────────────────────────
-// Transforme "un lion" en prompt Imagen-ready avec style, lumière, composition
+// ── Enrichissement du prompt via Gemini 2.5 Flash ─────────────────────────
 async function enrichPrompt(rawPrompt, apiKey) {
     try {
         const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -134,15 +97,15 @@ async function enrichPrompt(rawPrompt, apiKey) {
                     contents: [{
                         role: "user",
                         parts: [{
-                            text: `Tu es un expert en prompt engineering pour la génération d'images IA (Imagen 3, Midjourney, DALL-E).
-Transforme ce prompt court en un prompt détaillé et optimisé pour Imagen 3.
-Ajoute : style visuel, éclairage, composition, qualité technique, ambiance.
-Réponds UNIQUEMENT avec le prompt enrichi, rien d'autre. Maximum 200 mots. En anglais.
+                            text: `You are an expert image prompt engineer for Imagen 4.
+Rewrite this prompt into a detailed, optimized Imagen 4 prompt.
+Add: visual style, lighting, composition, technical quality, mood, camera angle.
+Reply ONLY with the enhanced prompt. Max 150 words. In English.
 
-Prompt original : "${rawPrompt}"`
+Original prompt: "${rawPrompt}"`
                         }]
                     }],
-                    generationConfig: { maxOutputTokens: 300, temperature: 0.7 }
+                    generationConfig: { maxOutputTokens: 250, temperature: 0.7 }
                 })
             }
         );
@@ -153,17 +116,17 @@ Prompt original : "${rawPrompt}"`
             if (enriched && enriched.length > 20) return enriched;
         }
     } catch (e) {
-        // Silencieux — le prompt brut reste utilisable
+        // Silencieux
     }
 
-    return rawPrompt; // Fallback sur le prompt original
+    return rawPrompt;
 }
 
 // ── Détection automatique du ratio selon le prompt ────────────────────────
 function detectAspectRatio(prompt) {
     const p = prompt.toLowerCase();
     if (p.includes("portrait") || p.includes("vertical") || p.includes("story")) return "9:16";
-    if (p.includes("paysage") || p.includes("landscape") || p.includes("panorama") || p.includes("cinéma")) return "16:9";
-    if (p.includes("bannière") || p.includes("banner") || p.includes("couverture")) return "3:1";
-    return "1:1"; // Carré par défaut
+    if (p.includes("paysage") || p.includes("landscape") || p.includes("panorama") || p.includes("cinéma") || p.includes("cinema")) return "16:9";
+    if (p.includes("bannière") || p.includes("banner") || p.includes("couverture") || p.includes("cover")) return "3:1";
+    return "1:1";
 }
