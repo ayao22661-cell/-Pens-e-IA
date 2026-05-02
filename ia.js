@@ -16,7 +16,8 @@ const CONFIG = {
         sh:'Shell', bash:'Bash', md:'Markdown', txt:'Texte',
         vue:'Vue', svelte:'Svelte', dart:'Dart', r:'R', lua:'Lua',
         pdf:'Document PDF', docx:'Document Word', doc:'Document Word',
-        mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG'
+        mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG',
+        mp4:'Vidéo MP4', webm:'Vidéo WebM', mov:'Vidéo MOV', avi:'Vidéo AVI'
     },
     systemPrompt: `Tu es PENSÉE — intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un simple assistant, mais un partenaire cognitif avec une voix, une exigence et une vision architecturale.
 
@@ -1055,7 +1056,7 @@ function readFileAsData(file) {
         }
         const reader   = new FileReader();
         const ext      = file.name.split(".").pop().toLowerCase();
-        const isBinary = ["pdf", "docx", "doc", "mp3", "m4a", "wav", "ogg"].includes(ext);
+        const isBinary = ["pdf", "docx", "doc", "mp3", "m4a", "wav", "ogg", "mp4", "webm", "mov", "avi"].includes(ext);
         reader.onload  = function(e) {
             if (isBinary) resolve({ type: "binary", mimeType: file.type, data: e.target.result.split(",")[1] });
             else          resolve({ type: "text", data: e.target.result });
@@ -1236,20 +1237,25 @@ async function searchMemory(query) {
 }
 
 // 3. Enregistrement d'une nouvelle information (via commande /memo)
-async function memorizeText(content) {
+async function memorizeText(content, isGlobal = false) {
     if (!currentUser || !activeTabId) return; 
     
     try {
         const vector = await getEmbedding(content);
         const vectorString = `[${vector.join(',')}]`;
         
-        const { error } = await supabase.from('memories').insert([{
+        const record = {
             user_id: currentUser.id,
-            workspace_id: activeTabId, // Isolation par onglet
             content: content,
-            embedding: vectorString
-        }]);
-        
+            embedding: vectorString,
+            is_global: isGlobal
+        };
+
+        if (!isGlobal && activeTabId) {
+            record.workspace_id = activeTabId;
+        }
+
+        const { error } = await supabase.from('memories').insert([record]);
         if (error) throw error;
     } catch (e) {
         console.error("Mémorisation impossible :", e.message);
@@ -1264,21 +1270,57 @@ async function loadMemoryPanel() {
     if (!currentUser || !activeTabId) return;
     const list = document.getElementById("memoryList");
     if (!list) return;
-    list.innerHTML = '<em style="color:var(--text3);font-size:12px;">Chargement...</em>';
 
-    const { data, error } = await supabase
+    // Injection CSS onglets (une seule fois)
+    if (!document.getElementById('mem-tab-style')) {
+        const s = document.createElement('style');
+        s.id = 'mem-tab-style';
+        s.textContent = `.mem-tab{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:'Syne',sans-serif;transition:all 0.2s;}.mem-tab.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}`;
+        document.head.appendChild(s);
+    }
+
+    list.innerHTML = `
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="mem-tab active" onclick="renderMemoryTab('local')">📍 Cette conv.</button>
+            <button class="mem-tab"        onclick="renderMemoryTab('global')">🌐 Globale</button>
+        </div>
+        <div id="memTabContent"><em style="color:var(--text3);font-size:12px;">Chargement...</em></div>
+    `;
+
+    renderMemoryTab('local');
+}
+
+window.renderMemoryTab = async function(tab) {
+    const btns = document.querySelectorAll('.mem-tab');
+    btns.forEach((b, i) => b.classList.toggle('active', (i === 0 && tab === 'local') || (i === 1 && tab === 'global')));
+
+    const content = document.getElementById('memTabContent');
+    if (!content) return;
+    content.innerHTML = '<em style="color:var(--text3);font-size:12px;">Chargement...</em>';
+
+    let query = supabase
         .from('memories')
-        .select('id, content, created_at')
+        .select('id, content, created_at, is_global')
         .eq('user_id', currentUser.id)
-        .eq('workspace_id', activeTabId)
         .order('created_at', { ascending: false });
 
+    if (tab === 'local') {
+        query = query.eq('workspace_id', activeTabId).eq('is_global', false);
+    } else {
+        query = query.eq('is_global', true);
+    }
+
+    const { data, error } = await query;
+
     if (error || !data || data.length === 0) {
-        list.innerHTML = '<em style="color:var(--text3);font-size:12px;">Aucune mémoire dans cet espace de travail.<br>Utilise <code>/memo [info]</code> pour en créer.</em>';
+        const hint = tab === 'local'
+            ? 'Utilise <code>/memo [info]</code>'
+            : 'Utilise <code>/memo global [info]</code>';
+        content.innerHTML = `<em style="color:var(--text3);font-size:12px;">Aucune mémoire ici.<br>${hint}</em>`;
         return;
     }
 
-    list.innerHTML = "";
+    content.innerHTML = "";
     data.forEach(mem => {
         const item = document.createElement("div");
         item.style.cssText = "display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);";
@@ -1288,13 +1330,12 @@ async function loadMemoryPanel() {
             <button data-memid="${mem.id}" title="Supprimer" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;flex-shrink:0;padding:2px 4px;">🗑️</button>
         `;
         item.querySelector('button').addEventListener('click', async function() {
-            const id = this.getAttribute('data-memid');
-            await supabase.from('memories').delete().eq('id', id);
-            await loadMemoryPanel();
+            await supabase.from('memories').delete().eq('id', this.getAttribute('data-memid'));
+            renderMemoryTab(tab);
         });
-        list.appendChild(item);
+        content.appendChild(item);
     });
-}
+};
 
 (function() {
     const memBtn = document.getElementById("memoryBtn");
@@ -1314,7 +1355,7 @@ async function loadMemoryPanel() {
 // ============================================================
 
 function buildPrompt(userMessage, files, memoryContext = "") {
-    const CONTEXT_WINDOW = 20;
+    const CONTEXT_WINDOW = 40; // 40 messages au lieu de 20
     const recent = history.slice(-CONTEXT_WINDOW);
 
     let userPrompt = "";
@@ -1341,12 +1382,19 @@ function buildPrompt(userMessage, files, memoryContext = "") {
             const role = msg.role === "user" ? "Utilisateur" : "Pensée";
             historyText += "[" + role + "]: " + msg.content + "\n\n";
         });
-        
-        // Troncation de sécurité (environ 12000 caractères, ~3000 tokens)
-        if (historyText.length > 12000) {
-            historyText = "...[Début de l'historique tronqué pour optimisation mémoire]...\n" + historyText.slice(-12000);
+
+        // Smart Chunking : on résume la tête si > 60 000 chars
+        const MAX_HISTORY = 60000;
+        const TAIL_SIZE   = 20000;
+        if (historyText.length > MAX_HISTORY) {
+            const head = historyText.slice(0, historyText.length - TAIL_SIZE);
+            const tail = historyText.slice(-TAIL_SIZE);
+            const wordCount = head.split(/\s+/).length;
+            userPrompt += `[📜 Début de conversation résumé — environ ${wordCount} mots d'échanges antérieurs. Utilise /memo pour conserver les infos importantes.]\n\n`;
+            userPrompt += tail;
+        } else {
+            userPrompt += historyText;
         }
-        userPrompt += historyText;
     }
 
     userPrompt += "### NOUVEAU MESSAGE :\n" + userMessage + "\n\n### RÉPONSE :\n";
@@ -1687,6 +1735,77 @@ function setStatus(state) {
 // ============================================================
 
 // ============================================================
+//  GÉNÉRATION D'IMAGES
+// ============================================================
+
+const IMAGE_TRIGGERS = [
+    "/image ", "génère une image", "génère l'image", "génère moi",
+    "dessine", "crée une image", "crée moi une image", "illustre",
+    "visualise", "montre moi une image", "fais moi une image"
+];
+
+async function generateImage(prompt) {
+    showTyping();
+    try {
+        const response = await fetch("/api/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt })
+        });
+
+        removeTyping();
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            addMessage("bot", `❌ Génération échouée : ${err.error || "Erreur inconnue"}`, false);
+            return;
+        }
+
+        const data = await response.json();
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "msg bot";
+
+        const label = document.createElement("span");
+        label.className = "msg-label";
+        label.textContent = "Pensée · 🎨 Image";
+        msgDiv.appendChild(label);
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+
+        const sourceLabel = data.source === "imagen3"
+            ? '<span style="font-size:10px;color:var(--text3);font-family:monospace;">Imagen 3 · Google</span>'
+            : '<span style="font-size:10px;color:var(--text3);font-family:monospace;">Pollinations AI · Flux</span>';
+
+        if (data.type === "base64") {
+            const imgSrc = `data:${data.mimeType};base64,${data.data}`;
+            bubble.innerHTML = `${sourceLabel}<br>
+                <img src="${imgSrc}" alt="${escapeHtml(prompt)}"
+                     style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy">
+                <a href="${imgSrc}" download="pensee-ia-${Date.now()}.png"
+                   style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
+        } else {
+            bubble.innerHTML = `${sourceLabel}<br>
+                <img src="${data.url}" alt="${escapeHtml(prompt)}"
+                     style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy"
+                     onerror="this.parentElement.innerHTML+='<em style=color:var(--red)>Timeout. Réessaie.</em>'">
+                <a href="${data.url}" download target="_blank"
+                   style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
+        }
+
+        msgDiv.appendChild(bubble);
+        messagesEl.appendChild(msgDiv);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        await saveMessageToDB("assistant", `🎨 Image générée pour : "${prompt}"`);
+
+    } catch (err) {
+        removeTyping();
+        addMessage("bot", "❌ Erreur réseau lors de la génération : " + err.message, false);
+    }
+}
+
+// ============================================================
 //  ENVOI ET GESTION DES MESSAGES
 // ============================================================
 
@@ -1697,19 +1816,39 @@ async function sendMessage() {
     if (sendBtn.disabled) return;
     
     if (text.startsWith("/memo ")) {
-        const memoContent = text.replace("/memo ", "").trim();
+        const raw = text.replace("/memo ", "").trim();
+        const isGlobal = raw.startsWith("global ");
+        const memoContent = isGlobal ? raw.replace("global ", "").trim() : raw;
+
         if (memoContent) {
             userInput.value = "";
             userInput.style.height = "auto";
             addMessage("user", text, false);
             showTyping();
-            await memorizeText(memoContent);
+            await memorizeText(memoContent, isGlobal);
             removeTyping();
-            addMessage("bot", "🧠 **Mémoire sauvegardée.** Info vectorisée et enregistrée.", true);
+            const scope = isGlobal
+                ? "🌐 **Mémoire GLOBALE sauvegardée.** Accessible dans toutes tes conversations."
+                : "🧠 **Mémoire locale sauvegardée.** Disponible dans cette conversation.";
+            addMessage("bot", scope, true);
         }
         return;
     }
     if (handleAgentCommand(text)) return;
+
+    // Détection génération d'image
+    const lowerText = text.toLowerCase();
+    const imageIntent = IMAGE_TRIGGERS.find(t => lowerText.startsWith(t) || lowerText.includes(t));
+    if (imageIntent) {
+        const imagePrompt = text.replace(/^\/image\s*/i, "").trim() || text;
+        addMessage("user", text, false);
+        userInput.value = "";
+        userInput.style.height = "auto";
+        toggleSendButton();
+        await saveMessageToDB("user", text);
+        await generateImage(imagePrompt);
+        return;
+    }
 
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "none";
