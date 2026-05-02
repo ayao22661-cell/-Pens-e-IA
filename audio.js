@@ -311,7 +311,7 @@ function cleanForSpeech(text) {
 }
 
 // ============================================================
-//  SYNTHESE VOCALE
+//  SYNTHESE VOCALE — TTS API (ElevenLabs / Google WaveNet / Web Speech)
 // ============================================================
 function loadVoices() {
     AudioState.voices = AudioState.synth.getVoices();
@@ -320,10 +320,53 @@ function loadVoices() {
         || null;
 }
 
-function speak(text) {
-    if (!text || !AudioState.synth) return;
+async function speak(text) {
+    if (!text) return;
     stopSpeaking();
 
+    AudioState.isSpeaking = true;
+    setOrbState('speaking');
+    setStatus('Pensee parle...', 'speaking');
+
+    try {
+        const response = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+        });
+
+        const ct = response.headers.get('Content-Type') || '';
+
+        if (ct.includes('audio/mpeg')) {
+            // Lecture via Web Audio API (ElevenLabs ou Google WaveNet)
+            const buf = await response.arrayBuffer();
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const decoded = await ctx.decodeAudioData(buf);
+            const src = ctx.createBufferSource();
+            src.buffer = decoded;
+            src.connect(ctx.destination);
+            AudioState.currentSource = src;
+            src.onended = () => {
+                AudioState.isSpeaking = false;
+                AudioState.currentSource = null;
+                if (AudioState.isOpen) { setOrbState('idle'); setStatus('Appuie pour parler', ''); }
+            };
+            src.start(0);
+            return;
+        }
+
+        // Fallback Web Speech demandé par le serveur
+        const data = await response.json().catch(() => ({ fallback: true, text }));
+        speakWebSpeech(data.text || text);
+
+    } catch (err) {
+        console.warn('[Audio] TTS API indisponible, fallback Web Speech:', err.message);
+        speakWebSpeech(text);
+    }
+}
+
+function speakWebSpeech(text) {
+    if (!AudioState.synth) return;
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
     let index = 0;
 
@@ -335,13 +378,13 @@ function speak(text) {
             return;
         }
         const utt = new SpeechSynthesisUtterance(sentences[index].trim());
-        utt.lang = AUDIO_CONFIG.lang;
-        utt.rate = AUDIO_CONFIG.voiceRate;
-        utt.pitch = AUDIO_CONFIG.voicePitch;
+        utt.lang   = AUDIO_CONFIG.lang;
+        utt.rate   = AUDIO_CONFIG.voiceRate;
+        utt.pitch  = AUDIO_CONFIG.voicePitch;
         utt.volume = AUDIO_CONFIG.voiceVolume;
         if (AudioState.selectedVoice) utt.voice = AudioState.selectedVoice;
         utt.onstart = () => { AudioState.isSpeaking = true; setOrbState('speaking'); setStatus('Pensee parle...', 'speaking'); };
-        utt.onend = () => { index++; next(); };
+        utt.onend   = () => { index++; next(); };
         utt.onerror = () => { index++; next(); };
         AudioState.currentUtterance = utt;
         AudioState.synth.speak(utt);
@@ -350,6 +393,12 @@ function speak(text) {
 }
 
 function stopSpeaking() {
+    // Stop Web Audio (ElevenLabs / Google)
+    if (AudioState.currentSource) {
+        try { AudioState.currentSource.stop(); } catch(e) {}
+        AudioState.currentSource = null;
+    }
+    // Stop Web Speech
     AudioState.synth?.cancel();
     AudioState.isSpeaking = false;
     AudioState.currentUtterance = null;
