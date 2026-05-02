@@ -858,11 +858,14 @@ async function loadHistoryFromDB() {
             }
         }
 
-        // Détection des marqueurs d'image pour re-rendu fidèle
-        const imgUrlMatch = finalContent.match(/^\[IMAGE_URL:([^|]+)\|([^\]]*)\]$/);
-        const imgB64Match = finalContent.match(/^\[IMAGE_B64:([^|]+)\|([^\]]*)\]\n([\s\S]+)$/);
+        // Détection du marqueur image (format : [IMAGE_URL:url|prompt|storagePath])
+        const imgUrlMatch = finalContent.match(/^\[IMAGE_URL:([^|]*)\|([^|]*)\|([^\]]*)\]$/);
+        // Compatibilité ascendante avec l'ancien format à 2 champs
+        const imgUrlMatchLegacy = !imgUrlMatch && finalContent.match(/^\[IMAGE_URL:([^|]+)\|([^\]]*)\]$/);
+        // Ancien format base64 (migration) — on affiche un message de remplacement
+        const imgB64Match = finalContent.match(/^\[IMAGE_B64:/);
 
-        if (imgUrlMatch || imgB64Match) {
+        if (imgUrlMatch || imgUrlMatchLegacy || imgB64Match) {
             const msgDiv = document.createElement("div");
             msgDiv.className = "msg bot";
             const lbl = document.createElement("span");
@@ -872,23 +875,26 @@ async function loadHistoryFromDB() {
             const bubble = document.createElement("div");
             bubble.className = "bubble";
 
-            if (imgUrlMatch) {
-                const [, url, rawPrompt] = imgUrlMatch;
+            if (imgB64Match) {
+                // Ancien format base64 en DB — image non récupérable
+                bubble.innerHTML = `<em style="color:var(--text3);font-size:12px;">🖼️ Image générée (format ancien, non récupérable). Régénère-la si besoin.</em>`;
+            } else {
+                const match   = imgUrlMatch || imgUrlMatchLegacy;
+                const url     = imgUrlMatch ? match[1] : match[1];
+                const rawPrompt = imgUrlMatch ? match[2] : match[2];
+                const storagePath = imgUrlMatch ? match[3] : "";
                 const safePrompt = rawPrompt.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
-                bubble.innerHTML = `<span style="font-size:10px;color:var(--text3);font-family:monospace;">Pollinations AI · Flux</span><br>
+
+                const sourceLabel = storagePath
+                    ? `<span style="font-size:10px;color:var(--text3);font-family:monospace;">Imagen 3 · Supabase Storage</span>`
+                    : `<span style="font-size:10px;color:var(--text3);font-family:monospace;">Pollinations AI · Flux</span>`;
+
+                bubble.innerHTML = `${sourceLabel}<br>
                     <img src="${url}" alt="${escapeHtml(safePrompt)}"
                          style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy"
-                         onerror="this.parentElement.innerHTML+='<em style=color:var(--red)>Image expirée ou indisponible.</em>'">
+                         onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+                    <em style="display:none;color:var(--red);font-size:12px;">⚠️ Image expirée ou indisponible.</em>
                     <a href="${url}" download target="_blank"
-                       style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
-            } else {
-                const [, mimeType, rawPrompt, b64] = imgB64Match;
-                const imgSrc = `data:${mimeType};base64,${b64.trim()}`;
-                const safePrompt = rawPrompt.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
-                bubble.innerHTML = `<span style="font-size:10px;color:var(--text3);font-family:monospace;">Imagen 3 · Google</span><br>
-                    <img src="${imgSrc}" alt="${escapeHtml(safePrompt)}"
-                         style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy">
-                    <a href="${imgSrc}" download="pensee-ia-image.png"
                        style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
             }
 
@@ -921,6 +927,32 @@ async function saveMessageToDB(role, content) {
         }]);
         
     if (error) console.error("Erreur de sauvegarde du message :", error);
+
+    // ── PURGE AUTO : garde les 200 derniers messages par conversation ──
+    // Exécuté en arrière-plan, non bloquant
+    pruneMessages(activeTabId).catch(e => console.warn("Purge silencieuse :", e.message));
+}
+
+async function pruneMessages(conversationId, maxMessages = 200) {
+    const { data, error } = await supabase
+        .from('messages')
+        .select('id, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false });
+
+    if (error || !data || data.length <= maxMessages) return;
+
+    // On supprime tout ce qui dépasse la limite
+    const toDelete = data.slice(maxMessages).map(m => m.id);
+    if (toDelete.length === 0) return;
+
+    const { error: delErr } = await supabase
+        .from('messages')
+        .delete()
+        .in('id', toDelete);
+
+    if (delErr) console.warn("Erreur purge messages :", delErr.message);
+    else console.log(`[Pensée] Purge : ${toDelete.length} message(s) supprimé(s) dans conv. ${conversationId}`);
 }
 
 function saveHistoryToStorage() {
@@ -1836,11 +1868,46 @@ async function generateImage(prompt) {
         messagesEl.appendChild(msgDiv);
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
-        // Sauvegarde avec marqueur structuré pour permettre le re-rendu au rechargement
+        // ── PERSISTANCE IMAGE : Storage Supabase (jamais de base64 en DB) ──
         if (data.type === "base64") {
-            await saveMessageToDB("assistant", `[IMAGE_B64:${data.mimeType}|${escapeHtml(prompt)}]\n${data.data}`);
+            try {
+                // Conversion base64 → Blob
+                const byteChars = atob(data.data);
+                const byteArr  = new Uint8Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+                const blob = new Blob([byteArr], { type: data.mimeType });
+
+                const ext      = data.mimeType.split("/")[1] || "png";
+                const userId   = currentUser ? currentUser.id : "anon";
+                const filePath = `images/${userId}/${Date.now()}.${ext}`;
+
+                const { error: upErr } = await supabase.storage
+                    .from("attachments")
+                    .upload(filePath, blob, { contentType: data.mimeType, upsert: false });
+
+                if (upErr) throw upErr;
+
+                const { data: signed } = await supabase.storage
+                    .from("attachments")
+                    .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 an
+
+                const persistentUrl = signed?.signedUrl || "";
+                await saveMessageToDB("assistant", `[IMAGE_URL:${persistentUrl}|${escapeHtml(prompt)}|${filePath}]`);
+
+                // Mise à jour de l'affichage avec l'URL Storage (remplace le src base64 temporaire)
+                const imgEl = bubble.querySelector("img");
+                if (imgEl && persistentUrl) imgEl.src = persistentUrl;
+                const dlEl = bubble.querySelector("a");
+                if (dlEl && persistentUrl) { dlEl.href = persistentUrl; dlEl.removeAttribute("download"); dlEl.target = "_blank"; }
+
+            } catch (storageErr) {
+                console.warn("Upload Storage échoué, fallback marqueur base64 :", storageErr.message);
+                // Fallback minimal : on stocke juste le prompt, l'image restera en mémoire session uniquement
+                await saveMessageToDB("assistant", `🎨 *Image générée (non persistée) pour : "${prompt}"*`);
+            }
         } else {
-            await saveMessageToDB("assistant", `[IMAGE_URL:${data.url}|${escapeHtml(prompt)}]`);
+            // URL externe (Pollinations) : on stocke l'URL + le path storage vide
+            await saveMessageToDB("assistant", `[IMAGE_URL:${data.url}|${escapeHtml(prompt)}|]`);
         }
 
     } catch (err) {
