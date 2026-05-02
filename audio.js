@@ -6,7 +6,7 @@
 //  Modèle : gemini-3.1-flash-live-preview (recommandé mai 2026)
 // ============================================================
 
-// ── CONFIGURATION ─────────────────────────────────────────
+// -- CONFIGURATION -----------------------------------------
 const LIVE_CONFIG = {
     // Modèle Live API — le plus récent et recommandé
     model: 'gemini-3.1-flash-live-preview',
@@ -37,7 +37,7 @@ const LIVE_CONFIG = {
     version: '2.0.0'
 };
 
-// ── ÉTAT GLOBAL ──────────────────────────────────────────
+// -- ÉTAT GLOBAL ------------------------------------------
 const LiveState = {
     // Connexion
     ws: null,
@@ -77,7 +77,7 @@ function injectLiveStyles() {
     const style = document.createElement('style');
     style.id = 'pensee-live-styles';
     style.textContent = `
-        /* ── Bouton header ── */
+        /* -- Bouton header -- */
         #liveAudioBtn {
             background: none;
             border: 1px solid var(--border2);
@@ -107,7 +107,7 @@ function injectLiveStyles() {
             animation: live-blink 1s ease-in-out infinite;
         }
 
-        /* ── Overlay ── */
+        /* -- Overlay -- */
         #liveOverlay {
             position: fixed; inset: 0; z-index: 8900;
             display: flex; align-items: center; justify-content: center;
@@ -119,7 +119,7 @@ function injectLiveStyles() {
         }
         #liveOverlay.open { opacity: 1; pointer-events: all; }
 
-        /* ── Carte ── */
+        /* -- Carte -- */
         .live-card {
             width: 100%; max-width: 440px; margin: 16px;
             background: var(--bg2);
@@ -144,7 +144,7 @@ function injectLiveStyles() {
             opacity: 0.7;
         }
 
-        /* ── Bouton fermeture ── */
+        /* -- Bouton fermeture -- */
         .live-close {
             position: absolute; top: 14px; right: 14px;
             width: 28px; height: 28px;
@@ -155,7 +155,7 @@ function injectLiveStyles() {
         }
         .live-close:hover { border-color: var(--text2); color: var(--text2); }
 
-        /* ── Titre ── */
+        /* -- Titre -- */
         .live-title {
             font-family: 'Fraunces', serif;
             font-size: 22px; font-weight: 300;
@@ -169,7 +169,7 @@ function injectLiveStyles() {
             text-transform: uppercase;
         }
 
-        /* ── Badge modèle ── */
+        /* -- Badge modèle -- */
         .live-model-badge {
             display: inline-block;
             font-size: 10px; font-family: 'JetBrains Mono', monospace;
@@ -179,7 +179,7 @@ function injectLiveStyles() {
             margin-bottom: 28px;
         }
 
-        /* ── Visualiseur central ── */
+        /* -- Visualiseur central -- */
         .live-viz-wrapper {
             position: relative; width: 140px; height: 140px;
             margin: 0 auto 20px;
@@ -228,7 +228,7 @@ function injectLiveStyles() {
         .live-orb-wrapper-active .live-ring:nth-child(2) { animation-delay: 0.65s; }
         .live-orb-wrapper-active .live-ring:nth-child(3) { animation-delay: 1.3s; }
 
-        /* ── Status ── */
+        /* -- Status -- */
         .live-status {
             font-family: 'JetBrains Mono', monospace;
             font-size: 11px; text-transform: uppercase;
@@ -241,7 +241,7 @@ function injectLiveStyles() {
         .live-status.connecting { color: var(--yellow); }
         .live-status.error      { color: var(--red); }
 
-        /* ── Zone de transcription ── */
+        /* -- Zone de transcription -- */
         .live-transcript-area {
             display: grid; grid-template-columns: 1fr 1fr;
             gap: 10px; margin-bottom: 16px;
@@ -282,7 +282,7 @@ function injectLiveStyles() {
             color: var(--text3); font-style: italic; font-size: 11px;
         }
 
-        /* ── Contrôles ── */
+        /* -- Contrôles -- */
         .live-controls {
             display: flex; gap: 8px; align-items: center;
             justify-content: center; flex-wrap: wrap;
@@ -299,7 +299,7 @@ function injectLiveStyles() {
         .live-ctrl.danger:hover { border-color: var(--red); color: var(--red); background: rgba(255,95,95,0.07); }
         .live-ctrl.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
-        /* ── Sélecteur de voix ── */
+        /* -- Sélecteur de voix -- */
         .live-voice-select {
             background: var(--bg3); border: 1px solid var(--border2);
             color: var(--text2); border-radius: 9px;
@@ -310,7 +310,7 @@ function injectLiveStyles() {
         .live-voice-select:hover { border-color: var(--accent); }
         .live-voice-select option { background: var(--bg2); }
 
-        /* ── Indicateur connexion ── */
+        /* -- Indicateur connexion -- */
         .live-conn-indicator {
             position: absolute; top: 14px; left: 14px;
             display: flex; align-items: center; gap: 6px;
@@ -324,7 +324,7 @@ function injectLiveStyles() {
         .live-conn-dot.connected { background: var(--accent); animation: live-blink 2s ease-in-out infinite; }
         .live-conn-dot.error { background: var(--red); }
 
-        /* ── ANIMATIONS ── */
+        /* -- ANIMATIONS -- */
         @keyframes live-ring-expand {
             0%   { transform: scale(1); opacity: 0.6; }
             100% { transform: scale(2); opacity: 0; }
@@ -489,7 +489,7 @@ async function connectToGeminiLive() {
     });
 }
 
-// ── Message de configuration Gemini Live ─────────────────
+// -- Message de configuration Gemini Live -----------------
 function sendSetupMessage() {
     const agentSystemPrompt = buildVoiceSystemPrompt();
 
@@ -534,7 +534,7 @@ function sendSetupMessage() {
     showDisconnectBtn(true);
 }
 
-// ── Prompt système adapté au mode vocal ─────────────────
+// -- Prompt système adapté au mode vocal -----------------
 function buildVoiceSystemPrompt() {
     const basePrompt = typeof window.CONFIG?.systemPrompt === 'string'
         ? window.CONFIG.systemPrompt
@@ -556,7 +556,7 @@ function buildVoiceSystemPrompt() {
 
 ${basePrompt}${agentLayer}
 
-━━━ MODE VOCAL NATIF ━━━
+--- MODE VOCAL NATIF ---
 Tu opères en conversation vocale temps réel via Gemini Live API.
 RÈGLES ABSOLUES POUR CE MODE :
 - Réponses orales : 2 à 5 phrases maximum, sauf si on te demande explicitement plus.
@@ -587,7 +587,7 @@ function handleGeminiMessage(rawData) {
     const serverContent = msg.serverContent;
     if (!serverContent) return;
 
-    // ── Audio PCM16 de Gemini → lecture ──────────────────
+    // -- Audio PCM16 de Gemini → lecture ------------------
     const parts = serverContent.modelTurn?.parts || [];
     for (const part of parts) {
         if (part.inlineData?.mimeType?.startsWith('audio/')) {
@@ -598,17 +598,17 @@ function handleGeminiMessage(rawData) {
         }
     }
 
-    // ── Transcription de la sortie (ce que Gemini dit) ──
+    // -- Transcription de la sortie (ce que Gemini dit) --
     if (serverContent.outputTranscription?.text) {
         appendOutputTranscript(serverContent.outputTranscription.text);
     }
 
-    // ── Transcription de l'entrée (ce que l'utilisateur dit) ──
+    // -- Transcription de l'entrée (ce que l'utilisateur dit) --
     if (serverContent.inputTranscription?.text) {
         appendInputTranscript(serverContent.inputTranscription.text);
     }
 
-    // ── Fin du tour de parole de Gemini ──────────────────
+    // -- Fin du tour de parole de Gemini ------------------
     if (serverContent.turnComplete) {
         console.log('[Live] Tour Gemini terminé');
         if (!LiveState.isPlaying) {
@@ -616,7 +616,7 @@ function handleGeminiMessage(rawData) {
         }
     }
 
-    // ── Interruption (barge-in) ───────────────────────────
+    // -- Interruption (barge-in) ---------------------------
     if (serverContent.interrupted) {
         console.log('[Live] Barge-in détecté');
         clearAudioQueue();
@@ -714,7 +714,7 @@ function stopMicCapture() {
     updateOrbActive(false);
 }
 
-// ── Envoi d'un chunk audio PCM16 à Gemini ────────────────
+// -- Envoi d'un chunk audio PCM16 à Gemini ----------------
 function sendAudioChunk(float32Chunk) {
     if (!LiveState.ws || LiveState.ws.readyState !== WebSocket.OPEN) return;
 
@@ -911,7 +911,7 @@ function closeLiveOverlay() {
     showDisconnectBtn(false);
 }
 
-// ── Toggle micro (mute/unmute) ────────────────────────────
+// -- Toggle micro (mute/unmute) ----------------------------
 let isMuted = false;
 function toggleMicMute() {
     isMuted = !isMuted;
@@ -925,7 +925,7 @@ function toggleMicMute() {
     }
 }
 
-// ── Barge-in : l'utilisateur interrompt Gemini ───────────
+// -- Barge-in : l'utilisateur interrompt Gemini -----------
 function handleBargeIn() {
     if (LiveState.isPlaying) {
         clearAudioQueue();
