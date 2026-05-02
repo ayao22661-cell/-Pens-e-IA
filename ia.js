@@ -887,6 +887,9 @@ function clearHistory() {
 const clearBtn = document.getElementById("clearBtn");
 if (clearBtn) clearBtn.addEventListener("click", clearHistory);
 
+const exportBtn = document.getElementById("exportBtn");
+if (exportBtn) exportBtn.addEventListener("click", exportConversation);
+
 // ============================================================
 //  CRÉDITS UI
 // ============================================================
@@ -918,6 +921,36 @@ function updateCredits() {
         alertBanner.style.display = "block";
         alertBanner.textContent   = "\u26a1 Plus que " + creditsLeft + " message(s) disponible(s) aujourd'hui.";
     }
+}
+
+// ============================================================
+//  EXPORT CONVERSATION (.md)
+// ============================================================
+
+function exportConversation() {
+    if (!history || history.length === 0) {
+        alert("Aucun message à exporter dans cette conversation.");
+        return;
+    }
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    const title = activeTab ? activeTab.title : "conversation";
+    const date = new Date().toLocaleDateString("fr-FR");
+
+    let md = `# ${title}\n_Exporté depuis Pensée IA — ${date}_\n\n---\n\n`;
+    history.forEach(msg => {
+        const role = msg.role === "user" ? "**Toi**" : "**Pensée**";
+        md += `${role}\n\n${msg.content}\n\n---\n\n`;
+    });
+
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pensee-${title.slice(0, 30).replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // ============================================================
@@ -1216,6 +1249,59 @@ async function memorizeText(content) {
 }
 
 // ============================================================
+//  PANNEAU MÉMOIRE VISIBLE — Audit & suppression des /memo
+// ============================================================
+
+async function loadMemoryPanel() {
+    if (!currentUser || !activeTabId) return;
+    const list = document.getElementById("memoryList");
+    if (!list) return;
+    list.innerHTML = '<em style="color:var(--text3);font-size:12px;">Chargement...</em>';
+
+    const { data, error } = await supabase
+        .from('memories')
+        .select('id, content, created_at')
+        .eq('user_id', currentUser.id)
+        .eq('workspace_id', activeTabId)
+        .order('created_at', { ascending: false });
+
+    if (error || !data || data.length === 0) {
+        list.innerHTML = '<em style="color:var(--text3);font-size:12px;">Aucune mémoire dans cet espace de travail.<br>Utilise <code>/memo [info]</code> pour en créer.</em>';
+        return;
+    }
+
+    list.innerHTML = "";
+    data.forEach(mem => {
+        const item = document.createElement("div");
+        item.style.cssText = "display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);";
+        const preview = escapeHtml(mem.content.slice(0, 120)) + (mem.content.length > 120 ? '…' : '');
+        item.innerHTML = `
+            <span style="font-size:12px;color:var(--text);flex:1;line-height:1.5;">${preview}</span>
+            <button data-memid="${mem.id}" title="Supprimer" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;flex-shrink:0;padding:2px 4px;">🗑️</button>
+        `;
+        item.querySelector('button').addEventListener('click', async function() {
+            const id = this.getAttribute('data-memid');
+            await supabase.from('memories').delete().eq('id', id);
+            await loadMemoryPanel();
+        });
+        list.appendChild(item);
+    });
+}
+
+(function() {
+    const memBtn = document.getElementById("memoryBtn");
+    if (!memBtn) return;
+    memBtn.addEventListener("click", async function() {
+        const panel = document.getElementById("memoryPanel");
+        if (!panel) return;
+        const isVisible = panel.style.display !== "none";
+        panel.style.display = isVisible ? "none" : "block";
+        if (!isVisible) await loadMemoryPanel();
+    });
+})();
+// ── FIN PANNEAU MÉMOIRE ────────────────────────────────────
+
+// ============================================================
 //  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
 // ============================================================
 
@@ -1401,6 +1487,10 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         // ==========================================
 
         bubble.innerHTML = formatResponse(fullReply);
+        // Coloration syntaxique sur les blocs de code rendus
+        if (typeof hljs !== 'undefined') {
+            bubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+        }
         // Bouton copier (Ton code existant)
         const actions = document.createElement("div");
         actions.className = "msg-actions";
@@ -1416,6 +1506,49 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             } catch(e) { copyBtn.innerHTML = "❌ Erreur"; }
         });
         actions.appendChild(copyBtn);
+
+        // ── BOUTON SYNTHÈSE VOCALE ───────────────────────────────
+        if ('speechSynthesis' in window) {
+            const ttsBtn = document.createElement("button");
+            ttsBtn.className = "copy-btn";
+            ttsBtn.innerHTML = "🔊 Écouter";
+            ttsBtn.title = "Lire la réponse à voix haute";
+            let isSpeaking = false;
+
+            ttsBtn.addEventListener("click", function() {
+                if (isSpeaking) {
+                    window.speechSynthesis.cancel();
+                    ttsBtn.innerHTML = "🔊 Écouter";
+                    isSpeaking = false;
+                    return;
+                }
+                const rawText = bubble.innerText
+                    .replace(/#{1,6}\s/g, "")
+                    .replace(/[*_`~]/g, "")
+                    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+                    .replace(/\n{2,}/g, ". ")
+                    .trim();
+
+                const utterance = new SpeechSynthesisUtterance(rawText);
+                utterance.lang = "fr-FR";
+                utterance.rate = 0.95;
+                utterance.pitch = 1;
+
+                // Choisir une voix française si disponible
+                const voices = window.speechSynthesis.getVoices();
+                const frVoice = voices.find(v => v.lang.startsWith("fr"));
+                if (frVoice) utterance.voice = frVoice;
+
+                utterance.onend = () => { ttsBtn.innerHTML = "🔊 Écouter"; isSpeaking = false; };
+                utterance.onerror = () => { ttsBtn.innerHTML = "🔊 Écouter"; isSpeaking = false; };
+
+                window.speechSynthesis.speak(utterance);
+                ttsBtn.innerHTML = "⏹ Arrêter";
+                isSpeaking = true;
+            });
+            actions.appendChild(ttsBtn);
+        }
+        // ── FIN SYNTHÈSE VOCALE ──────────────────────────────────
 
         // ==========================================
         // DÉBUT DE L'AJOUT : BOUTON AUDIT
@@ -1476,6 +1609,36 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         // ==========================================
 
         msgDiv.appendChild(actions);
+
+        // ── SUGGESTIONS DYNAMIQUES POST-RÉPONSE ──────────────────
+        const suggestionMap = {
+            code:       ["🐛 Explique ligne par ligne", "⚙️ Optimise les performances", "🧪 Génère les tests unitaires"],
+            creatif:    ["🎬 Développe la scène suivante", "✍️ Réécris en style plus dense", "🎭 Ajoute un retournement dramatique"],
+            strategie:  ["📊 Donne-moi les indicateurs clés", "⚠️ Quels sont les risques ?", "🚀 Plan d'action sur 30 jours"],
+            audit:      ["🔧 Propose les corrections", "📋 Synthèse exécutive", "🔁 Relancer l'audit après correction"],
+            recherche:  ["🔗 Creuse l'angle opposé", "📰 Sources primaires", "🌍 Impact en Afrique de l'Ouest ?"],
+            visionnaire:["🔭 Effets de troisième ordre ?", "🔄 Analogie dans un autre domaine", "💡 L'insight contre-intuitif ?"],
+            default:    ["📝 Résume en 3 points", "🔍 Approfondis ce point", "💬 Explique différemment"]
+        };
+        const pills = suggestionMap[resolvedAgentId] || suggestionMap.default;
+        const pillsDiv = document.createElement("div");
+        pillsDiv.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-left:2px;";
+        pills.forEach(text => {
+            const pill = document.createElement("button");
+            pill.textContent = text;
+            pill.style.cssText = "background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:'Syne',sans-serif;transition:border-color 0.2s,color 0.2s;white-space:nowrap;";
+            pill.addEventListener("mouseenter", () => { pill.style.borderColor = "var(--accent)"; pill.style.color = "var(--accent)"; });
+            pill.addEventListener("mouseleave", () => { pill.style.borderColor = "var(--border2)"; pill.style.color = "var(--text2)"; });
+            pill.addEventListener("click", () => {
+                userInput.value = text.replace(/^\S+\s/, ""); // Retire l'emoji
+                userInput.focus();
+                pillsDiv.remove();
+                toggleSendButton();
+            });
+            pillsDiv.appendChild(pill);
+        });
+        msgDiv.appendChild(pillsDiv);
+        // ── FIN SUGGESTIONS DYNAMIQUES ────────────────────────────
 
         // Mise à jour contexte
         history.push({ role: "user", content: userMessage });
