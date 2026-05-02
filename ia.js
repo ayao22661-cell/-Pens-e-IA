@@ -1047,7 +1047,8 @@ function readFileAsData(file) {
         }
         const reader   = new FileReader();
         const ext      = file.name.split(".").pop().toLowerCase();
-        const isBinary = ["pdf", "docx", "doc", "mp3", "m4a", "wav", "ogg"].includes(ext);
+        const isBinary = ["pdf", "docx", "doc", "mp3", "m4a", "wav", "ogg",
+                          "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(ext);
         reader.onload  = function(e) {
             if (isBinary) resolve({ type: "binary", mimeType: file.type, data: e.target.result.split(",")[1] });
             else          resolve({ type: "text", data: e.target.result });
@@ -1077,7 +1078,29 @@ function renderUploadPreview() {
     attachedFiles.forEach(function(file, i) {
         const chip = document.createElement("div");
         chip.className = "attached-chip";
-        chip.innerHTML = "<span>\ud83d\udcc4 " + escapeHtml(file.name) + " <span style='color:var(--text3)'>(" + file.lang + ")</span></span><button onclick=\"removeFile(" + i + ")\" title=\"Retirer\">\u2715</button>";
+        chip.style.cssText = "display:flex;align-items:center;gap:8px;";
+
+        // Aperçu visuel pour les images (Ctrl+V ou fichier image)
+        if (file.content?.type === "binary" && file.content.mimeType?.startsWith("image/")) {
+            const thumb = document.createElement("img");
+            thumb.src = `data:${file.content.mimeType};base64,${file.content.data}`;
+            thumb.alt = file.name;
+            thumb.style.cssText = "width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid var(--border2);";
+            chip.appendChild(thumb);
+            const nameSpan = document.createElement("span");
+            nameSpan.innerHTML = escapeHtml(file.name) + " <span style='color:var(--text3)'>(" + file.lang + ")</span>";
+            chip.appendChild(nameSpan);
+        } else {
+            const textSpan = document.createElement("span");
+            textSpan.innerHTML = "📄 " + escapeHtml(file.name) + " <span style='color:var(--text3)'>(" + file.lang + ")</span>";
+            chip.appendChild(textSpan);
+        }
+
+        const delBtn = document.createElement("button");
+        delBtn.innerHTML = "✕";
+        delBtn.title = "Retirer";
+        delBtn.onclick = function() { removeFile(i); };
+        chip.appendChild(delBtn);
         uploadPreview.appendChild(chip);
     });
 }
@@ -1345,6 +1368,36 @@ function buildPrompt(userMessage, files, memoryContext = "") {
     return userPrompt;
 }
 
+// ============================================================
+//  WEB READER TOOL — Ingestion automatique d'URLs
+// ============================================================
+
+async function extractUrlContent(text) {
+    const urlRegex = /https?:\/\/[^\s<>"']{10,}/gi;
+    const urls = text.match(urlRegex);
+    if (!urls || urls.length === 0) return null;
+
+    // Ignore les assets statiques (images, fonts, icônes)
+    const skipExt = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf'];
+    const target = urls.find(u => !skipExt.some(ext => u.toLowerCase().split('?')[0].endsWith(ext)));
+    if (!target) return null;
+
+    try {
+        const res = await fetch('/api/fetch-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: target })
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data.text) return null;
+        return { url: data.url, title: data.title, content: data.text };
+    } catch (e) {
+        console.warn('[WebReader] Échec :', e.message);
+        return null;
+    }
+}
+
 
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
@@ -1487,6 +1540,57 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         // ==========================================
 
         bubble.innerHTML = formatResponse(fullReply);
+
+        // ── AUTO-AUDIT SILENCIEUX (Agent Chaining) ────────────────
+        // Fire-and-forget : zéro blocage UX, s'efface si [VALIDE]
+        if ((resolvedAgentId === 'creatif' || resolvedAgentId === 'recherche') && fullReply.length > 400) {
+            (async () => {
+                const refineBadge = document.createElement("span");
+                refineBadge.style.cssText = "font-size:10px;color:var(--text3);font-style:italic;display:block;margin-top:6px;";
+                refineBadge.textContent = "⚙️ Auto-vérification interne...";
+                bubble.appendChild(refineBadge);
+
+                const auditPrompt = resolvedAgentId === 'creatif'
+                    ? `Tu es en mode AUDIT CRÉATIF. Analyse ce contenu avec précision chirurgicale. Vérifie : cohérence narrative, authenticité culturelle, absence de clichés, qualité cinématographique si applicable. Si le contenu est irréprochable, réponds UNIQUEMENT : [VALIDE]. Sinon, liste les corrections nécessaires en format chirurgical court.\n\n### CONTENU À AUDITER :\n${fullReply.slice(0, 3000)}`
+                    : `Tu es en mode AUDIT RECHERCHE. Analyse cette synthèse : croise les angles, détecte les contradictions non exposées, les potentielles hallucinations, le manque d'équilibre. Si tout est solide, réponds UNIQUEMENT : [VALIDE]. Sinon, liste les corrections en format chirurgical court.\n\n### SYNTHÈSE À AUDITER :\n${fullReply.slice(0, 3000)}`;
+
+                try {
+                    const auditRes = await fetch("/api/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            prompt: auditPrompt,
+                            systemInstruction: buildSystemInstruction("audit", false),
+                            agentId: "audit"
+                        })
+                    });
+
+                    if (!auditRes.ok) { refineBadge.remove(); return; }
+
+                    const reader2 = auditRes.body.getReader();
+                    const dec2 = new TextDecoder("utf-8");
+                    let auditReply = "";
+                    while (true) {
+                        const { done, value } = await reader2.read();
+                        if (done) break;
+                        auditReply += dec2.decode(value, { stream: true });
+                    }
+                    auditReply = auditReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+                    if (auditReply.toLowerCase().startsWith('[valide')) {
+                        refineBadge.remove(); // Propre : rien à corriger
+                    } else {
+                        refineBadge.style.cssText = "font-size:10px;color:var(--yellow);font-style:italic;display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(240,192,64,0.2);border-radius:8px;background:rgba(240,192,64,0.04);";
+                        refineBadge.innerHTML = `⚠️ <strong style="color:var(--yellow);">Note d'auto-correction :</strong><br>${escapeHtml(auditReply.slice(0, 500))}`;
+                    }
+                } catch (e) {
+                    refineBadge.remove();
+                    console.warn('[ChainAgent] Audit silencieux échoué :', e.message);
+                }
+            })();
+        }
+        // ── FIN AUTO-AUDIT SILENCIEUX ─────────────────────────────
+
         // Coloration syntaxique sur les blocs de code rendus
         if (typeof hljs !== 'undefined') {
             bubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
@@ -1553,7 +1657,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         // ==========================================
         // DÉBUT DE L'AJOUT : BOUTON AUDIT
         // ==========================================
-        if (resolvedAgentId === 'code' || resolvedAgentId === 'strategie') {
+        if (resolvedAgentId && resolvedAgentId !== 'audit') {
             const auditBtn = document.createElement("button");
             auditBtn.className = "copy-btn"; // On réutilise le style discret du bouton copier
             auditBtn.innerHTML = "⚖️ Auditer";
@@ -1786,6 +1890,15 @@ async function sendMessage() {
     // ==========================================
     
     let memoryContext = "";
+
+    // ── WEB READER : ingestion du contenu si une URL est détectée ──
+    const urlData = await extractUrlContent(messageText);
+    if (urlData) {
+        memoryContext += `### CONTENU WEB RÉCUPÉRÉ\nSource : ${urlData.url}\nTitre : ${urlData.title}\n\n${urlData.content}\n\n---\n\n`;
+        addMessage("bot", `<span style="font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;"><em>🔗 Ingestion : <strong>${urlData.title}</strong></em></span>`, true);
+    }
+    // ── FIN WEB READER ─────────────────────────────────────────────
+
     try {
         const memories = await searchMemory(messageText);
         if (memories && memories.length > 0) {
@@ -1892,6 +2005,30 @@ document.addEventListener("click", function(e) {
 
 window.useSuggestion = function(el) { userInput.value = el.textContent; userInput.focus(); };
 uploadBtn.addEventListener("click", function() { fileInput.click(); });
+
+// ── PASTE D'IMAGE (Ctrl+V) — Vision Multimodale ────────────
+document.addEventListener("paste", function(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles = [];
+    for (const item of items) {
+        if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) imageFiles.push(file);
+        }
+    }
+
+    if (imageFiles.length > 0) {
+        e.preventDefault();
+        addFiles(imageFiles);
+        const prev = userInput.placeholder;
+        userInput.placeholder = `📸 ${imageFiles.length} image(s) prête(s) — décris ce que tu veux analyser`;
+        setTimeout(() => { userInput.placeholder = prev; }, 3000);
+        userInput.focus();
+    }
+});
+// ── FIN PASTE D'IMAGE ───────────────────────────────────────
 fileInput.addEventListener("change", function() { if (fileInput.files.length) addFiles(fileInput.files); });
 
 document.addEventListener("dragover",  function(e) { e.preventDefault(); dropOverlay.classList.add("visible"); });
@@ -1922,10 +2059,25 @@ document.getElementById("messages").addEventListener("click", function(e) {
 // ============================================================
 //  INIT GLOBALE
 // ============================================================
+
+// ── PWA — Enregistrement du Service Worker ─────────────────
+function initPWA() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then(reg => {
+            reg.addEventListener('updatefound', () => {
+                console.log('[Pensée PWA] Nouvelle version disponible.');
+            });
+        })
+        .catch(err => console.warn('[Pensée PWA] SW non enregistré :', err));
+}
+// ── FIN PWA ─────────────────────────────────────────────────
+
 updateCredits();
 setStatus("ok");
 checkLocalAuth();
 initAgentSelector();
+initPWA();
 // ============================================================
 //  MOTEUR SANDBOX (Exécution Web)
 // ============================================================
