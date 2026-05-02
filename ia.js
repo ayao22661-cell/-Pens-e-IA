@@ -1,6 +1,7 @@
 // ============================================================
 //  PENSÉE IA — ia.js (localStorage, sans Supabase)
 // ============================================================
+import { getLiveContext } from './tools.js';
 
 const CONFIG = {
     maxCredits: 20,
