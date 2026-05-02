@@ -1403,14 +1403,19 @@
         <button id="liveAudioBtn" title="Mode vocal natif Gemini Live" style="font-size:12px;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:Syne,sans-serif;transition:all 0.2s;">
     <span style="width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;"></span> Live
 </button>
-        <button id="exportBtn" title="Exporter cette conversation en Markdown" style="font-size:12px;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 10px;cursor:pointer;transition:border-color 0.2s,color 0.2s;" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">⬇ Export</button>
-        <button id="memoryBtn" title="Voir la mémoire de cet espace de travail" style="font-size:12px;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 10px;cursor:pointer;transition:border-color 0.2s,color 0.2s;" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">🧠 Mémoire</button>
+        <!-- Menu condensé : Export + Mémoire -->
+        <button id="moreBtn" title="Plus d'options" onclick="document.getElementById('morePanel').style.display = document.getElementById('morePanel').style.display === 'none' ? 'block' : 'none'" style="font-size:14px;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 9px;cursor:pointer;transition:all 0.2s;line-height:1;" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">···</button>
+
+        <div id="morePanel" style="display:none;position:absolute;top:52px;right:8px;min-width:180px;background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:8px;z-index:300;box-shadow:var(--shadow);">
+            <button id="exportBtn" onclick="document.getElementById('morePanel').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'">⬇ Exporter</button>
+            <button id="memoryBtn" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'">🧠 Mémoire</button>
+        </div>
 
         <!-- Panneau mémoire -->
         <div id="memoryPanel" style="display:none;position:absolute;top:52px;right:8px;width:320px;max-height:400px;overflow-y:auto;background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:16px;z-index:200;box-shadow:var(--shadow);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                 <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.1em;font-family:'JetBrains Mono',monospace;">Mémoires · espace actif</span>
-                <button onclick="document.getElementById('memoryPanel').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;">✕</button>
+                <button onclick="document.getElementById('memoryPanel').style.display='none';" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;">✕</button>
             </div>
             <div id="memoryList"><em style="color:var(--text3);font-size:12px;">Chargement...</em></div>
         </div>
@@ -1481,7 +1486,7 @@
     <!-- Chargement de Supabase en version globale (UMD) pour éviter les erreurs CORS locales -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module" src="ia.js"></script>
-    <script type="module" src="audio.js"></script>
+    <script src="audio.js" defer></script>
     <script>
         // Masquer l'écran d'accueil dès qu'un message apparaît
         const messagesDiv = document.getElementById('messages');
@@ -1539,6 +1544,15 @@
                 configurable: true
             });
         })();
+    </script>
+    <script>
+        document.addEventListener('click', function(e) {
+            const panel = document.getElementById('morePanel');
+            const btn = document.getElementById('moreBtn');
+            if (panel && btn && !btn.contains(e.target) && !panel.contains(e.target)) {
+                panel.style.display = 'none';
+            }
+        });
     </script>
 </body>
 </html>
