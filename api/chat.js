@@ -16,7 +16,7 @@ const AGENTS = {
         temperature: 0.2,
         topP: 0.90,
         topK: 40,
-        maxOutputTokens: 32768,     // Fichiers complets, fonctions longues
+        maxOutputTokens: 65536,     // Fichiers complets, fonctions longues
         useSearch: false,
         preferredModel: null
     },
@@ -32,7 +32,7 @@ const AGENTS = {
         temperature: 1.0,
         topP: 0.98,
         topK: 64,
-        maxOutputTokens: 32768,     // Scripts longs, romans, scénarios complets
+        maxOutputTokens: 65536,     // Scripts longs, romans, scénarios complets
         useSearch: false,
         preferredModel: null
     },
@@ -92,7 +92,8 @@ export default async function handler(req) {
 
     // Modèles : si l'agent préfère un modèle, on le met en tête de cascade
     const baseModels = [
-        "gemini-2.5-flash",
+        "gemini-2.5-pro",      // 1M tokens, raisonnement maximal
+        "gemini-2.5-flash",    // 1M tokens, rapide
         "gemini-2.0-flash",
         "gemini-1.5-flash",
         "gemma-3-27b-it",
@@ -123,6 +124,15 @@ export default async function handler(req) {
                         inline_data: {
                             mime_type: file.mime,
                             data: file.base64
+                        }
+                    });
+                }
+                // Support URL image/vidéo directe
+                if (file.url) {
+                    parts.push({
+                        file_data: {
+                            mime_type: file.mime || "image/jpeg",
+                            file_uri: file.url
                         }
                     });
                 }
