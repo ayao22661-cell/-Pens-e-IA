@@ -1,5 +1,0 @@
-{
-  "functions": {
-    "api/live-proxy.js": { "runtime": "nodejs20.x" }
-  }
-}
