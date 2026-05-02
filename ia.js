@@ -1425,11 +1425,16 @@ window.renderMemoryTab = async function(tab) {
 //  CONSTRUCTION DU PROMPT — fenêtre glissante de contexte
 // ============================================================
 
-function buildPrompt(userMessage, files, memoryContext = "") {
+function buildPrompt(userMessage, files, memoryContext = "", webContext = "") {
     const CONTEXT_WINDOW = 40; // 40 messages au lieu de 20
     const recent = history.slice(-CONTEXT_WINDOW);
 
     let userPrompt = "";
+
+    // Contexte web en premier (priorité maximale)
+    if (webContext) {
+        userPrompt += webContext;
+    }
 
     if (files && files.length > 0) {
         userPrompt += "### FICHIERS JOINTS (PRIORITÉ HAUTE) :\n\n";
@@ -1499,18 +1504,85 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         }
     }
 
-    // Détection des mots-clés temporels pour forcer la recherche
+    // ── RECHERCHE WEB INTELLIGENTE ────────────────────────────
+    // Détection : mots-clés temporels OU agent Recherche actif
     const temporalKeywords = [
         "aujourd'hui", "ce mois", "cette semaine", "cette année", "récent", "récente",
         "dernière", "dernier", "maintenant", "actuellement", "actuel", "actuelle",
         "nouveau", "nouvelle", "nouveaux", "nouvelles", "2025", "2026", "vient de",
-        "dernières nouvelles", "quoi de neuf", "tendance", "tendances"
+        "dernières nouvelles", "quoi de neuf", "tendance", "tendances",
+        "actualité", "actualités", "info", "infos", "news", "prix de", "cours de",
+        "qui est", "c'est quoi", "qu'est-ce que", "combien coûte", "compare"
     ];
-    const needsSearch = temporalKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+    const needsSearch = resolvedAgentId === 'recherche'
+        || temporalKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+
+    // Recherche web réelle : on fait la recherche AVANT d'appeler Gemini
+    let webContext = "";
+    let webSources = [];
+
+    if (needsSearch) {
+        try {
+            // Affichage discret : badge de recherche en cours
+            const searchBadge = document.createElement("div");
+            searchBadge.id = "search-badge";
+            searchBadge.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
+            searchBadge.innerHTML = "🔍 Recherche web en cours...";
+            messagesEl.appendChild(searchBadge);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+
+            const searchRes = await fetch("/api/search", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: userMessage, count: 5 })
+            });
+
+            document.getElementById("search-badge")?.remove();
+
+            if (searchRes.ok) {
+                const searchData = await searchRes.json();
+                webSources = searchData.results || [];
+
+                if (webSources.length > 0) {
+                    // Enrichissement : lecture du contenu complet de la 1ère source
+                    try {
+                        const fetchRes = await fetch("/api/fetch-url", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ url: webSources[0].url }),
+                            signal: AbortSignal.timeout(6000)
+                        });
+                        if (fetchRes.ok) {
+                            const fetchData = await fetchRes.json();
+                            if (fetchData.text) webSources[0].fullContent = fetchData.text.slice(0, 4000);
+                        }
+                    } catch (_) { /* non bloquant */ }
+
+                    // Construction du contexte web injecté dans le prompt
+                    webContext = "### DONNÉES WEB EN TEMPS RÉEL (priorité maximale sur ta mémoire d'entraînement) :\n\n";
+
+                    // Réponse directe Serper (answerBox / knowledgeGraph)
+                    if (searchData.directAnswer) {
+                        webContext += `RÉPONSE DIRECTE : ${searchData.directAnswer}\n\n`;
+                    }
+
+                    webSources.forEach((r, i) => {
+                        webContext += `[SOURCE ${i + 1}] ${r.title}\nURL : ${r.url}\nExtrait : ${r.snippet}\n`;
+                        if (r.fullContent) webContext += `Contenu complet :\n${r.fullContent}\n`;
+                        webContext += "\n";
+                    });
+                    webContext += "---\nCite les sources par leur numéro [SOURCE N] dans ta réponse chaque fois que tu utilises une information issue de cette recherche.\n\n";
+                }
+            }
+        } catch (searchErr) {
+            console.warn("[Search] Recherche non bloquante échouée :", searchErr.message);
+            document.getElementById("search-badge")?.remove();
+        }
+    }
 
     // Construction des deux couches séparées
     const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch);
-    const userPrompt = buildPrompt(userMessage, files, memoryContext);
+    const userPrompt = buildPrompt(userMessage, files, memoryContext, webContext);
 
     const binaryFiles = files
         .filter(f => f.content && f.content.type === "binary")
@@ -1771,6 +1843,39 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         history.push({ role: "user", content: userMessage });
         history.push({ role: "assistant", content: fullReply });
         await saveMessageToDB("assistant", fullReply);
+
+        // ── SOURCES WEB CITÉES ── affichage sous la réponse ──────
+        if (webSources && webSources.length > 0) {
+            const sourcesDiv = document.createElement("div");
+            sourcesDiv.style.cssText = "margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;";
+            const label = document.createElement("span");
+            label.style.cssText = "font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;width:100%;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.08em;";
+            label.textContent = "Sources";
+            sourcesDiv.appendChild(label);
+
+            webSources.forEach((src, i) => {
+                const chip = document.createElement("a");
+                chip.href = src.url;
+                chip.target = "_blank";
+                chip.rel = "noopener noreferrer";
+                chip.style.cssText = "display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--text2);text-decoration:none;transition:border-color 0.2s,color 0.2s;max-width:240px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;";
+                chip.onmouseenter = () => { chip.style.borderColor = "var(--accent)"; chip.style.color = "var(--accent)"; };
+                chip.onmouseleave = () => { chip.style.borderColor = "var(--border2)"; chip.style.color = "var(--text2)"; };
+
+                const srcIcon = src.source === 'google' ? '🔵' : '🦆';
+                try {
+                    const domain = new URL(src.url).hostname.replace('www.', '');
+                    chip.innerHTML = `<span style="font-size:10px;opacity:0.6">[${i+1}]</span> ${escapeHtml(domain)}`;
+                } catch {
+                    chip.innerHTML = `<span style="font-size:10px;opacity:0.6">[${i+1}]</span> Source`;
+                }
+                chip.title = src.title;
+                sourcesDiv.appendChild(chip);
+            });
+
+            msgDiv.appendChild(sourcesDiv);
+        }
+        // ── FIN SOURCES ──────────────────────────────────────────
 
         creditsLeft--;
         await useCreditInDB();
