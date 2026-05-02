@@ -1591,19 +1591,54 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                 webSources = searchData.results || [];
 
                 if (webSources.length > 0) {
-                    // Enrichissement : lecture du contenu complet de la 1ère source
-                    try {
-                        const fetchRes = await fetch("/api/fetch-url", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ url: webSources[0].url }),
-                            signal: AbortSignal.timeout(6000)
-                        });
-                        if (fetchRes.ok) {
-                            const fetchData = await fetchRes.json();
-                            if (fetchData.text) webSources[0].fullContent = fetchData.text.slice(0, 4000);
+                    // ── ENRICHISSEMENT PARALLÈLE — 3 sources simultanées, 0 appel Serper supplémentaire ──
+                    // On anime le badge pendant les fetches
+                    const badge = document.getElementById("search-badge");
+                    if (badge) {
+                        badge.style.display = "block";
+                        badge.innerHTML = "🔍 Lecture des sources en parallèle...";
+                    } else {
+                        const b = document.createElement("div");
+                        b.id = "search-badge";
+                        b.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
+                        b.innerHTML = "🔍 Lecture des sources en parallèle...";
+                        messagesEl.appendChild(b);
+                    }
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+                    // Sélection intelligente : on prend les 3 premières sources non-wiki/reddit
+                    // (contenu plus dense que les agrégateurs)
+                    const FETCH_COUNT = 3;
+                    const CHAR_LIMIT  = 3000; // par source — total ~9000 chars injectés
+                    const fetchTargets = webSources
+                        .filter(r => r.url && !/reddit\.com|wikipedia\.org\/wiki\/(?!.{1,50}$)/i.test(r.url))
+                        .slice(0, FETCH_COUNT);
+
+                    // Promise.allSettled : si une source timeout, les autres continuent
+                    const fetchResults = await Promise.allSettled(
+                        fetchTargets.map(src =>
+                            fetch("/api/fetch-url", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ url: src.url }),
+                                signal: AbortSignal.timeout(6000)
+                            })
+                            .then(r => r.ok ? r.json() : null)
+                            .catch(() => null)
+                        )
+                    );
+
+                    // Injection des contenus récupérés dans les objets source
+                    fetchTargets.forEach((src, i) => {
+                        const result = fetchResults[i];
+                        if (result.status === "fulfilled" && result.value?.text) {
+                            // Indexation dans webSources original (par URL)
+                            const idx = webSources.findIndex(s => s.url === src.url);
+                            if (idx !== -1) webSources[idx].fullContent = result.value.text.slice(0, CHAR_LIMIT);
                         }
-                    } catch (_) { /* non bloquant */ }
+                    });
+
+                    document.getElementById("search-badge")?.remove();
 
                     // Construction du contexte web injecté dans le prompt
                     webContext = "### DONNÉES WEB EN TEMPS RÉEL (priorité maximale sur ta mémoire d'entraînement) :\n\n";
@@ -1618,7 +1653,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                         if (r.fullContent) webContext += `Contenu complet :\n${r.fullContent}\n`;
                         webContext += "\n";
                     });
-                    webContext += "---\nCite les sources par leur numéro [SOURCE N] dans ta réponse chaque fois que tu utilises une information issue de cette recherche.\n\n";
+                    webContext += "---\nCite les sources par leur numéro [SOURCE N] dans ta réponse. Lorsque plusieurs sources confirment un même fait, croise-les explicitement.\n\n";
                 }
             }
         } catch (searchErr) {
