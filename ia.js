@@ -858,11 +858,50 @@ async function loadHistoryFromDB() {
             }
         }
 
-        addMessage(
-            msg.role === "assistant" ? "bot" : "user",
-            formatResponse(finalContent),
-            true
-        );
+        // Détection des marqueurs d'image pour re-rendu fidèle
+        const imgUrlMatch = finalContent.match(/^\[IMAGE_URL:([^|]+)\|([^\]]*)\]$/);
+        const imgB64Match = finalContent.match(/^\[IMAGE_B64:([^|]+)\|([^\]]*)\]\n([\s\S]+)$/);
+
+        if (imgUrlMatch || imgB64Match) {
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "msg bot";
+            const lbl = document.createElement("span");
+            lbl.className = "msg-label";
+            lbl.textContent = "Pensée · 🎨 Image";
+            msgDiv.appendChild(lbl);
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+
+            if (imgUrlMatch) {
+                const [, url, rawPrompt] = imgUrlMatch;
+                const safePrompt = rawPrompt.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+                bubble.innerHTML = `<span style="font-size:10px;color:var(--text3);font-family:monospace;">Pollinations AI · Flux</span><br>
+                    <img src="${url}" alt="${escapeHtml(safePrompt)}"
+                         style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy"
+                         onerror="this.parentElement.innerHTML+='<em style=color:var(--red)>Image expirée ou indisponible.</em>'">
+                    <a href="${url}" download target="_blank"
+                       style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
+            } else {
+                const [, mimeType, rawPrompt, b64] = imgB64Match;
+                const imgSrc = `data:${mimeType};base64,${b64.trim()}`;
+                const safePrompt = rawPrompt.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+                bubble.innerHTML = `<span style="font-size:10px;color:var(--text3);font-family:monospace;">Imagen 3 · Google</span><br>
+                    <img src="${imgSrc}" alt="${escapeHtml(safePrompt)}"
+                         style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy">
+                    <a href="${imgSrc}" download="pensee-ia-image.png"
+                       style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
+            }
+
+            msgDiv.appendChild(bubble);
+            messagesEl.appendChild(msgDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        } else {
+            addMessage(
+                msg.role === "assistant" ? "bot" : "user",
+                formatResponse(finalContent),
+                true
+            );
+        }
     }
 
     const sug = document.getElementById("suggestions");
@@ -1797,7 +1836,12 @@ async function generateImage(prompt) {
         messagesEl.appendChild(msgDiv);
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
-        await saveMessageToDB("assistant", `🎨 Image générée pour : "${prompt}"`);
+        // Sauvegarde avec marqueur structuré pour permettre le re-rendu au rechargement
+        if (data.type === "base64") {
+            await saveMessageToDB("assistant", `[IMAGE_B64:${data.mimeType}|${escapeHtml(prompt)}]\n${data.data}`);
+        } else {
+            await saveMessageToDB("assistant", `[IMAGE_URL:${data.url}|${escapeHtml(prompt)}]`);
+        }
 
     } catch (err) {
         removeTyping();
