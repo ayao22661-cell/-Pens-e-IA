@@ -1916,7 +1916,7 @@ const liveContext = await getLiveContext(messageText);
     try {
         // L'API est appelée avec les binaires LOCAUX pour aller plus vite, 
         // et Supabase a stocké les liens permanents en BDD.
-        await callAPI(messageText, files, memoryContext);
+        await callAPI(messageText, files, memoryContext + liveContext);
     } finally {
         // Restauration de l'interface garantie à 100%
         removeTyping();
