@@ -1812,7 +1812,10 @@ async function sendMessage() {
     if (sug) sug.style.display = "none";
 
     const messageText = text || "Analyse ce fichier et explique ce qu'il fait.";
-    let dbMessageText = messageText;
+let dbMessageText = messageText;
+
+// APPEL INVISIBLE DES API (33 sources)
+const liveContext = await getLiveContext(messageText);
 
     // ==========================================
     // 1. VERROUILLAGE IMMÉDIAT DE L'INTERFACE
