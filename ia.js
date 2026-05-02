@@ -902,11 +902,55 @@ async function loadHistoryFromDB() {
             messagesEl.appendChild(msgDiv);
             messagesEl.scrollTop = messagesEl.scrollHeight;
         } else {
-            addMessage(
-                msg.role === "assistant" ? "bot" : "user",
-                formatResponse(finalContent),
-                true
-            );
+            // Extraction des sources sérialisées si présentes dans le contenu DB
+            const sourcesMatch = finalContent.match(/\[WEB_SOURCES:(\[[\s\S]*?\])\]/);
+            const restoredSources = sourcesMatch
+                ? (() => { try { return JSON.parse(sourcesMatch[1]); } catch { return null; } })()
+                : null;
+
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "msg " + (msg.role === "assistant" ? "bot" : "user");
+            const lbl = document.createElement("span");
+            lbl.className = "msg-label";
+            lbl.textContent = msg.role === "assistant" ? "Pensée" : "Toi";
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            // formatResponse supprime déjà le marqueur [WEB_SOURCES:...] avant le rendu
+            bubble.innerHTML = formatResponse(finalContent);
+            msgDiv.appendChild(lbl);
+            msgDiv.appendChild(bubble);
+
+            // Reconstruction du bloc sources si trouvées
+            if (restoredSources && restoredSources.length > 0) {
+                const sourcesDiv = document.createElement("div");
+                sourcesDiv.style.cssText = "margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;";
+                const srcLabel = document.createElement("span");
+                srcLabel.style.cssText = "font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;width:100%;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.08em;";
+                srcLabel.textContent = "Sources";
+                sourcesDiv.appendChild(srcLabel);
+
+                restoredSources.forEach((src, i) => {
+                    const chip = document.createElement("a");
+                    chip.href = src.url;
+                    chip.target = "_blank";
+                    chip.rel = "noopener noreferrer";
+                    chip.style.cssText = "display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--text2);text-decoration:none;transition:border-color 0.2s,color 0.2s;max-width:240px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;";
+                    chip.onmouseenter = () => { chip.style.borderColor = "var(--accent)"; chip.style.color = "var(--accent)"; };
+                    chip.onmouseleave = () => { chip.style.borderColor = "var(--border2)"; chip.style.color = "var(--text2)"; };
+                    try {
+                        const domain = new URL(src.url).hostname.replace('www.', '');
+                        chip.innerHTML = `<span style="font-size:10px;opacity:0.6">[${i+1}]</span> ${escapeHtml(domain)}`;
+                    } catch {
+                        chip.innerHTML = `<span style="font-size:10px;opacity:0.6">[${i+1}]</span> Source`;
+                    }
+                    chip.title = src.title || src.url;
+                    sourcesDiv.appendChild(chip);
+                });
+                msgDiv.appendChild(sourcesDiv);
+            }
+
+            messagesEl.appendChild(msgDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
         }
     }
 
@@ -1059,6 +1103,9 @@ function formatResponse(text) {
     let cleanText = isThinking
         ? text.replace(/<think>[\s\S]*$/i, "")
         : text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+    // Suppression du marqueur sources avant rendu Markdown (ne doit jamais apparaître dans la bulle)
+    cleanText = cleanText.replace(/\n?\[WEB_SOURCES:\[[\s\S]*?\]\]/g, "");
 
     if (cleanText.trim() === "") {
         if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
@@ -1841,8 +1888,18 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
 
         // Mise à jour contexte
         history.push({ role: "user", content: userMessage });
+        // L'IA ne voit pas le marqueur sources dans le contexte futur
         history.push({ role: "assistant", content: fullReply });
-        await saveMessageToDB("assistant", fullReply);
+
+        // Sérialisation des sources dans le contenu sauvegardé en DB
+        let contentToSave = fullReply;
+        if (webSources && webSources.length > 0) {
+            const sourcesJson = JSON.stringify(
+                webSources.map(s => ({ title: s.title || '', url: s.url || '', source: s.source || '' }))
+            );
+            contentToSave += `\n[WEB_SOURCES:${sourcesJson}]`;
+        }
+        await saveMessageToDB("assistant", contentToSave);
 
         // ── SOURCES WEB CITÉES ── affichage sous la réponse ──────
         if (webSources && webSources.length > 0) {
@@ -1862,14 +1919,13 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                 chip.onmouseenter = () => { chip.style.borderColor = "var(--accent)"; chip.style.color = "var(--accent)"; };
                 chip.onmouseleave = () => { chip.style.borderColor = "var(--border2)"; chip.style.color = "var(--text2)"; };
 
-                const srcIcon = src.source === 'google' ? '🔵' : '🦆';
                 try {
                     const domain = new URL(src.url).hostname.replace('www.', '');
                     chip.innerHTML = `<span style="font-size:10px;opacity:0.6">[${i+1}]</span> ${escapeHtml(domain)}`;
                 } catch {
                     chip.innerHTML = `<span style="font-size:10px;opacity:0.6">[${i+1}]</span> Source`;
                 }
-                chip.title = src.title;
+                chip.title = src.title || src.url;
                 sourcesDiv.appendChild(chip);
             });
 
