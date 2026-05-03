@@ -1673,9 +1673,9 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
     // Mise à jour du badge agent dans l'UI
     updateAgentBadge(resolvedAgentId);
 
-    // On récupère la session active depuis Supabase
-const { data: { session } } = await supabase.auth.getSession();
-const token = session?.access_token || "";
+try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
 
 const response = await fetch("/api/chat", {
     method: "POST",
