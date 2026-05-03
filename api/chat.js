@@ -1,6 +1,6 @@
 // ============================================================
 //  PENSÉE IA — api/chat.js (Vercel Edge & Streaming)
-//  Multi-agents, systemInstruction natif Google, cascade blindée
+//  Multi-agents, Security Validation, Intelligent Model Routing
 // ============================================================
 
 export const config = {
@@ -9,32 +9,28 @@ export const config = {
 
 // ============================================================
 //  CONFIGURATION DES AGENTS
-//  Chaque agent a : température, outils, modèle prioritaire
 // ============================================================
 const AGENTS = {
     code: {
         temperature: 0.2,
         topP: 0.90,
         topK: 40,
-        maxOutputTokens: 65536,     // Fichiers complets, fonctions longues
+        maxOutputTokens: 65536,
         useSearch: false,
-        preferredModel: null
     },
     recherche: {
         temperature: 0.6,
         topP: 0.95,
         topK: 64,
-        maxOutputTokens: 8192,      // Synthèse dense, pas de roman
+        maxOutputTokens: 8192,
         useSearch: true,
-        preferredModel: "gemini-2.5-flash"
     },
     creatif: {
         temperature: 1.0,
         topP: 0.98,
         topK: 64,
-        maxOutputTokens: 65536,     // Scripts longs, romans, scénarios complets
+        maxOutputTokens: 65536,
         useSearch: false,
-        preferredModel: null
     },
     strategie: {
         temperature: 0.7,
@@ -42,23 +38,20 @@ const AGENTS = {
         topK: 64,
         maxOutputTokens: 8192,
         useSearch: true,
-        preferredModel: null
     },
     visionnaire: {
         temperature: 0.9,
         topP: 0.97,
         topK: 64,
-        maxOutputTokens: 6144,      // Insight concentré, pas de digression infinie
+        maxOutputTokens: 6144,
         useSearch: true,
-        preferredModel: "gemini-2.5-flash"
     },
     audit: {
         temperature: 0.1,
         topP: 0.85,
         topK: 32,
-        maxOutputTokens: 8192,      // Rapport structuré, pas un roman
+        maxOutputTokens: 8192,
         useSearch: false,
-        preferredModel: null
     },
     default: {
         temperature: 0.5,
@@ -66,7 +59,6 @@ const AGENTS = {
         topK: 64,
         maxOutputTokens: 16384,
         useSearch: false,
-        preferredModel: null
     }
 };
 
@@ -75,6 +67,63 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Méthode non autorisée" }), { status: 405 });
     }
 
+    // ============================================================
+    //  1. SÉCURITÉ : VALIDATION SUPABASE (EDGE)
+    // ============================================================
+    const authHeader = req.headers.get('Authorization');
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // Clé secrète pour bypasser les RLS
+
+    // Si le système est configuré pour la prod (clés présentes), on verrouille.
+    if (SUPABASE_URL && SUPABASE_KEY) {
+        if (!authHeader) {
+            return new Response(JSON.stringify({ error: "Accès refusé. Token manquant." }), { status: 401 });
+        }
+
+        try {
+            const token = authHeader.replace('Bearer ', '');
+            
+            // A. Vérification de l'identité via API Supabase
+            const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_KEY }
+            });
+            if (!userRes.ok) throw new Error("Token expiré ou invalide.");
+            const user = await userRes.json();
+
+            // B. Récupération des crédits dans la table profiles
+            const profRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=credits_used`, {
+                headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY }
+            });
+            const profiles = await profRes.json();
+            const creditsUsed = profiles[0]?.credits_used || 0;
+
+            // Limite fixée à 20 crédits par jour
+            if (creditsUsed >= 20) {
+                return new Response(JSON.stringify({ error: "Quota journalier épuisé (20/20)." }), { status: 403 });
+            }
+
+            // C. Débit immédiat du crédit pour éviter les doubles exécutions (Race Conditions)
+            await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`, {
+                method: 'PATCH',
+                headers: { 
+                    'Authorization': `Bearer ${SUPABASE_KEY}`, 
+                    'apikey': SUPABASE_KEY,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal' // Optimisation de la bande passante
+                },
+                body: JSON.stringify({ credits_used: creditsUsed + 1 })
+            });
+
+        } catch (e) {
+            return new Response(JSON.stringify({ error: "Erreur de validation: " + e.message }), { status: 401 });
+        }
+    } else {
+        console.warn("[PENSÉE] Mode dev : Variables Supabase manquantes, sécurité bypassée.");
+    }
+
+    // ============================================================
+    //  2. TRAITEMENT DE LA REQUÊTE
+    // ============================================================
     const bodyReq = await req.json().catch(() => ({}));
     const { prompt, files, systemInstruction, agentId } = bodyReq;
 
@@ -87,78 +136,72 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
-    // Récupération de la config agent (fallback sur default)
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
-    // Modèles : si l'agent préfère un modèle, on le met en tête de cascade
-    const baseModels = [
-        "gemini-2.5-pro",      // 1M tokens, raisonnement maximal
-        "gemini-2.5-flash",    // 1M tokens, rapide
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemma-3-27b-it",
-        "gemma-3-12b-it",
-        "gemma-3-4b-it",
-        "gemma-3-2b-it",
-        "gemma-3-1b-it"
-    ];
-
-    let modelsToTry = baseModels;
-    if (agentConfig.preferredModel) {
-        // Mise en tête du modèle préféré sans doublon
+    // ============================================================
+    //  3. MODEL ROUTING INTELLIGENT
+    // ============================================================
+    let modelsToTry = [];
+    
+    if (agentId === 'code' || agentId === 'audit') {
+        // Tâches complexes : Priorité absolue à Gemini 2.5 Pro (1M tokens)
         modelsToTry = [
-            agentConfig.preferredModel,
-            ...baseModels.filter(m => m !== agentConfig.preferredModel)
+            "gemini-2.5-pro",
+            "gemini-2.5-flash", 
+            "gemini-2.0-flash"
+        ];
+    } else if (agentId === 'creatif' || (prompt.length < 150 && (!files || files.length === 0))) {
+        // Tâches simples ou purement créatives : Rapidité et Économie (Flash en priorité)
+        modelsToTry = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash"
+        ];
+    } else {
+        // Mix standard pour recherche, stratégie, visionnaire
+        modelsToTry = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-2.5-pro"
         ];
     }
 
+    // Fallback de sécurité global si Google censure/rate
+    modelsToTry.push("gemma-3-27b-it", "gemma-3-12b-it");
+
+    // ============================================================
+    //  4. EXÉCUTION EN CASCADE
+    // ============================================================
     for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
         const parts = [{ text: prompt }];
 
-        // Ajout des fichiers binaires
         if (files && files.length > 0) {
             files.forEach(file => {
                 if (file.base64) {
                     parts.push({
-                        inline_data: {
-                            mime_type: file.mime,
-                            data: file.base64
-                        }
+                        inline_data: { mime_type: file.mime, data: file.base64 }
                     });
                 }
-                // Support URL image/vidéo directe
                 if (file.url) {
                     parts.push({
-                        file_data: {
-                            mime_type: file.mime || "image/jpeg",
-                            file_uri: file.url
-                        }
+                        file_data: { mime_type: file.mime || "image/jpeg", file_uri: file.url }
                     });
                 }
             });
         }
 
-        // ── Gestion du systemInstruction selon le modèle ──────────────
-        // Gemma ne supporte PAS systemInstruction → on réinjecte dans le message
-        // Gemini supporte le canal natif → on l'utilise
+        // Gemma ne supporte PAS systemInstruction nativement
         let finalParts = parts;
         if (isGemma && systemInstruction) {
             finalParts = [
-                {
-                    text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text
-                },
-                ...parts.slice(1) // Fichiers binaires intacts
+                { text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text },
+                ...parts.slice(1)
             ];
         }
 
-        // ── Configuration des outils (Search & Code Interpreter) ──────
         const canUseSearch = !isGemma && agentConfig.useSearch;
-        // Activation de l'exécution de code pour les profils techniques et analytiques
         const canUseCodeExecution = !isGemma && ["code", "audit", "strategie", "default"].includes(agentId);
 
-        // Sur Gemma : on neutralise l'instruction google_search dans le system prompt
-        // pour éviter la contradiction "tu DOIS chercher" sur un modèle sans accès web
         let finalSystemInstruction = systemInstruction;
         if (isGemma && systemInstruction) {
             finalSystemInstruction = systemInstruction
@@ -183,10 +226,7 @@ export default async function handler(req) {
         let activeTools = [];
         if (canUseSearch) activeTools.push({ google_search: {} });
         if (canUseCodeExecution) activeTools.push({ codeExecution: {} });
-
-        if (activeTools.length > 0) {
-            body.tools = activeTools;
-        }
+        if (activeTools.length > 0) body.tools = activeTools;
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
@@ -204,7 +244,6 @@ export default async function handler(req) {
                         const decoder = new TextDecoder();
                         let buffer = "";
 
-                        // Avertissement silencieux si Gemma (sans révéler le modèle)
                         if (isGemma && agentConfig.useSearch) {
                             controller.enqueue(new TextEncoder().encode("⚠️ *Action dégradée : Modèle local activé. La recherche web demandée est indisponible.*\n\n"));
                         }
@@ -233,7 +272,7 @@ export default async function handler(req) {
                                                 controller.enqueue(new TextEncoder().encode(textChunk));
                                             }
                                         } catch (e) {
-                                            // Fragment JSON incomplet, ignoré
+                                            // Ignore parsing errors for partial JSON
                                         }
                                     }
                                 }
@@ -256,17 +295,17 @@ export default async function handler(req) {
             }
 
             if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
-                continue;
+                continue; // Failover sur le modèle suivant
             }
 
             const errorData = await response.json().catch(() => ({}));
-            const errMsg = errorData.error?.message || `Erreur de l'API (${response.status})`;
-            return new Response(JSON.stringify({ error: errMsg }), { status: response.status });
+            return new Response(JSON.stringify({ error: errorData.error?.message || `Erreur API (${response.status})` }), { status: response.status });
 
         } catch (fetchError) {
-            continue;
+            continue; // Failover sur erreur réseau
         }
     }
 
+    // Si on sort de la boucle, tous les modèles ont échoué
     return new Response(JSON.stringify({ error: "Serveurs IA saturés. Réessaie dans quelques secondes." }), { status: 503 });
 }
