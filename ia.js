@@ -1975,7 +1975,6 @@ if (!response.ok) {
         // ── FIN SOURCES ──────────────────────────────────────────
 
         creditsLeft--;
-        await useCreditInDB();
         updateCredits();
         if (creditsLeft > 0) setStatus("ok");
 
