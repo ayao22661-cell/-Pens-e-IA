@@ -1,7 +1,6 @@
 // ============================================================
 //  PENSÉE IA — api/search.js
-//  Recherche web : Serper.dev (Google réel) → fallback DuckDuckGo
-//  Retourne jusqu'à 5 résultats {title, url, snippet}
+//  Tavily Search API (1000 req/mois gratuit) → fallback DuckDuckGo
 // ============================================================
 
 export const config = { runtime: 'edge' };
@@ -18,53 +17,47 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: 'Requête vide.' }), { status: 400 });
     }
 
-    const SERPER_KEY = process.env.SERPER_API_KEY;
+    const TAVILY_KEY = process.env.TAVILY_API_KEY;
 
-    // ── TENTATIVE 1 : Serper.dev (résultats Google réels, sans restriction) ──
-    if (SERPER_KEY) {
+    // ── TENTATIVE 1 : Tavily Search (1000 req/mois gratuit, sans CB) ──
+    if (TAVILY_KEY) {
         try {
-            const res = await fetch("https://google.serper.dev/search", {
+            const res = await fetch("https://api.tavily.com/search", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-API-KEY": SERPER_KEY
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    q:   query,
-                    gl:  "ci",
-                    hl:  "fr",
-                    num: Math.min(count, 5)
+                    api_key:        TAVILY_KEY,
+                    query:          query,
+                    search_depth:   "basic",       // 1 crédit/req (vs 2 pour "advanced")
+                    max_results:    Math.min(count, 5),
+                    include_answer: true,           // Retourne une réponse directe si dispo
+                    include_raw_content: false
                 }),
-                signal: AbortSignal.timeout(7000)
+                signal: AbortSignal.timeout(8000)
             });
 
-            if (!res.ok) throw new Error(`Serper ${res.status}`);
+            if (!res.ok) throw new Error(`Tavily ${res.status}`);
 
             const data = await res.json();
 
-            const items = (data.organic || []).slice(0, count).map(r => ({
+            const items = (data.results || []).slice(0, count).map(r => ({
                 title:   r.title   || '',
-                url:     r.link    || '',
-                snippet: r.snippet || '',
-                source:  'serper'
+                url:     r.url     || '',
+                snippet: r.content || '',
+                source:  'tavily'
             }));
 
-            let directAnswer = null;
-            if (data.answerBox?.answer)           directAnswer = data.answerBox.answer;
-            else if (data.answerBox?.snippet)     directAnswer = data.answerBox.snippet;
-            else if (data.knowledgeGraph?.description) directAnswer = data.knowledgeGraph.description;
-
             return new Response(JSON.stringify({
-                results: items,
-                directAnswer,
-                source: 'serper'
+                results:     items,
+                directAnswer: data.answer || null,
+                source:      'tavily'
             }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }
             });
 
         } catch (e) {
-            console.warn('[Search] Serper échoué :', e.message);
+            console.warn('[Search] Tavily échoué :', e.message);
         }
     }
 
