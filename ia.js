@@ -1673,28 +1673,34 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
     // Mise à jour du badge agent dans l'UI
     updateAgentBadge(resolvedAgentId);
 
-    try {
-        const response = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                prompt: userPrompt,
-                systemInstruction: systemInstruction,
-                agentId: resolvedAgentId || "default",
-                files: binaryFiles.length > 0 ? binaryFiles : undefined
-            })
-        });
+    // On récupère la session active depuis Supabase
+const { data: { session } } = await supabase.auth.getSession();
+const token = session?.access_token || "";
 
-        if (!response.ok) {
-            let errMsg = "Erreur HTTP " + response.status;
-            try {
-                const errData = await response.json();
-                errMsg = errData.error || errMsg;
-            } catch(e) {}
-            addMessage("bot", "❌ Erreur : " + errMsg, false);
-            setStatus("err");
-            return;
-        }
+const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}` // Injection du token ici
+    },
+    body: JSON.stringify({
+        prompt: userPrompt,
+        systemInstruction: systemInstruction,
+        agentId: resolvedAgentId || "default",
+        files: binaryFiles.length > 0 ? binaryFiles : undefined
+    })
+});
+
+if (!response.ok) {
+    let errMsg = "Erreur HTTP " + response.status;
+    try {
+        const errData = await response.json();
+        errMsg = errData.error || errMsg;
+    } catch(e) {}
+    addMessage("bot", "❌ Erreur : " + errMsg, false);
+    setStatus("err");
+    return;
+}
 
         removeTyping();
 
