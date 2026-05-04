@@ -2020,8 +2020,15 @@ if (!response.ok) {
                     // Le PDF est toujours un data-URI base64 — aucun stockage externe
                     const fileChipHtml = `<a href="${pdfData.data}" download="${label}" class="file-chip pdf-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
 
-                    // Injection dans la bulle — le PDF reste dans le message
-                    bubble.innerHTML = formatResponse(fullReply) + fileChipHtml;
+                    // Injection dans la bulle — texte dans innerHTML, chip en nœud séparé
+                    bubble.innerHTML = formatResponse(fullReply);
+                    if (typeof hljs !== 'undefined') {
+                        bubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+                    }
+                    const chipNode = document.createElement("div");
+                    chipNode.className = "pdf-chip-wrapper";
+                    chipNode.innerHTML = fileChipHtml;
+                    bubble.appendChild(chipNode);
 
                 } catch (pdfErr) {
                     pdfBadge.remove();
@@ -2034,7 +2041,11 @@ if (!response.ok) {
         // FIN DE L'AJOUT : INTERCEPTEUR PDF
         // ==========================================
 
-        bubble.innerHTML = formatResponse(fullReply);
+        // Si un PDF est en cours de génération, ne pas écraser la bulle —
+        // l'async block ci-dessus s'en charge avec appendChild.
+        if (!pdfMatch) {
+            bubble.innerHTML = formatResponse(fullReply);
+        }
         // Coloration syntaxique sur les blocs de code rendus
         if (typeof hljs !== 'undefined') {
             bubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
