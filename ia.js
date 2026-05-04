@@ -1957,7 +1957,9 @@ if (!response.ok) {
         // ==========================================
         // DÉBUT DE L'AJOUT : INTERCEPTEUR PDF
         // ==========================================
-        const pdfMarkerRegex = /\[GENERATE_PDF:\s*([^|]+)\|([^\]]+)\]/i;
+        // CORRECTIF : le contenu HTML peut contenir des "]", on utilise un regex
+        // qui capture jusqu'au dernier "]" de la ligne (greedy sur le contenu).
+        const pdfMarkerRegex = /\[GENERATE_PDF:\s*([^|]+)\|([\s\S]+?)\](?=\s*$|\s*\n|$)/i;
         const pdfMatch = fullReply.match(pdfMarkerRegex);
 
         if (pdfMatch) {
