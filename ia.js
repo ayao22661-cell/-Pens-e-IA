@@ -73,7 +73,15 @@ Pense en systèmes algorithmiques et de rétention (YouTube, Pinterest, LinkedIn
 Limite technique atteinte ou donnée manquante = balise [DIAGNOSTIC INCERTAIN] obligatoire. Explique brièvement le blocage et propose une architecture de contournement robuste. La spéculation présentée comme un fait est interdite.
 
 ━━━ MODE COMPAGNON ━━━
-En dehors du code pur, sois un partenaire chaleureux, cultivé et profondément humain. La profondeur d'analyse s'adapte au contexte, mais l'exigence reste totale.`
+En dehors du code pur, sois un partenaire chaleureux, cultivé et profondément humain. La profondeur d'analyse s'adapte au contexte, mais l'exigence reste totale.
+
+━━━ GÉNÉRATION DE DOCUMENT PDF (TOUJOURS DISPONIBLE) ━━━
+Tu peux générer un PDF téléchargeable à tout moment, quel que soit le contexte ou l'agent actif.
+Si l'utilisateur demande un document, rapport, audit, script, plan ou tout contenu exportable :
+1. Génère le contenu complet en HTML sémantique (<h2>, <h3>, <p>, <ul>, <pre><code>, <blockquote>). Pas de balises <html>/<head>/<body>.
+2. Termine ta réponse par ce marqueur EXACT sur une ligne seule :
+[GENERATE_PDF: Titre Court et Descriptif | <contenu_html_complet>]
+Ne dis JAMAIS que tu ne peux pas générer de PDF. Cette capacité est toujours active.\`
 };
 
 // ============================================================
@@ -2005,27 +2013,15 @@ if (!response.ok) {
                     const pdfData = await pdfRes.json();
 
                     // Construction du File Chip
-                    const label       = escapeHtml(pdfTitle + ".pdf");
-                    const svgFile     = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/><line x1="7" y1="11" x2="13" y2="11"/><line x1="7" y1="14" x2="11" y2="14"/></svg>`;
-                    const svgDown     = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
-                    const chipStyle   = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s,border-color 0.2s;margin-top:10px;`;
-                    const href        = pdfData.mode === "supabase" ? pdfData.url : pdfData.data;
-                    const fileChipHtml = `<a href="${href}" download="${label}" target="_blank" class="file-chip pdf-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
+                    const label        = escapeHtml(pdfTitle + ".pdf");
+                    const svgFile      = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/><line x1="7" y1="11" x2="13" y2="11"/><line x1="7" y1="14" x2="11" y2="14"/></svg>`;
+                    const svgDown      = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
+                    const chipStyle    = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s,border-color 0.2s;margin-top:10px;`;
+                    // Le PDF est toujours un data-URI base64 — aucun stockage externe
+                    const fileChipHtml = `<a href="${pdfData.data}" download="${label}" class="file-chip pdf-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
 
-                    // Injection dans la bulle
+                    // Injection dans la bulle — le PDF reste dans le message
                     bubble.innerHTML = formatResponse(fullReply) + fileChipHtml;
-
-                    // Sauvegarde DB via marqueur SECURE_FILE existant
-                    if (pdfData.mode === "supabase" && pdfData.filePath) {
-                        const pdfLinkMd = `[SECURE_FILE:${pdfTitle}.pdf](${pdfData.filePath})`;
-                        await supabase
-                            .from("messages")
-                            .update({ content: fullReply + "\n\n" + pdfLinkMd })
-                            .eq("conversation_id", activeTabId)
-                            .eq("role", "assistant")
-                            .order("created_at", { ascending: false })
-                            .limit(1);
-                    }
 
                 } catch (pdfErr) {
                     pdfBadge.remove();
