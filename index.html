@@ -984,6 +984,7 @@
             background: rgba(0,229,160,0.05);
             border: 2px dashed rgba(0,229,160,0.4);
             z-index: 1000;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             font-family: 'JetBrains Mono', monospace;
@@ -1345,7 +1346,10 @@
 </div>
 
     <!-- DROP OVERLAY -->
-    <div id="dropOverlay">⬇ Dépose ton fichier ici</div>
+    <div id="dropOverlay">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px;opacity:0.7"><path d="M12 3v13M5 13l7 7 7-7"/><path d="M3 21h18"/></svg>
+        Dépose ton fichier ici
+    </div>
     <!-- SIDEBAR OVERLAY mobile -->
     <div id="sidebarOverlay"></div>
 
@@ -1388,14 +1392,19 @@
 
         <!-- Header minimal -->
         <header>
-    <button id="sidebarToggle">☰</button>
+    <button id="sidebarToggle" aria-label="Menu"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="2" y1="5" x2="18" y2="5"/><line x1="2" y1="10" x2="18" y2="10"/><line x1="2" y1="15" x2="18" y2="15"/></svg></button>
     <span id="activeConvTitle">Pensée IA</span>
     <div class="header-right" style="position: relative;">
         <!-- Bouton Thème existant -->
-        <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">🌙</button>
+        <button id="themeToggle" title="Mode clair / sombre" aria-label="Basculer mode clair/sombre">
+            <svg id="themeIcon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+        </button>
         
         <!-- Badge Agent existant -->
-        <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">🤖 Auto</span>
+        <span id="agentBadge" class="agent-badge" title="Mode agent" onclick="document.getElementById('agentSelector').classList.toggle('visible')">
+            <svg id="agentBadgeIcon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="4"/><path d="M3 17c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="10" cy="8" r="1.5" fill="currentColor" stroke="none"/></svg>
+            <span id="agentBadgeLabel">Auto</span>
+        </span>
         
         <div id="agentSelector" class="agent-selector-menu"></div>
         
@@ -1407,15 +1416,15 @@
         <button id="moreBtn" title="Plus d'options" onclick="document.getElementById('morePanel').style.display = document.getElementById('morePanel').style.display === 'none' ? 'block' : 'none'" style="font-size:14px;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 9px;cursor:pointer;transition:all 0.2s;line-height:1;" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">···</button>
 
         <div id="morePanel" style="display:none;position:absolute;top:52px;right:8px;min-width:180px;background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:8px;z-index:300;box-shadow:var(--shadow);">
-            <button id="exportBtn" onclick="document.getElementById('morePanel').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'">⬇ Exporter</button>
-            <button id="memoryBtn" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'">🧠 Mémoire</button>
+            <button id="exportBtn" onclick="document.getElementById('morePanel').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg> Exporter</button>
+            <button id="memoryBtn" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="10" cy="7" rx="7" ry="4.5"/><path d="M3 7v3c0 2.5 3.1 4.5 7 4.5s7-2 7-4.5V7"/><path d="M3 10v3c0 2.5 3.1 4.5 7 4.5s7-2 7-4.5v-3"/></svg> Mémoire</button>
         </div>
 
         <!-- Panneau mémoire -->
         <div id="memoryPanel" style="display:none;position:absolute;top:52px;right:8px;width:320px;max-height:400px;overflow-y:auto;background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:16px;z-index:200;box-shadow:var(--shadow);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                 <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.1em;font-family:'JetBrains Mono',monospace;">Mémoires · espace actif</span>
-                <button onclick="document.getElementById('memoryPanel').style.display='none';" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;">✕</button>
+                <button onclick="document.getElementById('memoryPanel').style.display='none';" style="background:none;border:none;color:var(--text3);cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;padding:4px;border-radius:4px;transition:color 0.2s;" onmouseenter="this.style.color='var(--text)'" onmouseleave="this.style.color='var(--text3)'"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg></button>
             </div>
             <div id="memoryList"><em style="color:var(--text3);font-size:12px;">Chargement...</em></div>
         </div>
@@ -1505,21 +1514,22 @@
         /* ── Theme toggle ─────────────────────────────────────── */
         (function() {
             const btn = document.getElementById('themeToggle');
-            const ICONS = { dark: '🌙', light: '☀️' };
+            const MOON_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>`;
+            const SUN_SVG  = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
             const saved = localStorage.getItem('pensee_theme') || 'dark';
             if (saved === 'light') {
                 document.body.setAttribute('data-theme', 'light');
-                btn.textContent = ICONS.light;
+                btn.innerHTML = SUN_SVG;
             }
             btn.addEventListener('click', function() {
                 const isLight = document.body.getAttribute('data-theme') === 'light';
                 if (isLight) {
                     document.body.removeAttribute('data-theme');
-                    btn.textContent = ICONS.dark;
+                    btn.innerHTML = MOON_SVG;
                     localStorage.setItem('pensee_theme', 'dark');
                 } else {
                     document.body.setAttribute('data-theme', 'light');
-                    btn.textContent = ICONS.light;
+                    btn.innerHTML = SUN_SVG;
                     localStorage.setItem('pensee_theme', 'light');
                 }
             });
