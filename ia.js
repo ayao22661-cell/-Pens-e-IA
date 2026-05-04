@@ -397,7 +397,21 @@ if (toggleAuthModeBtn) {
 
 // Vérification de la session au chargement
 async function checkLocalAuth() {
-    // 1. Écouter les changements d'état
+    // Guard : évite le double init quand onAuthStateChange + getSession se déclenchent tous les deux au boot
+    let tabsInitialized = false;
+
+    // 1. Vérification immédiate — source unique d'init au chargement normal
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+        currentUser = session.user;
+        loginScreen.style.display = "none";
+        tabsInitialized = true;
+        await loadCreditsFromDB();
+        initTabs();
+    }
+
+    // 2. Écouter les changements d'état — uniquement pour les events APRÈS le boot
+    // (magic link, password recovery, déconnexion, login depuis le formulaire)
     supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
             isRecoveryMode = true;
@@ -408,33 +422,24 @@ async function checkLocalAuth() {
             toggleAuthModeBtn.style.display = "none";
             authInstruction.textContent = "Saisis ton NOUVEAU mot de passe.";
             loginBtn.textContent = "Mettre à jour le mot de passe";
-            return; // On bloque la connexion automatique pour forcer la mise à jour
+            return;
         }
 
-        if (session && !isRecoveryMode) {
+        if (session && !isRecoveryMode && !tabsInitialized) {
+            // Cas : magic link ou session établie après le boot (getSession était vide)
             currentUser = session.user;
             loginScreen.style.display = "none";
-            
-            // Nettoyage de l'URL (enlève le #access_token...) — redirect uniquement
             if (window.location.hash) {
                 window.history.replaceState(null, null, window.location.pathname);
-                loadCreditsFromDB();
-                initTabs();
             }
-        } else {
+            tabsInitialized = true;
+            loadCreditsFromDB();
+            initTabs();
+        } else if (!session && !isRecoveryMode) {
             loginScreen.style.display = "flex";
             if (loginEmailEl) loginEmailEl.focus();
         }
     });
-
-    // 2. Vérification immédiate au chargement — source unique d'init des crédits et des tabs
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-        currentUser = session.user;
-        loginScreen.style.display = "none";
-        await loadCreditsFromDB();
-        initTabs();
-    }
 }
 
 // Fonction unique pour gérer l'Auth
