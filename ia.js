@@ -31,7 +31,12 @@ Tu opères dans un environnement web strictement isolé. Tu n'as AUCUN accès au
 Réponses systématiquement en français, sauf demande explicite. L'intégrité du code est inviolable : ne traduis JAMAIS les commentaires, les noms de variables ou les chaînes de caractères dans tes blocs de code.
 
 ━━━ PROTOCOLE DE RÉFLEXION (OBLIGATOIRE ET MASQUÉ) ━━━
-Avant toute réponse, tu DOIS générer un bloc <think>...</think> formant ton espace de calcul interne. Ordre absolu : ce bloc doit être un paragraphe dense et continu, SANS puces ni listes. Utilise ces balises en ligne pour structurer ta logique : [INTENT] analyse de l'objectif réel | [ROOT] identification de la cause racine | [ARCHI] définition de la solution pérenne. Dès la fermeture de </think>, effectue un double saut de ligne et démarre ta réponse finale immédiatement.
+Avant toute réponse, tu DOIS générer un bloc <think>...</think> formant ton espace de calcul interne. Ordre absolu : ce bloc doit être un paragraphe dense et continu, SANS puces ni listes. Structure OBLIGATOIRE : [INTENT] quel est le vrai besoin derrière la demande, pas la demande littérale | [ROOT] quelle est la cause racine ou la contrainte structurante | [ARCHI] quelle solution minimise la dette future et maximise la valeur immédiate | [EDGE] quels cas limites ou erreurs l'utilisateur n'a pas anticipés | [OUTPUT] quel format de réponse sert le mieux ce besoin précis. Dès la fermeture de </think>, effectue un double saut de ligne et démarre ta réponse finale immédiatement.
+
+━━━ PROTOCOLE DE CLÔTURE (OBLIGATOIRE) ━━━
+Pour toute réponse dépassant 3 paragraphes ou contenant un bloc de code, termine TOUJOURS par une ligne :
+**→ Prochaine étape :** [une action concrète, précise, immédiatement exécutable par l'utilisateur]
+Cette ligne est obligatoire sur les réponses longues. Elle transforme chaque réponse en vecteur d'action.
 
 ━━━ RECHERCHE WEB & ACTUALITÉ ━━━
 Si le marqueur [INSTRUCTION CRITIQUE : google_search] est présent, priorise les données fraîches fournies. Distingue clairement tes connaissances internes des données récupérées. Si la recherche échoue, n'hallucine jamais. Utilise la balise [DIAGNOSTIC INCERTAIN] pour acter l'absence de données et propose la meilleure alternative logique.
@@ -85,6 +90,9 @@ RÈGLES STRICTES :
 - Toujours auditer : bugs, performances, sécurité, accessibilité, mobile-first.
 - Jamais de code approximatif. Si tu n'es pas sûr à 100%, dis-le avec [DIAGNOSTIC INCERTAIN].
 - Propose systématiquement la version la plus maintenable, pas juste la plus rapide à écrire.
+- Anticipe TOUJOURS les edge cases : valeurs nulles/undefined, tableaux vides, timeouts réseau, erreurs silencieuses.
+- Tout code produit doit être production-ready : gestion d'erreurs, logs utiles, pas de console.log oubliés.
+- Si le code implique de l'async/await, vérifie les race conditions possibles et les cas d'annulation.
 
 ━━━ MOTEUR DE CALCUL PYTHON (INTERPRETER) ━━━
 Tu disposes d'un interpréteur Python natif. 
@@ -107,7 +115,9 @@ RÈGLES STRICTES :
 - Croise au moins 2 angles différents avant de conclure.
 - Si les résultats sont contradictoires, expose la contradiction — ne tranche pas arbitrairement.
 - Utilise [DIAGNOSTIC INCERTAIN] si les données manquent ou sont trop anciennes.
-- Format de synthèse : contexte → faits clés → implications → ce que ça change.`
+- Format de synthèse obligatoire : **Contexte** → **Faits clés** → **Implications** → **Ce que ça change concrètement**.
+- Distingue toujours : fait établi / tendance émergente / spéculation.
+- Pour les sujets africains ou ivoiriens : croise des sources locales (médias, experts terrain) avec les sources globales.`
     },
 
     creatif: {
@@ -137,11 +147,12 @@ RÈGLES STRICTES :
 Tu es en mode architecte de systèmes. Chaque conseil intègre ses effets de second ordre.
 RÈGLES STRICTES :
 - Pense toujours en 3 horizons : court terme (action immédiate), moyen terme (momentum), long terme (positionnement).
-- Chaque recommandation inclut : l'opportunité, le risque, l'indicateur de succès.
+- Chaque recommandation inclut : l'opportunité, le risque, l'indicateur de succès mesurable.
 - Algorithmes (YouTube, Pinterest, TikTok, Instagram) : pense distribution avant création.
-- Marketing pour contextes africains/émergents : adapte les frameworks occidentaux à la réalité locale.
+- Marketing pour contextes africains/émergents : adapte les frameworks occidentaux à la réalité locale (mobile money, bouche-à-oreille, communautés WhatsApp, codes culturels).
 - Jamais de conseil générique. Si tu ne connais pas le contexte précis, pose UNE question ciblée avant.
-- UX/UI : mobile-first absolu, lois de Gestalt, psychologie de la conversion.`
+- UX/UI : mobile-first absolu, lois de Gestalt, psychologie de la conversion.
+- Après chaque recommandation principale, ajoute toujours : **Risque sous-estimé :** [ce que la plupart des gens ratent en exécutant ce plan].`
     },
 
     visionnaire: {
@@ -161,7 +172,7 @@ RÈGLES STRICTES :
 - Cartographie les effets de second et troisième ordre — pas seulement les conséquences directes.
 - Ancre dans la réalité africaine et mondiale simultanément : les ruptures globales se manifestent différemment selon les contextes.
 - Utilise des analogies inter-domaines pour révéler des patterns invisibles dans le domaine cible.
-- Termine par UN insight contre-intuitif que l'utilisateur ne peut pas trouver ailleurs.
+- Termine TOUJOURS par un bloc **Insight contre-intuitif :** suivi d'une observation que l'utilisateur ne peut pas trouver en cherchant sur Google. C'est non-négociable.
 - Si google_search est disponible : cherche les signaux faibles, pas les tendances mainstream.`
     }
     ,
@@ -247,11 +258,49 @@ function detectAgent(message) {
     return winner[1] > 0 ? winner[0] : null;
 }
 
+// ── DÉTECTION DU NIVEAU D'EXPERTISE ──────────────────────
+function detectExpertiseLevel(message) {
+    const advanced = [
+        'architecture', 'scalabilité', 'complexité', 'algorithme', 'optimisation',
+        'race condition', 'mutex', 'vectorisation', 'embedding', 'rls', 'supabase',
+        'edge function', 'runtime', 'concurrence', 'async', 'pipeline', 'sharding',
+        'tokenisation', 'gradient', 'backpropagation', 'microservice', 'kubernetes'
+    ];
+    const beginner = [
+        "comment faire", "c'est quoi", "je comprends pas", "pour débuter",
+        'apprendre', 'tutoriel', 'exemple simple', 'expliquer', 'débutant',
+        'première fois', 'je ne sais pas', 'aide moi à comprendre'
+    ];
+    const msg = message.toLowerCase();
+    if (advanced.some(k => msg.includes(k))) return 'expert';
+    if (beginner.some(k => msg.includes(k))) return 'débutant';
+    return null;
+}
+
 // ── CONSTRUCTION DU SYSTEM PROMPT FINAL ──────────────────
-function buildSystemInstruction(agentId, needsSearch) {
+function buildSystemInstruction(agentId, needsSearch, userMessage = "", memoryContext = "") {
     const today = new Date().toLocaleDateString("fr-FR", {
         weekday: "long", year: "numeric", month: "long", day: "numeric"
     });
+
+    // Profil utilisateur persistant (défini via /profil)
+    const userProfile = localStorage.getItem('pensee_user_profile') || '';
+    const profileBlock = userProfile
+        ? `\n[PROFIL UTILISATEUR CONNU]\n${userProfile}\nAdapte le niveau, les exemples et l'ancrage culturel à ce profil. Ne réexplique jamais des notions qu'il maîtrise déjà.\n`
+        : '';
+
+    // Mémoire RAG injectée dans le system prompt (poids fort vs user prompt)
+    const memoryBlock = memoryContext
+        ? `\n[MÉMOIRE ACTIVÉE — Faits établis sur cet utilisateur/projet, traite-les comme certains]\n${memoryContext}\n`
+        : '';
+
+    // Niveau d'expertise détecté dynamiquement sur le message courant
+    const level = userMessage ? detectExpertiseLevel(userMessage) : null;
+    const levelBlock = level === 'expert'
+        ? '\n[NIVEAU DÉTECTÉ : EXPERT] — Va directement dans les détails techniques. Zéro explication des fondamentaux.\n'
+        : level === 'débutant'
+        ? '\n[NIVEAU DÉTECTÉ : DÉBUTANT] — Vulgarise sans condescendance. Définis les termes à leur première occurrence, utilise des analogies concrètes.\n'
+        : '';
 
     const searchInstruction = needsSearch
         ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualité récente. Tu DOIS utiliser google_search pour répondre. Ne réponds JAMAIS depuis ta mémoire d'entraînement sur ce sujet.]\n"
@@ -261,7 +310,7 @@ function buildSystemInstruction(agentId, needsSearch) {
         ? AGENTS_CONFIG[agentId].systemOverride
         : "";
 
-    return `[DATE ACTUELLE : ${today}]${searchInstruction}\n\n${CONFIG.systemPrompt}${agentLayer}`;
+    return `[DATE ACTUELLE : ${today}]${profileBlock}${memoryBlock}${levelBlock}${searchInstruction}\n\n${CONFIG.systemPrompt}${agentLayer}`;
 }
 
 // ── BADGE AGENT DANS L'UI ─────────────────────────────────
@@ -349,7 +398,7 @@ function handleAgentCommand(text) {
     }
 
     const list = Object.values(AGENTS_CONFIG).map(a => `\`/agent ${a.id}\` — ${a.icon} ${a.label} : ${a.description}`).join("\n");
-    addMessage("bot", `Agent inconnu. Agents disponibles :\n\n${list}\n\n\`/agent auto\` — Détection automatique`, true);
+    addMessage("bot", `Agent inconnu. Agents disponibles :\n\n${list}\n\n\`/agent auto\` — Détection automatique\n\n**Autres commandes :**\n\`/memo [texte]\` — Mémoriser une info\n\`/memo global [texte]\` — Mémoire globale\n\`/profil [description]\` — Définir ton profil (niveau, contexte, préférences)\n\`/profil reset\` — Effacer le profil`, true);
     return true;
 }
 
@@ -1678,8 +1727,9 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
     }
 
     // Construction des deux couches séparées
-    const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch);
-    const userPrompt = buildPrompt(userMessage, files, memoryContext, webContext);
+    // memoryContext est maintenant injecté dans le system prompt (poids fort) plutôt que dans le user prompt
+    const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch, userMessage, memoryContext);
+    const userPrompt = buildPrompt(userMessage, files, "", webContext); // memoryContext retiré du user prompt
 
     const binaryFiles = files
         .filter(f => f.content && f.content.type === "binary")
@@ -2146,6 +2196,27 @@ async function sendMessage() {
     if (!text && !files.length) return;
     if (sendBtn.disabled) return;
     
+    // ── COMMANDE /profil ──────────────────────────────────────
+    if (text.startsWith("/profil ")) {
+        const profilContent = text.replace("/profil ", "").trim();
+        if (profilContent) {
+            localStorage.setItem('pensee_user_profile', profilContent);
+            userInput.value = "";
+            userInput.style.height = "auto";
+            addMessage("user", text, false);
+            addMessage("bot", `<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="10" cy="7" r="4"/><path d="M2 19c0-4 3.6-7 8-7s8 3 8 7"/></svg> **Profil enregistré.** Pensée adaptera désormais chaque réponse à ce contexte :\n\n> ${escapeHtml(profilContent)}\n\nTape \`/profil reset\` pour effacer.`, true);
+        }
+        return;
+    }
+    if (text === "/profil reset") {
+        localStorage.removeItem('pensee_user_profile');
+        userInput.value = "";
+        userInput.style.height = "auto";
+        addMessage("user", text, false);
+        addMessage("bot", "· Profil effacé. Pensée repartira sans contexte utilisateur.", false);
+        return;
+    }
+
     if (text.startsWith("/memo ")) {
         const raw = text.replace("/memo ", "").trim();
         const isGlobal = raw.startsWith("global ");
