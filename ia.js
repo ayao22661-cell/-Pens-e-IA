@@ -199,8 +199,12 @@ Tu as accès à un environnement d'exécution Python natif.
     }
 };
 
+// ── CACHE MÉMOIRE — évite les aller-retours Supabase répétés ─
+const _memoryCache = new Map(); // key: userId_tabId → { data, ts }
+const MEMORY_CACHE_TTL = 30000; // 30 secondes
 
-// Agent actif (null = détection automatique)
+// ── ABORT CONTROLLER — annule le stream précédent si nouveau message ─
+let _currentAbortController = null;
 let activeAgentId = null;
 
 // Exposition sur window pour audio.js (script non-module)
@@ -1394,24 +1398,35 @@ async function getEmbedding(text) {
     return data.embedding; // Tableau de 768 nombres
 }
 
-// 2. Recherche dans Supabase (restreinte à l'onglet actif)
+// 2. Recherche dans Supabase (restreinte à l'onglet actif) — avec cache 30s
 async function searchMemory(query) {
-    if (!currentUser || !activeTabId) return []; 
-    
+    if (!currentUser || !activeTabId) return [];
+
+    const cacheKey = `${currentUser.id}_${activeTabId}`;
+    const now = Date.now();
+    const cached = _memoryCache.get(cacheKey);
+
+    // Cache valide → retour immédiat, zéro DB
+    if (cached && (now - cached.ts) < MEMORY_CACHE_TTL) {
+        return cached.data;
+    }
+
     try {
         const queryVector = await getEmbedding(query);
-        const vectorString = `[${queryVector.join(',')}]`; 
-        
+        const vectorString = `[${queryVector.join(',')}]`;
+
         const { data, error } = await supabase.rpc('match_memories', {
             query_embedding: vectorString,
             match_threshold: 0.5,
             match_count: 3,
             p_user_id: currentUser.id,
-            p_workspace_id: activeTabId // Isolation par onglet
+            p_workspace_id: activeTabId
         });
-        
+
         if (error) throw error;
-        return data || [];
+        const result = data || [];
+        _memoryCache.set(cacheKey, { data: result, ts: Date.now() });
+        return result;
     } catch (e) {
         console.warn("RAG indisponible ou vide :", e.message);
         return [];
@@ -1439,6 +1454,10 @@ async function memorizeText(content, isGlobal = false) {
 
         const { error } = await supabase.from('memories').insert([record]);
         if (error) throw error;
+        // Invalide le cache pour forcer un rechargement au prochain message
+        if (currentUser && activeTabId) {
+            _memoryCache.delete(`${currentUser.id}_${activeTabId}`);
+        }
     } catch (e) {
         console.error("Mémorisation impossible :", e.message);
     }
@@ -1589,6 +1608,20 @@ function buildPrompt(userMessage, files, memoryContext = "", webContext = "") {
 }
 
 
+// ── NETTOYAGE DE LA REQUÊTE AVANT ENVOI À SEARXNG ────────────
+function buildSearchQuery(message) {
+    return message
+        .replace(/c'est quoi\s*/gi, "")
+        .replace(/qu'est-ce que\s*/gi, "")
+        .replace(/tu peux me dire\s*/gi, "")
+        .replace(/j'ai vu ça\s*/gi, "")
+        .replace(/hier|aujourd'hui|cette semaine/gi, "")
+        .replace(/est-ce que\s*/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .slice(0, 120);
+}
+
 //  APPEL API — /api/chat (Vercel Edge & Streaming)
 // ============================================================
 
@@ -1638,16 +1671,26 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             const searchBadge = document.createElement("div");
             searchBadge.id = "search-badge";
             searchBadge.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
-            searchBadge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:5px;"><circle cx="8.5" cy="8.5" r="5"/><line x1="13" y1="13" x2="17" y2="17"/></svg> Recherche web en cours...`;
+            searchBadge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:5px;"><circle cx="8.5" cy="8.5" r="5"/><line x1="13" y1="13" x2="17" y2="17"/></svg> Recherche web...`;
             messagesEl.appendChild(searchBadge);
             messagesEl.scrollTop = messagesEl.scrollHeight;
+
+            // Animation des points de progression
+            let searchDots = 0;
+            const searchBadgeInterval = setInterval(() => {
+                searchDots = (searchDots + 1) % 4;
+                const dots = '.'.repeat(searchDots);
+                const badge = document.getElementById("search-badge");
+                if (badge) badge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:5px;"><circle cx="8.5" cy="8.5" r="5"/><line x1="13" y1="13" x2="17" y2="17"/></svg> Recherche web${dots}`;
+            }, 400);
 
             const searchRes = await fetch("/api/search", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: userMessage, count: 5 })
+                body: JSON.stringify({ query: buildSearchQuery(userMessage), count: 5 })
             });
 
+            clearInterval(searchBadgeInterval);
             document.getElementById("search-badge")?.remove();
 
             if (searchRes.ok) {
@@ -1670,12 +1713,20 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                     }
                     messagesEl.scrollTop = messagesEl.scrollHeight;
 
-                    // Sélection intelligente : on prend les 3 premières sources non-wiki/reddit
-                    // (contenu plus dense que les agrégateurs)
+                    // Sélection intelligente : déduplication par domaine + exclusion des agrégateurs
                     const FETCH_COUNT = 3;
                     const CHAR_LIMIT  = 3000; // par source — total ~9000 chars injectés
+                    const seenDomains = new Set();
                     const fetchTargets = webSources
-                        .filter(r => r.url && !/reddit\.com|wikipedia\.org\/wiki\/(?!.{1,50}$)/i.test(r.url))
+                        .filter(r => {
+                            if (!r.url || /reddit\.com|wikipedia\.org\/wiki\/(?!.{1,50}$)/i.test(r.url)) return false;
+                            try {
+                                const domain = new URL(r.url).hostname;
+                                if (seenDomains.has(domain)) return false;
+                                seenDomains.add(domain);
+                                return true;
+                            } catch { return false; }
+                        })
                         .slice(0, FETCH_COUNT);
 
                     // Promise.allSettled : si une source timeout, les autres continuent
@@ -1702,6 +1753,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                         }
                     });
 
+                    clearInterval(searchBadgeInterval);
                     document.getElementById("search-badge")?.remove();
 
                     // Construction du contexte web injecté dans le prompt
@@ -1722,6 +1774,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             }
         } catch (searchErr) {
             console.warn("[Search] Recherche non bloquante échouée :", searchErr.message);
+            clearInterval(searchBadgeInterval);
             document.getElementById("search-badge")?.remove();
         }
     }
@@ -1738,6 +1791,10 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
     // Mise à jour du badge agent dans l'UI
     updateAgentBadge(resolvedAgentId);
 
+    // Annule le stream précédent si l'utilisateur envoie un nouveau message
+    if (_currentAbortController) _currentAbortController.abort();
+    _currentAbortController = new AbortController();
+
 try {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || "";
@@ -1748,6 +1805,7 @@ const response = await fetch("/api/chat", {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}` // Injection du token ici
     },
+    signal: _currentAbortController.signal,
     body: JSON.stringify({
         prompt: userPrompt,
         systemInstruction: systemInstruction,
@@ -1794,6 +1852,13 @@ if (!response.ok) {
         const decoder = new TextDecoder("utf-8");
         let fullReply = "";
 
+        // Timeout visuel : avertissement si aucun token après 12 secondes
+        let streamTimeout = setTimeout(() => {
+            if (fullReply.trim().length === 0) {
+                bubble.innerHTML = formatResponse("· *La génération prend du temps... Si cela persiste, renvoie ton message.*");
+            }
+        }, 12000);
+
         try {
             while (true) {
                 const { done, value } = await reader.read();
@@ -1803,6 +1868,7 @@ if (!response.ok) {
                 messagesEl.scrollTop = messagesEl.scrollHeight;
             }
         } catch (streamErr) {
+            if (streamErr.name === 'AbortError') return; // Annulation volontaire, pas d'erreur
             console.warn("Stream interrompu (mise en veille du navigateur) :", streamErr);
             
             // Sauvegarde gracieuse de ce qui a eu le temps d'être généré
@@ -1814,6 +1880,7 @@ if (!response.ok) {
         }
 
         // Nettoyage final
+        clearTimeout(streamTimeout);
         fullReply = fullReply.replace(/^\s*\[Pens[ée]{1,2}e?\s*(?:IA)?\s*\]:\s*/i, "");
         const cutIndex = fullReply.search(/\n\[Utilisateur\]:|\n###\s*NOUVEAU MESSAGE/i);
         if (cutIndex > 80) fullReply = fullReply.substring(0, cutIndex);
