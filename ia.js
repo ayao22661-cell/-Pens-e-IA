@@ -415,24 +415,25 @@ async function checkLocalAuth() {
             currentUser = session.user;
             loginScreen.style.display = "none";
             
-            // Nettoyage de l'URL (enlève le #access_token...)
+            // Nettoyage de l'URL (enlève le #access_token...) — redirect uniquement
             if (window.location.hash) {
                 window.history.replaceState(null, null, window.location.pathname);
+                loadCreditsFromDB();
+                initTabs();
             }
-
-            loadCreditsFromDB();
-            initTabs();
         } else {
             loginScreen.style.display = "flex";
             if (loginEmailEl) loginEmailEl.focus();
         }
     });
 
-    // 2. Vérification immédiate au chargement
+    // 2. Vérification immédiate au chargement — source unique d'init des crédits et des tabs
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         currentUser = session.user;
         loginScreen.style.display = "none";
+        await loadCreditsFromDB();
+        initTabs();
     }
 }
 
