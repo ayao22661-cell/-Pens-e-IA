@@ -62,6 +62,14 @@ En dehors du code pur, sois un partenaire chaleureux, cultivé et profondément 
 //  AGENTS IA — Système multi-agents avec détection auto + sélection manuelle
 // ============================================================
 
+// ── CONSTANTES SVG UI ────────────────────────────────────────────────────────
+const SVG_COPY_ICON  = "<svg viewBox='0 0 20 20' width='11' height='11' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' style='display:inline;vertical-align:middle;margin-right:4px;'><rect x='7' y='7' width='10' height='10' rx='2'/><path d='M3 13V3h10'/></svg>";
+const SVG_CHECK_ICON = "<svg viewBox='0 0 20 20' width='11' height='11' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='display:inline;vertical-align:middle;margin-right:4px;'><polyline points='3,10 8,15 17,5'/></svg>";
+const SVG_SOUND_ICON = "<svg viewBox='0 0 20 20' width='11' height='11' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' style='display:inline;vertical-align:middle;margin-right:4px;'><path d='M3 7v6h4l5 4V3L7 7H3z'/><path d='M15 7a4 4 0 0 1 0 6'/></svg>";
+const SVG_BRAIN_ICON = "<svg viewBox='0 0 20 20' width='11' height='11' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' style='display:inline;vertical-align:middle;margin-right:4px;'><path d='M10 3C6.7 3 4 5.4 4 8.5c0 1.5.6 2.9 1.6 3.9L6 17h8l.4-4.6c1-.9 1.6-2.3 1.6-3.9C16 5.4 13.3 3 10 3z'/><line x1='10' y1='3' x2='10' y2='8'/></svg>";
+const SVG_PEN_ICON   = "<svg viewBox='0 0 20 20' width='11' height='11' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' style='display:inline;vertical-align:middle;margin-right:4px;'><path d='M14.5 2.5c1.5 1.5 1.5 4 0 5.5L6 17l-4 1 1-4L11.5 5.5c1.5-1.5 4-1.5 3 3z'/><line x1='11' y1='5' x2='15' y2='9'/></svg>";
+// ── FIN CONSTANTES SVG ───────────────────────────────────────────────────────
+
 const AGENTS_CONFIG = {
 
     code: {
@@ -328,7 +336,7 @@ function handleAgentCommand(text) {
     const id = match[1].toLowerCase();
     if (id === "auto" || id === "reset") {
         activeAgentId = null;
-        addMessage("bot", "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M4 10a6 6 0 1 0 1.2-3.6"/><polyline points="2,5 4,10 9,8"/></svg>Mode **auto-détection** activé. L'agent sera choisi selon le contenu de chaque message.", true);
+        addMessage("bot", `<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M4 10a6 6 0 1 0 1.2-3.6"/><polyline points="2,5 4,10 9,8"/></svg>Mode **auto-détection** activé. L'agent sera choisi selon le contenu de chaque message.`, true);
         updateAgentBadge(null);
         return true;
     }
@@ -1115,7 +1123,7 @@ function formatResponse(text) {
     cleanText = cleanText.replace(/\n?\[WEB_SOURCES:\[[\s\S]*?\]\]/g, "");
 
     if (cleanText.trim() === "") {
-        if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3C6.7 3 4 5.4 4 8.5c0 1.5.6 2.9 1.6 3.9L6 17h8l.4-4.6c1-.9 1.6-2.3 1.6-3.9C16 5.4 13.3 3 10 3z"/><line x1="10" y1="3" x2="10" y2="8"/></svg>Pensée en cours d'analyse...</span>";
+        if (isThinking) return `<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>${SVG_BRAIN_ICON}Pensée en cours d'analyse...</span>`;
         if (thinkContent) return `<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>${thinkContent}`;
         return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'><svg viewBox=\"0 0 20 20\" width=\"11\" height=\"11\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"display:inline;vertical-align:middle;margin-right:4px;\"><path d=\"M14.5 2.5c1.5 1.5 1.5 4 0 5.5L6 17l-4 1 1-4L11.5 5.5c1.5-1.5 4-1.5 3 3z\"/><line x1=\"11\" y1=\"5\" x2=\"15\" y2=\"9\"/></svg>Rédaction en cours...</span>";
     }
@@ -1794,13 +1802,13 @@ if (!response.ok) {
         actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
         copyBtn.className = "copy-btn";
-        copyBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 13V3h10"/></svg>Copier";
+        copyBtn.innerHTML = SVG_COPY_ICON + "Copier";
         copyBtn.addEventListener("click", async function() {
             try {
                 await navigator.clipboard.writeText(bubble.innerText);
-                copyBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><polyline points="3,10 8,15 17,5"/></svg>Copié !";
+                copyBtn.innerHTML = SVG_CHECK_ICON + "Copié !";
                 copyBtn.style.color = "var(--accent)";
-                setTimeout(() => { copyBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 13V3h10"/></svg>Copier"; copyBtn.style.color = ""; }, 2000);
+                setTimeout(() => { copyBtn.innerHTML = SVG_COPY_ICON + "Copier"; copyBtn.style.color = ""; }, 2000);
             } catch(e) { copyBtn.innerHTML = "Erreur"; }
         });
         actions.appendChild(copyBtn);
@@ -1809,14 +1817,14 @@ if (!response.ok) {
         if ('speechSynthesis' in window) {
             const ttsBtn = document.createElement("button");
             ttsBtn.className = "copy-btn";
-            ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter";
+            ttsBtn.innerHTML = SVG_SOUND_ICON + "Écouter";
             ttsBtn.title = "Lire la réponse à voix haute";
             let isSpeaking = false;
 
             ttsBtn.addEventListener("click", function() {
                 if (isSpeaking) {
                     window.speechSynthesis.cancel();
-                    ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter";
+                    ttsBtn.innerHTML = SVG_SOUND_ICON + "Écouter";
                     isSpeaking = false;
                     return;
                 }
@@ -1837,8 +1845,8 @@ if (!response.ok) {
                 const frVoice = voices.find(v => v.lang.startsWith("fr"));
                 if (frVoice) utterance.voice = frVoice;
 
-                utterance.onend = () => { ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter"; isSpeaking = false; };
-                utterance.onerror = () => { ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter"; isSpeaking = false; };
+                utterance.onend = () => { ttsBtn.innerHTML = SVG_SOUND_ICON + "Écouter"; isSpeaking = false; };
+                utterance.onerror = () => { ttsBtn.innerHTML = SVG_SOUND_ICON + "Écouter"; isSpeaking = false; };
 
                 window.speechSynthesis.speak(utterance);
                 ttsBtn.innerHTML = "⏹ Arrêter";
