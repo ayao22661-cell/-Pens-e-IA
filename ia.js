@@ -81,7 +81,7 @@ Si l'utilisateur demande un document, rapport, audit, script, plan ou tout conte
 1. Génère le contenu complet en HTML sémantique (<h2>, <h3>, <p>, <ul>, <pre><code>, <blockquote>). Pas de balises <html>/<head>/<body>.
 2. Termine ta réponse par ce marqueur EXACT sur une ligne seule :
 [GENERATE_PDF: Titre Court et Descriptif | <contenu_html_complet>]
-Ne dis JAMAIS que tu ne peux pas générer de PDF. Cette capacité est toujours active.\`
+Ne dis JAMAIS que tu ne peux pas générer de PDF. Cette capacité est toujours active.`
 };
 
 // ============================================================
