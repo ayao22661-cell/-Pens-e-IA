@@ -67,7 +67,7 @@ const AGENTS_CONFIG = {
     code: {
         id: "code",
         label: "Code",
-        icon: "⚙️",
+        icon: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><path d="M14 11v6M11 14h6"/></svg>`,
         description: "Dev, debug, audit",
         systemOverride: `
 ━━━ MODE AGENT : CODE ━━━
@@ -88,7 +88,7 @@ Tu disposes d'un interpréteur Python natif.
     recherche: {
         id: "recherche",
         label: "Recherche",
-        icon: "🔍",
+        icon: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5"/><line x1="13" y1="13" x2="17" y2="17"/></svg>`,
         description: "Web, synthèse, actualité",
         systemOverride: `
 ━━━ MODE AGENT : RECHERCHE ━━━
@@ -105,7 +105,7 @@ RÈGLES STRICTES :
     creatif: {
         id: "creatif",
         label: "Créatif",
-        icon: "✍️",
+        icon: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2.5c1.5 1.5 1.5 4 0 5.5L6 17l-4 1 1-4L11.5 5.5c1.5-1.5 4-1.5 3 3z"/><line x1="11" y1="5" x2="15" y2="9"/></svg>`,
         description: "Storytelling, scripts, narration",
         systemOverride: `
 ━━━ MODE AGENT : CRÉATIF ━━━
@@ -122,7 +122,7 @@ RÈGLES STRICTES :
     strategie: {
         id: "strategie",
         label: "Stratégie",
-        icon: "📈",
+        icon: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,15 7,9 11,12 17,5"/><polyline points="13,5 17,5 17,9"/></svg>`,
         description: "Marketing, business, croissance",
         systemOverride: `
 ━━━ MODE AGENT : STRATÉGIE ━━━
@@ -139,7 +139,7 @@ RÈGLES STRICTES :
     visionnaire: {
         id: "visionnaire",
         label: "Visionnaire",
-        icon: "🔭",
+        icon: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 10s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="10" cy="10" r="2.5"/></svg>`,
         description: "Insights systémiques, ruptures, second ordre",
         systemOverride: `
 ━━━ MODE AGENT : VISIONNAIRE ━━━
@@ -160,7 +160,7 @@ RÈGLES STRICTES :
     audit: {
         id: "audit",
         label: "Audit",
-        icon: "⚖️",
+        icon: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2L3 5v5c0 4.4 3 8.5 7 9.5 4-1 7-5.1 7-9.5V5L10 2z"/><polyline points="7,10 9,12 13,8"/></svg>`,
         description: "Contrôle qualité, sécurité, optimisation",
         systemOverride: `
 ━━━ MODE AGENT : AUDIT TECHNIQUE ━━━
@@ -257,18 +257,25 @@ function buildSystemInstruction(agentId, needsSearch) {
 }
 
 // ── BADGE AGENT DANS L'UI ─────────────────────────────────
+// SVG Auto icon (neurones connectés)
+const SVG_AUTO = `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="10" r="2"/><circle cx="15" cy="5" r="2"/><circle cx="15" cy="15" r="2"/><line x1="7" y1="9" x2="13" y2="6"/><line x1="7" y1="11" x2="13" y2="14"/></svg>`;
+
 function updateAgentBadge(agentId) {
-    let badge = document.getElementById("agentBadge");
+    const iconEl = document.getElementById("agentBadgeIcon");
+    const labelEl = document.getElementById("agentBadgeLabel");
+    const badge = document.getElementById("agentBadge");
     if (!badge) return;
 
     if (!agentId) {
-        badge.textContent = "🤖 Auto";
+        if (iconEl) iconEl.outerHTML = SVG_AUTO;
+        if (labelEl) labelEl.textContent = "Auto";
         badge.className = "agent-badge agent-auto";
         return;
     }
     const agent = AGENTS_CONFIG[agentId];
     if (agent) {
-        badge.textContent = `${agent.icon} ${agent.label}`;
+        if (iconEl) iconEl.outerHTML = agent.icon;
+        if (labelEl) labelEl.textContent = agent.label;
         badge.className = `agent-badge agent-${agentId}`;
     }
 }
@@ -280,7 +287,7 @@ function initAgentSelector() {
 
     const autoBtn = document.createElement("button");
     autoBtn.className = "agent-btn agent-btn-auto" + (!activeAgentId ? " active" : "");
-    autoBtn.innerHTML = "🤖 Auto";
+    autoBtn.innerHTML = `${SVG_AUTO} Auto`;
     autoBtn.title = "Détection automatique";
     autoBtn.addEventListener("click", () => {
         activeAgentId = null;
@@ -321,7 +328,7 @@ function handleAgentCommand(text) {
     const id = match[1].toLowerCase();
     if (id === "auto" || id === "reset") {
         activeAgentId = null;
-        addMessage("bot", "🔄 Mode **auto-détection** activé. L'agent sera choisi selon le contenu de chaque message.", true);
+        addMessage("bot", "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M4 10a6 6 0 1 0 1.2-3.6"/><polyline points="2,5 4,10 9,8"/></svg>Mode **auto-détection** activé. L'agent sera choisi selon le contenu de chaque message.", true);
         updateAgentBadge(null);
         return true;
     }
@@ -461,7 +468,7 @@ async function handleAuth() {
             isRecoveryMode = false;
             if(loginSuccess) {
                 loginSuccess.style.display = "block";
-                loginSuccess.innerHTML = "✅ Mot de passe mis à jour !";
+                loginSuccess.innerHTML = "· Mot de passe mis à jour !";
             }
             setTimeout(() => location.reload(), 2000); // Recharge pour nettoyer l'URL et reconnecter proprement
 
@@ -474,7 +481,7 @@ async function handleAuth() {
             
             if(loginSuccess) {
                 loginSuccess.style.display = "block";
-                loginSuccess.innerHTML = "✅ Lien de récupération envoyé !<br>Vérifie tes emails.";
+                loginSuccess.innerHTML = "· Lien envoyé !<br>Vérifie tes emails.";
             }
 
         } else if (isSignUpMode) {
@@ -484,7 +491,7 @@ async function handleAuth() {
             
             if(loginSuccess) {
                 loginSuccess.style.display = "block";
-                loginSuccess.innerHTML = "✅ Compte créé !<br>Vérifie tes emails pour confirmer.";
+                loginSuccess.innerHTML = "· Compte créé !<br>Vérifie tes emails pour confirmer.";
             }
 
         } else {
@@ -850,10 +857,10 @@ async function loadHistoryFromDB() {
                     
                 if (!error && signedData) {
                     // On remplace le marqueur par le vrai lien éphémère pour l'affichage
-                    const secureLink = `[📄 ${fileName}](${signedData.signedUrl})`;
+                    const secureLink = `[${fileName}](${signedData.signedUrl})`;
                     finalContent = finalContent.replace(match[0], secureLink);
                 } else {
-                    finalContent = finalContent.replace(match[0], `[❌ Fichier expiré ou inaccessible]`);
+                    finalContent = finalContent.replace(match[0], `[Fichier expiré ou inaccessible]`);
                 }
             }
         }
@@ -870,14 +877,14 @@ async function loadHistoryFromDB() {
             msgDiv.className = "msg bot";
             const lbl = document.createElement("span");
             lbl.className = "msg-label";
-            lbl.textContent = "Pensée · 🎨 Image";
+            lbl.textContent = "Pensée · Image générée";
             msgDiv.appendChild(lbl);
             const bubble = document.createElement("div");
             bubble.className = "bubble";
 
             if (imgB64Match) {
                 // Ancien format base64 en DB — image non récupérable
-                bubble.innerHTML = `<em style="color:var(--text3);font-size:12px;">🖼️ Image générée (format ancien, non récupérable). Régénère-la si besoin.</em>`;
+                bubble.innerHTML = `<em style="color:var(--text3);font-size:12px;">Image générée (format ancien, non récupérable). Régénère-la si besoin.</em>`;
             } else {
                 const match   = imgUrlMatch || imgUrlMatchLegacy;
                 const url     = imgUrlMatch ? match[1] : match[1];
@@ -893,9 +900,9 @@ async function loadHistoryFromDB() {
                     <img src="${url}" alt="${escapeHtml(safePrompt)}"
                          style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy"
                          onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-                    <em style="display:none;color:var(--red);font-size:12px;">⚠️ Image expirée ou indisponible.</em>
+                    <em style="display:none;color:var(--red);font-size:12px;">Image expirée ou indisponible.</em>
                     <a href="${url}" download target="_blank"
-                       style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
+                       style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Télécharger</a>`;
             }
 
             msgDiv.appendChild(bubble);
@@ -1108,9 +1115,9 @@ function formatResponse(text) {
     cleanText = cleanText.replace(/\n?\[WEB_SOURCES:\[[\s\S]*?\]\]/g, "");
 
     if (cleanText.trim() === "") {
-        if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'>🧠 Pensée en cours d'analyse...</span>";
+        if (isThinking) return "<span style='color: var(--text2); font-style: italic; font-size: 12px; animation: pulse 1.5s infinite;'><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3C6.7 3 4 5.4 4 8.5c0 1.5.6 2.9 1.6 3.9L6 17h8l.4-4.6c1-.9 1.6-2.3 1.6-3.9C16 5.4 13.3 3 10 3z"/><line x1="10" y1="3" x2="10" y2="8"/></svg>Pensée en cours d'analyse...</span>";
         if (thinkContent) return `<span style='color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;'>[Analyse brute extraite]</span><br><br>${thinkContent}`;
-        return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'>✍️ Rédaction en cours...</span>";
+        return "<span style='color: var(--text2); font-style: italic; font-size: 12px;'><svg viewBox=\"0 0 20 20\" width=\"11\" height=\"11\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"display:inline;vertical-align:middle;margin-right:4px;\"><path d=\"M14.5 2.5c1.5 1.5 1.5 4 0 5.5L6 17l-4 1 1-4L11.5 5.5c1.5-1.5 4-1.5 3 3z\"/><line x1=\"11\" y1=\"5\" x2=\"15\" y2=\"9\"/></svg>Rédaction en cours...</span>";
     }
 
     // 2. CONFIGURATION DU RENDU (Compatibilité v11+)
@@ -1151,9 +1158,9 @@ try {
     });
 
     // 2. RECONSTRUCTION : On intercepte les liens Supabase et on les transforme en boutons verts interactifs
-    sanitized = sanitized.replace(/<a[^>]+href="(https:\/\/[^"]+supabase\.co\/storage[^"]+)"[^>]*>(?:📄\s*)?([^<]+)<\/a>/gi, (match, url, fileName) => {
+    sanitized = sanitized.replace(/<a[^>]+href="(https:\/\/[^"]+supabase\.co\/storage[^"]+)"[^>]*>(?:)?([^<]+)<\/a>/gi, (match, url, fileName) => {
         const cleanName = fileName.trim();
-        return `<a href="${url}" download="${cleanName}" target="_blank" class="file-chip" title="Télécharger ${cleanName}" style="text-decoration:none; cursor:pointer; display:inline-flex;"><span>📄</span>${cleanName} <span style="margin-left:6px; font-size:10px;">⬇️</span></a>`;
+        return `<a href="${url}" download="${cleanName}" target="_blank" class="file-chip" title="Télécharger ${cleanName}" style="text-decoration:none; cursor:pointer; display:inline-flex;"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg>${cleanName} <svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-left:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg></a>`;
     });
 
     return sanitized;
@@ -1277,7 +1284,7 @@ function addUserMessageWithFiles(text, files) {
         }
 
         // 3. Rendu visuel propre
-        chip.innerHTML = `<span>📄</span>${escapeHtml(file.name)} <span style='opacity:0.6'>(${file.lang})</span> <span style='margin-left:6px; font-size:10px;'>⬇️</span>`;
+        chip.innerHTML = `<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg>${escapeHtml(file.name)} <span style='opacity:0.6'>(${file.lang})</span> <svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-left:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
         bubble.appendChild(chip);
     });
     
@@ -1399,8 +1406,8 @@ async function loadMemoryPanel() {
 
     list.innerHTML = `
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <button class="mem-tab active" onclick="renderMemoryTab('local')">📍 Cette conv.</button>
-            <button class="mem-tab"        onclick="renderMemoryTab('global')">🌐 Globale</button>
+            <button class="mem-tab active" onclick="renderMemoryTab('local')"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 2l2 6h4l-3 4-1 6-2-4-2 4-1-6-3-4h4z"/></svg>Cette conv.</button>
+            <button class="mem-tab"        onclick="renderMemoryTab('global')"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="10" cy="10" r="8"/><ellipse cx="10" cy="10" rx="4" ry="8"/><line x1="2" y1="10" x2="18" y2="10"/></svg>Globale</button>
         </div>
         <div id="memTabContent"><em style="color:var(--text3);font-size:12px;">Chargement...</em></div>
     `;
@@ -1445,7 +1452,7 @@ window.renderMemoryTab = async function(tab) {
         const preview = escapeHtml(mem.content.slice(0, 120)) + (mem.content.length > 120 ? '…' : '');
         item.innerHTML = `
             <span style="font-size:12px;color:var(--text);flex:1;line-height:1.5;">${preview}</span>
-            <button data-memid="${mem.id}" title="Supprimer" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;flex-shrink:0;padding:2px 4px;">🗑️</button>
+            <button data-memid="${mem.id}" title="Supprimer" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;flex-shrink:0;padding:2px 4px;"><svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,5 17,5"/><path d="M8 5V3h4v2"/><rect x="5" y="5" width="10" height="12" rx="1"/><line x1="8" y1="9" x2="8" y2="14"/><line x1="12" y1="9" x2="12" y2="14"/></svg></button>
         `;
         item.querySelector('button').addEventListener('click', async function() {
             await supabase.from('memories').delete().eq('id', this.getAttribute('data-memid'));
@@ -1513,7 +1520,7 @@ function buildPrompt(userMessage, files, memoryContext = "", webContext = "") {
             const head = historyText.slice(0, historyText.length - TAIL_SIZE);
             const tail = historyText.slice(-TAIL_SIZE);
             const wordCount = head.split(/\s+/).length;
-            userPrompt += `[📜 Début de conversation résumé — environ ${wordCount} mots d'échanges antérieurs. Utilise /memo pour conserver les infos importantes.]\n\n`;
+            userPrompt += `[Début de conversation résumé — environ ${wordCount} mots d'échanges antérieurs. Utilise /memo pour conserver les infos importantes.]\n\n`;
             userPrompt += tail;
         } else {
             userPrompt += historyText;
@@ -1530,7 +1537,7 @@ function buildPrompt(userMessage, files, memoryContext = "", webContext = "") {
 
 async function callAPI(userMessage, files, memoryContext = "", tempAgentId = null) {
     if (creditsLeft <= 0) {
-        addMessage("bot", "⚠️ Tes crédits du jour sont épuisés. Reviens demain !", false);
+        addMessage("bot", "· Crédits épuisés. Reviens demain !", false);
         return;
     }
 
@@ -1547,7 +1554,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             refreshAgentButtons();    // Met à jour le menu déroulant
             
             // Feedback visuel discret pour l'utilisateur
-            addMessage("bot", `<span style="font-size: 11px; color: var(--text2);"><em>⚡ Pensée a auto-détecté le contexte et verrouillé l'agent <strong>${AGENTS_CONFIG[detected].label}</strong>.</em></span>`, true);
+            addMessage("bot", `<span style="font-size: 11px; color: var(--text2);"><em><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><polygon points="11,2 4,11 10,11 9,18 16,9 10,9"/></svg>Pensée a auto-détecté le contexte et verrouillé l'agent <strong>${AGENTS_CONFIG[detected].label}</strong>.</em></span>`, true);
         }
     }
 
@@ -1574,7 +1581,7 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
             const searchBadge = document.createElement("div");
             searchBadge.id = "search-badge";
             searchBadge.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
-            searchBadge.innerHTML = "🔍 Recherche web en cours...";
+            searchBadge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:5px;"><circle cx="8.5" cy="8.5" r="5"/><line x1="13" y1="13" x2="17" y2="17"/></svg> Recherche web en cours...`;
             messagesEl.appendChild(searchBadge);
             messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -1596,12 +1603,12 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
                     const badge = document.getElementById("search-badge");
                     if (badge) {
                         badge.style.display = "block";
-                        badge.innerHTML = "🔍 Lecture des sources en parallèle...";
+                        badge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:5px;"><circle cx="8.5" cy="8.5" r="5"></circle><line x1="13" y1="13" x2="17" y2="17"></line></svg> Lecture des sources...`;
                     } else {
                         const b = document.createElement("div");
                         b.id = "search-badge";
                         b.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
-                        b.innerHTML = "🔍 Lecture des sources en parallèle...";
+                        b.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:5px;"><circle cx="8.5" cy="8.5" r="5"></circle><line x1="13" y1="13" x2="17" y2="17"></line></svg> Lecture des sources...`;
                         messagesEl.appendChild(b);
                     }
                     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -1697,7 +1704,7 @@ if (!response.ok) {
         const errData = await response.json();
         errMsg = errData.error || errMsg;
     } catch(e) {}
-    addMessage("bot", "❌ Erreur : " + errMsg, false);
+    addMessage("bot", "· Erreur : " + errMsg, false);
     setStatus("err");
     return;
 }
@@ -1712,7 +1719,11 @@ if (!response.ok) {
 
         // On affiche le nom de l'agent actif dans le label
         const agentMeta = resolvedAgentId && AGENTS_CONFIG[resolvedAgentId];
-        label.textContent = agentMeta ? `Pensée · ${agentMeta.icon} ${agentMeta.label}` : "Pensée";
+        if (agentMeta) {
+            label.innerHTML = `Pensée · ${agentMeta.icon} ${agentMeta.label}`;
+        } else {
+            label.textContent = "Pensée";
+        }
 
         const bubble = document.createElement("div");
         bubble.className = "bubble";
@@ -1738,9 +1749,9 @@ if (!response.ok) {
             
             // Sauvegarde gracieuse de ce qui a eu le temps d'être généré
             if (fullReply.trim().length === 0) {
-                fullReply = "⚠️ *La génération a été coupée par la mise en veille de l'écran ou le changement d'onglet.* Veuillez relancer la question.";
+                fullReply = "· *La génération a été coupée par la mise en veille de l'écran ou le changement d'onglet.* Veuillez relancer la question.";
             } else {
-                fullReply += "\n\n*[⚠️ Génération interrompue par la mise en veille]*";
+                fullReply += "\n\n*[Génération interrompue par la mise en veille]*";
             }
         }
 
@@ -1765,11 +1776,11 @@ if (!response.ok) {
             }));
 
             // Remplacement visuel propre pour l'utilisateur
-            fullReply = fullReply.replace(commandMatch[0], `<br><em style="color: var(--accent);">⚙️ Exécution en cours : <code>${commandToRun}</code>...</em>`);
+            fullReply = fullReply.replace(commandMatch[0], `<br><em style="color: var(--accent);"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="10" cy="10" r="3"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>Exécution en cours : <code>${commandToRun}</code>...</em>`);
             
         } else if (commandMatch) {
             // L'IA a tenté d'exécuter, mais le tunnel n'est pas ouvert
-            fullReply = fullReply.replace(commandMatch[0], `<br><em style="color: var(--red);">❌ Exécution échouée : Terminal non connecté.</em>`);
+            fullReply = fullReply.replace(commandMatch[0], `<br><em style="color: var(--red);">· Exécution échouée : Terminal non connecté.</em>`);
         }
         // ==========================================
 
@@ -1783,14 +1794,14 @@ if (!response.ok) {
         actions.className = "msg-actions";
         const copyBtn = document.createElement("button");
         copyBtn.className = "copy-btn";
-        copyBtn.innerHTML = "📋 Copier";
+        copyBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 13V3h10"/></svg>Copier";
         copyBtn.addEventListener("click", async function() {
             try {
                 await navigator.clipboard.writeText(bubble.innerText);
-                copyBtn.innerHTML = "✅ Copié !";
+                copyBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><polyline points="3,10 8,15 17,5"/></svg>Copié !";
                 copyBtn.style.color = "var(--accent)";
-                setTimeout(() => { copyBtn.innerHTML = "📋 Copier"; copyBtn.style.color = ""; }, 2000);
-            } catch(e) { copyBtn.innerHTML = "❌ Erreur"; }
+                setTimeout(() => { copyBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 13V3h10"/></svg>Copier"; copyBtn.style.color = ""; }, 2000);
+            } catch(e) { copyBtn.innerHTML = "Erreur"; }
         });
         actions.appendChild(copyBtn);
 
@@ -1798,14 +1809,14 @@ if (!response.ok) {
         if ('speechSynthesis' in window) {
             const ttsBtn = document.createElement("button");
             ttsBtn.className = "copy-btn";
-            ttsBtn.innerHTML = "🔊 Écouter";
+            ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter";
             ttsBtn.title = "Lire la réponse à voix haute";
             let isSpeaking = false;
 
             ttsBtn.addEventListener("click", function() {
                 if (isSpeaking) {
                     window.speechSynthesis.cancel();
-                    ttsBtn.innerHTML = "🔊 Écouter";
+                    ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter";
                     isSpeaking = false;
                     return;
                 }
@@ -1826,8 +1837,8 @@ if (!response.ok) {
                 const frVoice = voices.find(v => v.lang.startsWith("fr"));
                 if (frVoice) utterance.voice = frVoice;
 
-                utterance.onend = () => { ttsBtn.innerHTML = "🔊 Écouter"; isSpeaking = false; };
-                utterance.onerror = () => { ttsBtn.innerHTML = "🔊 Écouter"; isSpeaking = false; };
+                utterance.onend = () => { ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter"; isSpeaking = false; };
+                utterance.onerror = () => { ttsBtn.innerHTML = "<svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M15 7a4 4 0 0 1 0 6"/></svg>Écouter"; isSpeaking = false; };
 
                 window.speechSynthesis.speak(utterance);
                 ttsBtn.innerHTML = "⏹ Arrêter";
@@ -1843,7 +1854,7 @@ if (!response.ok) {
         if (resolvedAgentId === 'code' || resolvedAgentId === 'strategie') {
             const auditBtn = document.createElement("button");
             auditBtn.className = "copy-btn"; // On réutilise le style discret du bouton copier
-            auditBtn.innerHTML = "⚖️ Auditer";
+            auditBtn.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 2L3 5v5c0 4.4 3 8.5 7 9.5 4-1 7-5.1 7-9.5V5L10 2z"/><polyline points="7,10 9,12 13,8"/></svg>Auditer`;
             auditBtn.title = "Lancer un audit strict sur cette réponse";
 
             auditBtn.addEventListener("click", async function() {
@@ -1885,7 +1896,7 @@ if (!response.ok) {
                 } finally {
                     // Restauration purement visuelle
                     updateAgentBadge(activeAgentId || null);
-                    auditBtn.innerHTML = "⚖️ Auditer";
+                    auditBtn.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 2L3 5v5c0 4.4 3 8.5 7 9.5 4-1 7-5.1 7-9.5V5L10 2z"/><polyline points="7,10 9,12 13,8"/></svg>Auditer`;
                     auditBtn.disabled = false;
                 }
             });
@@ -1899,13 +1910,13 @@ if (!response.ok) {
 
         // ── SUGGESTIONS DYNAMIQUES POST-RÉPONSE ──────────────────
         const suggestionMap = {
-            code:       ["🐛 Explique ligne par ligne", "⚙️ Optimise les performances", "🧪 Génère les tests unitaires"],
-            creatif:    ["🎬 Développe la scène suivante", "✍️ Réécris en style plus dense", "🎭 Ajoute un retournement dramatique"],
-            strategie:  ["📊 Donne-moi les indicateurs clés", "⚠️ Quels sont les risques ?", "🚀 Plan d'action sur 30 jours"],
-            audit:      ["🔧 Propose les corrections", "📋 Synthèse exécutive", "🔁 Relancer l'audit après correction"],
-            recherche:  ["🔗 Creuse l'angle opposé", "📰 Sources primaires", "🌍 Impact en Afrique de l'Ouest ?"],
-            visionnaire:["🔭 Effets de troisième ordre ?", "🔄 Analogie dans un autre domaine", "💡 L'insight contre-intuitif ?"],
-            default:    ["📝 Résume en 3 points", "🔍 Approfondis ce point", "💬 Explique différemment"]
+            code:       ["Explique ligne par ligne", "Optimise les performances", "Génère les tests unitaires"],
+            creatif:    ["Développe la scène suivante", "Réécris en style plus dense", "Ajoute un retournement dramatique"],
+            strategie:  ["Donne-moi les indicateurs clés", "Quels sont les risques ?", "Plan d'action sur 30 jours"],
+            audit:      ["Propose les corrections", "Synthèse exécutive", "Relancer l'audit après correction"],
+            recherche:  ["Creuse l'angle opposé", "Sources primaires", "Impact en Afrique de l'Ouest ?"],
+            visionnaire:["Effets de troisième ordre ?", "Analogie dans un autre domaine", "L'insight contre-intuitif ?"],
+            default:    ["Résume en 3 points", "Approfondis ce point", "Explique différemment"]
         };
         const pills = suggestionMap[resolvedAgentId] || suggestionMap.default;
         const pillsDiv = document.createElement("div");
@@ -1976,13 +1987,12 @@ if (!response.ok) {
 
         creditsLeft--;
         updateCredits();
-        useCreditInDB();
         if (creditsLeft > 0) setStatus("ok");
 
         // Réinitialisation du badge si l'agent était auto-détecté (pas fixé manuellement)
         } catch(error) {
         removeTyping();
-        addMessage("bot", "❌ Erreur réseau : " + error.message, false);
+        addMessage("bot", "· Erreur réseau : " + error.message, false);
         setStatus("err");
     }
 }
@@ -2030,7 +2040,7 @@ async function generateImage(prompt) {
 
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
-            addMessage("bot", `❌ Génération échouée : ${err.error || "Erreur inconnue"}`, false);
+            addMessage("bot", `· Génération échouée : ${err.error || "Erreur inconnue"}`, false);
             return;
         }
 
@@ -2040,7 +2050,7 @@ async function generateImage(prompt) {
 
         const label = document.createElement("span");
         label.className = "msg-label";
-        label.textContent = "Pensée · 🎨 Image";
+        label.textContent = "Pensée · Image générée";
         msgDiv.appendChild(label);
 
         const bubble = document.createElement("div");
@@ -2056,14 +2066,14 @@ async function generateImage(prompt) {
                 <img src="${imgSrc}" alt="${escapeHtml(prompt)}"
                      style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy">
                 <a href="${imgSrc}" download="pensee-ia-${Date.now()}.png"
-                   style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
+                   style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Télécharger</a>`;
         } else {
             bubble.innerHTML = `${sourceLabel}<br>
                 <img src="${data.url}" alt="${escapeHtml(prompt)}"
                      style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy"
                      onerror="this.parentElement.innerHTML+='<em style=color:var(--red)>Timeout. Réessaie.</em>'">
                 <a href="${data.url}" download target="_blank"
-                   style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;">⬇️ Télécharger</a>`;
+                   style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Télécharger</a>`;
         }
 
         msgDiv.appendChild(bubble);
@@ -2105,7 +2115,7 @@ async function generateImage(prompt) {
             } catch (storageErr) {
                 console.warn("Upload Storage échoué, fallback marqueur base64 :", storageErr.message);
                 // Fallback minimal : on stocke juste le prompt, l'image restera en mémoire session uniquement
-                await saveMessageToDB("assistant", `🎨 *Image générée (non persistée) pour : "${prompt}"*`);
+                await saveMessageToDB("assistant", `· *Image générée (non persistée) pour : "${prompt}"*`);
             }
         } else {
             // URL externe (Pollinations) : on stocke l'URL + le path storage vide
@@ -2114,7 +2124,7 @@ async function generateImage(prompt) {
 
     } catch (err) {
         removeTyping();
-        addMessage("bot", "❌ Erreur réseau lors de la génération : " + err.message, false);
+        addMessage("bot", "· Erreur réseau : " + err.message, false);
     }
 }
 
@@ -2141,8 +2151,8 @@ async function sendMessage() {
             await memorizeText(memoContent, isGlobal);
             removeTyping();
             const scope = isGlobal
-                ? "🌐 **Mémoire GLOBALE sauvegardée.** Accessible dans toutes tes conversations."
-                : "🧠 **Mémoire locale sauvegardée.** Disponible dans cette conversation.";
+                ? "· **Mémoire GLOBALE sauvegardée.** Accessible dans toutes tes conversations."
+                : "· **Mémoire locale sauvegardée.** Disponible dans cette conversation.";
             addMessage("bot", scope, true);
         }
         return;
@@ -2224,7 +2234,7 @@ async function sendMessage() {
                 const { error } = await supabase.storage.from('attachments').upload(filePath, fileBlob);
                 
                 if (error) {
-                    addMessage("bot", `❌ **Erreur d'upload (${f.name})** : ${error.message}`, false);
+                    addMessage("bot", `· **Erreur upload (${f.name})** : ${error.message}`, false);
                     throw error;
                 }
                 
