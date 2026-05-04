@@ -107,6 +107,12 @@ RÈGLES STRICTES :
 - Tout code produit doit être production-ready : gestion d'erreurs, logs utiles, pas de console.log oubliés.
 - Si le code implique de l'async/await, vérifie les race conditions possibles et les cas d'annulation.
 
+━━━ GÉNÉRATION DE DOCUMENT PDF ━━━
+Si l'utilisateur demande un rapport, une documentation ou un audit exportable en PDF :
+1. Génère le contenu complet en HTML sémantique (<h2>, <h3>, <p>, <ul>, <pre><code>, <table>, <blockquote>). Pas de balises <html>/<head>/<body>.
+2. Termine ta réponse par ce marqueur EXACT sur une ligne seule :
+[GENERATE_PDF: Titre Court et Descriptif | <contenu_html_complet>]
+
 ━━━ MOTEUR DE CALCUL PYTHON (INTERPRETER) ━━━
 Tu disposes d'un interpréteur Python natif. 
 - Utilise-le pour valider tes algorithmes, effectuer des calculs mathématiques complexes ou manipuler des données avant de répondre.
@@ -147,7 +153,12 @@ RÈGLES STRICTES :
 - Jamais de métaphore morte, jamais de formule convenue. Chaque mot doit gagner sa place.
 - Pour les scripts : structure en actes explicite, tensions visibles, personnages à contradictions internes.
 - Pour la poésie : rythme d'abord, sens ensuite. La musicalité prime sur la clarté immédiate.
-- Propose toujours une note de mise en scène ou de direction après chaque création.`
+- Propose toujours une note de mise en scène ou de direction après chaque création.
+
+━━━ GÉNÉRATION DE DOCUMENT PDF ━━━
+Si l'utilisateur demande un script, scénario ou histoire à exporter :
+Structure en HTML (actes en <h2>, scènes en <h3>, dialogues en <blockquote>, actions en <em>) et termine par :
+[GENERATE_PDF: Titre de l'Œuvre | <contenu_html>]`
     },
 
     strategie: {
@@ -165,7 +176,12 @@ RÈGLES STRICTES :
 - Marketing pour contextes africains/émergents : adapte les frameworks occidentaux à la réalité locale (mobile money, bouche-à-oreille, communautés WhatsApp, codes culturels).
 - Jamais de conseil générique. Si tu ne connais pas le contexte précis, pose UNE question ciblée avant.
 - UX/UI : mobile-first absolu, lois de Gestalt, psychologie de la conversion.
-- Après chaque recommandation principale, ajoute toujours : **Risque sous-estimé :** [ce que la plupart des gens ratent en exécutant ce plan].`
+- Après chaque recommandation principale, ajoute toujours : **Risque sous-estimé :** [ce que la plupart des gens ratent en exécutant ce plan].
+
+━━━ GÉNÉRATION DE DOCUMENT PDF ━━━
+Si l'utilisateur demande un plan stratégique, un rapport ou un livrable exportable :
+Génère le HTML structuré (<h2> pour les sections, <ul> pour les recommandations, <table> pour les comparaisons, <blockquote> pour les insights) et termine par :
+[GENERATE_PDF: Titre | <contenu_html>]`
     },
 
     visionnaire: {
@@ -208,7 +224,12 @@ Tu as accès à un environnement d'exécution Python natif.
 - Ne te fie jamais à ton intuition pour valider des algorithmes de simulation (ex: moteurs de résolution de matchs, systèmes de transferts complexes, statistiques de tournois, probabilités).
 - Avant de déclarer un algorithme "VALIDE" ou "[À CORRIGER]", génère un script Python pour simuler plusieurs centaines d'itérations (Monte Carlo) ou tester les cas extrêmes (edge cases) de la logique proposée.
 - Exécute le test en silence. Base ton verdict uniquement sur les résultats mathématiques retournés par l'interpréteur.
-- Reste factuel, froid et professionnel. Traque la faille par la preuve, pas par l'opinion.`
+- Reste factuel, froid et professionnel. Traque la faille par la preuve, pas par l'opinion.
+
+━━━ GÉNÉRATION DE DOCUMENT PDF ━━━
+Si l'utilisateur demande un rapport d'audit exportable :
+Génère le HTML (sections VALIDE/À CORRIGER, tableaux, blocs de code) et termine par :
+[GENERATE_PDF: Rapport d'Audit - <Sujet> | <contenu_html>]`
     }
 };
 
@@ -1931,6 +1952,88 @@ if (!response.ok) {
             // L'IA a tenté d'exécuter, mais le tunnel n'est pas ouvert
             fullReply = fullReply.replace(commandMatch[0], `<br><em style="color: var(--red);">· Exécution échouée : Terminal non connecté.</em>`);
         }
+        // ==========================================
+
+        // ==========================================
+        // DÉBUT DE L'AJOUT : INTERCEPTEUR PDF
+        // ==========================================
+        const pdfMarkerRegex = /\[GENERATE_PDF:\s*([^|]+)\|([^\]]+)\]/i;
+        const pdfMatch = fullReply.match(pdfMarkerRegex);
+
+        if (pdfMatch) {
+            const pdfTitle   = pdfMatch[1].trim();
+            const pdfContent = pdfMatch[2].trim();
+
+            // Nettoyage du marqueur dans la bulle
+            fullReply = fullReply.replace(pdfMatch[0], "").trim();
+
+            // Badge de génération
+            const pdfBadge = document.createElement("div");
+            pdfBadge.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
+            pdfBadge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:5px;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg> Génération du PDF...`;
+            messagesEl.appendChild(pdfBadge);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+
+            // Appel async — n'interrompt pas le rendu de la bulle
+            (async () => {
+                try {
+                    const { data: { session: pdfSession } } = await supabase.auth.getSession();
+
+                    const pdfRes = await fetch("/api/generate-pdf", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${pdfSession?.access_token || ""}`,
+                        },
+                        body: JSON.stringify({
+                            title: pdfTitle,
+                            htmlContent: pdfContent,
+                            userId: currentUser?.id || "anon",
+                        }),
+                    });
+
+                    pdfBadge.remove();
+
+                    if (!pdfRes.ok) {
+                        const errData = await pdfRes.json().catch(() => ({}));
+                        addMessage("bot", `· PDF échoué : ${errData.error || "Erreur inconnue"}`, false);
+                        return;
+                    }
+
+                    const pdfData = await pdfRes.json();
+
+                    // Construction du File Chip
+                    const label       = escapeHtml(pdfTitle + ".pdf");
+                    const svgFile     = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/><line x1="7" y1="11" x2="13" y2="11"/><line x1="7" y1="14" x2="11" y2="14"/></svg>`;
+                    const svgDown     = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
+                    const chipStyle   = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s,border-color 0.2s;margin-top:10px;`;
+                    const href        = pdfData.mode === "supabase" ? pdfData.url : pdfData.data;
+                    const fileChipHtml = `<a href="${href}" download="${label}" target="_blank" class="file-chip pdf-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
+
+                    // Injection dans la bulle
+                    bubble.innerHTML = formatResponse(fullReply) + fileChipHtml;
+
+                    // Sauvegarde DB via marqueur SECURE_FILE existant
+                    if (pdfData.mode === "supabase" && pdfData.filePath) {
+                        const pdfLinkMd = `[SECURE_FILE:${pdfTitle}.pdf](${pdfData.filePath})`;
+                        await supabase
+                            .from("messages")
+                            .update({ content: fullReply + "\n\n" + pdfLinkMd })
+                            .eq("conversation_id", activeTabId)
+                            .eq("role", "assistant")
+                            .order("created_at", { ascending: false })
+                            .limit(1);
+                    }
+
+                } catch (pdfErr) {
+                    pdfBadge.remove();
+                    console.error("[PDF] Erreur :", pdfErr);
+                    addMessage("bot", `· Erreur PDF : ${pdfErr.message}`, false);
+                }
+            })();
+        }
+        // ==========================================
+        // FIN DE L'AJOUT : INTERCEPTEUR PDF
         // ==========================================
 
         bubble.innerHTML = formatResponse(fullReply);
