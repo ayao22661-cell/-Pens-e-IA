@@ -2239,6 +2239,7 @@ if (!response.ok) {
 
         creditsLeft--;
         updateCredits();
+        useCreditInDB(); // <-- SYNCHRONISATION SUPABASE AJOUTÉE
         if (creditsLeft > 0) setStatus("ok");
 
         // Réinitialisation du badge si l'agent était auto-détecté (pas fixé manuellement)
