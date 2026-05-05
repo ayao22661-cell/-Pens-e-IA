@@ -2864,8 +2864,7 @@ async function _executePython(btn, container, rawCode) {
         }
 
         // ── 1. INITIALISATION DU CONTEXTE (Réparé) ───────────────
-        pyodide.globals.set("__pensee_files__", []);
-
+        pyodide.globals.set("__pensee_files__", pyodide.toPy([]));
         await pyodide.runPythonAsync(`
 import sys, io, base64, builtins as _bi
 
@@ -2954,7 +2953,10 @@ except Exception as _err:
         btn.classList.add('running');
 
     } catch(e) {
-        appendOut('❌ Erreur critique : ' + e.message, 'var(--red,#ff5f5f)');
+        } catch(e) {
+        const msg = e?.message || e?.toString() || 'Erreur inconnue — voir F12 > Console';
+        appendOut('❌ Erreur critique : ' + msg, 'var(--red,#ff5f5f)');
+        console.error('[PENSÉE · Python WASM]', e);
         btn.innerHTML = '▶ Réessayer';
         btn.disabled  = false;
     }
