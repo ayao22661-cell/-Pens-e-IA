@@ -2877,7 +2877,7 @@ except Exception as _err:
     import traceback as _tb
     _pensee_buf.append(('err', _tb.format_exc()))
 `);
-# ── Interception open() : capture tout fichier ouvert en écriture binaire ──
+ ── Interception open() : capture tout fichier ouvert en écriture binaire ──
 _real_open = _bi.open
 def _pensee_open(path, mode='r', *args, **kwargs):
     if isinstance(mode, str) and 'w' in mode and ('b' in mode or mode in ('w','wb','xb')):
