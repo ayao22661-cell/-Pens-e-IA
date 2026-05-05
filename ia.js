@@ -2842,6 +2842,11 @@ async function _executePython(btn, container, rawCode) {
             importMatches.map(m => m[1]).filter(m => !_STDLIB.has(m) && m !== '__future__')
         )];
 
+        // Injection auto de la dépendance Excel pour Pandas
+        if ((rawCode.includes('pandas') || rawCode.includes('to_excel')) && !toLoad.includes('openpyxl')) {
+            toLoad.push('openpyxl');
+        }
+
         if (toLoad.length > 0) {
             appendOut(`📦 Chargement : ${toLoad.join(', ')}…`);
             for (const mod of toLoad) {
