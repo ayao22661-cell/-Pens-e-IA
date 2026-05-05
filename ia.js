@@ -2863,11 +2863,11 @@ async function _executePython(btn, container, rawCode) {
             }
         }
 
-        // ── 1. INITIALISATION DU CONTEXTE (Réparé) ───────────────
-        pyodide.globals.set("__pensee_files__", pyodide.toPy([]));
+        // ── 1. INITIALISATION DU CONTEXTE ────────────────────────
         await pyodide.runPythonAsync(`
 import sys, io, base64, builtins as _bi
 
+__pensee_files__ = []
 _pensee_buf = []
 class _PWriter:
     def write(self, s):
@@ -2935,7 +2935,7 @@ except Exception as _err:
             appendOut(text, type === 'err' ? 'var(--red,#ff5f5f)' : null);
         }
 
-        const files = pyodide.globals.get("__pensee_files__").toJs();
+        const files = pyodide.runPython("__pensee_files__").toJs();
         let fileCount = 0;
         for (const f of files) {
             const name = f.get ? f.get('name') : f.name;
@@ -2951,8 +2951,8 @@ except Exception as _err:
         btn.innerHTML = '⏹ Fermer';
         btn.disabled  = false;
         btn.classList.add('running');
-        
-        } catch(e) {
+
+    } catch(e) {
         const msg = e?.message || e?.toString() || 'Erreur inconnue — voir F12 > Console';
         appendOut('❌ Erreur critique : ' + msg, 'var(--red,#ff5f5f)');
         console.error('[PENSÉE · Python WASM]', e);
