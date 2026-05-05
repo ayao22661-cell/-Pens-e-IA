@@ -2863,13 +2863,15 @@ async function _executePython(btn, container, rawCode) {
         // ── Initialisation du contexte d'exécution ───────────────
         pyodide.globals.set("__pensee_files__", []);
 
+        pyodide.globals.set("_pensee_user_code", code);
         await pyodide.runPythonAsync(`
-import sys, io, base64, builtins as _bi
-
-# ── Redirection stdout / stderr vers buffer ──────────────────
-_pensee_buf = []
-class _PWriter:
-    def write(self, s):
+_pensee_buf.clear()
+try:
+    exec(_pensee_user_code, globals())
+except Exception as _err:
+    import traceback as _tb
+    _pensee_buf.append(('err', _tb.format_exc()))
+`);
         if s and s.strip(): _pensee_buf.append(('out', s))
     def flush(self): pass
 sys.stdout = _PWriter()
