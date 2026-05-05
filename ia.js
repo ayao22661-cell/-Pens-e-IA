@@ -75,13 +75,22 @@ Limite technique atteinte ou donnée manquante = balise [DIAGNOSTIC INCERTAIN] o
 ━━━ MODE COMPAGNON ━━━
 En dehors du code pur, sois un partenaire chaleureux, cultivé et profondément humain. La profondeur d'analyse s'adapte au contexte, mais l'exigence reste totale.
 
+━━━ GÉNÉRATION AUTOMATIQUE DE FICHIERS ━━━
+Tu peux générer des fichiers téléchargeables (CSV, Excel, PDF, images, ZIP, JSON, Word, etc.) à tout moment.
+Lorsque l'utilisateur demande un fichier ou un export :
+1. Génère directement un bloc de code Python complet, fonctionnel, sans demander à l'utilisateur d'écrire une seule ligne.
+2. Utilise open('nom.ext', 'wb') pour écrire — le fichier sera capturé automatiquement et proposé en téléchargement avec un bouton ⬇.
+3. Pour les graphiques matplotlib : utilise plt.savefig('graphique.png') — NE JAMAIS appeler plt.show().
+4. Termine toujours par : "Clique sur ▶ Exécuter pour générer le fichier."
+Ne dis JAMAIS que tu ne peux pas générer de fichier. Cette capacité est toujours active.
+
 ━━━ GÉNÉRATION DE DOCUMENT PDF (TOUJOURS DISPONIBLE) ━━━
 Tu peux générer un PDF téléchargeable à tout moment, quel que soit le contexte ou l'agent actif.
 Si l'utilisateur demande un document, rapport, audit, script, plan ou tout contenu exportable :
 1. Génère le contenu complet en HTML sémantique (<h2>, <h3>, <p>, <ul>, <pre><code>, <blockquote>). Pas de balises <html>/<head>/<body>.
 2. Termine ta réponse par ce marqueur EXACT sur une ligne seule :
 [GENERATE_PDF: Titre Court et Descriptif | <contenu_html_complet>]
-Ne dis JAMAIS que tu ne peux pas générer de PDF. Cette capacité est toujours active.`
+Ne dis JAMAIS que tu ne peux pas générer de PDF. Cette capacité est toujours active.\`
 };
 
 // ============================================================
@@ -121,11 +130,22 @@ Si l'utilisateur demande un rapport, une documentation ou un audit exportable en
 2. Termine ta réponse par ce marqueur EXACT sur une ligne seule :
 [GENERATE_PDF: Titre Court et Descriptif | <contenu_html_complet>]
 
-━━━ MOTEUR DE CALCUL PYTHON (INTERPRETER) ━━━
-Tu disposes d'un interpréteur Python natif. 
-- Utilise-le pour valider tes algorithmes, effectuer des calculs mathématiques complexes ou manipuler des données avant de répondre.
-- Si l'utilisateur demande une analyse de données ou un script complexe, exécute un test interne pour garantir l'exactitude des résultats.
-- Signale uniquement le résultat final validé dans ta réponse.`
+━━━ GÉNÉRATION AUTOMATIQUE DE FICHIERS (PRIORITÉ ABSOLUE) ━━━
+Lorsque l'utilisateur demande un fichier (CSV, Excel, PDF, image, ZIP, JSON, etc.), tu DOIS :
+1. Générer directement un bloc de code Python prêt à l'exécution, sans demander à l'utilisateur d'écrire quoi que ce soit.
+2. Le bloc Python doit utiliser open('nom_fichier.ext', 'wb') pour écrire le fichier — il sera automatiquement intercepté et proposé en téléchargement.
+3. Terminer ta réponse par une instruction claire : "Clique sur ▶ Exécuter ci-dessus pour générer et télécharger le fichier."
+
+RÈGLES STRICTES POUR LA GÉNÉRATION DE FICHIERS :
+- CSV/Excel : utilise pandas. df.to_csv('fichier.csv') ou df.to_excel('fichier.xlsx').
+- PDF : utilise reportlab. canvas.save() génère le fichier automatiquement.
+- Images/Graphiques : utilise matplotlib avec plt.savefig('graphique.png', ...). Ne jamais appeler plt.show().
+- ZIP : utilise zipfile.ZipFile('archive.zip', 'w') avec context manager.
+- JSON : json.dump(data, open('fichier.json', 'w')).
+- Word (.docx) : utilise python-docx, doc.save('fichier.docx').
+- Tu génères TOUJOURS un fichier complet et fonctionnel, jamais un squelette.
+- Si l'utilisateur donne des données, tu les intègres directement dans le code.
+- Ne propose JAMAIS à l'utilisateur d'écrire ou modifier le code. Tu fais tout.`
     },
 
     recherche: {
@@ -1244,11 +1264,11 @@ function formatResponse(text) {
         const language = (isV11 ? argsOrCode.lang : _lang) || "";
         
         const lang = language.toLowerCase();
-        const isWeb = ['html', 'css', 'javascript', 'js'].includes(lang);
+        const isExecutable = ['html', 'css', 'javascript', 'js', 'python', 'py'].includes(lang);
         const encodedCode = encodeURIComponent(code.trim());
         const runId = 'sandbox_' + Math.random().toString(36).substring(2, 9);
         // Ajout des data-attributes au lieu de l'attribut exécutable onclick
-        const btnHtml = isWeb ? `<button class="run-btn" data-code="${encodedCode}" data-runid="${runId}" data-lang="${lang}">▶ Exécuter</button>` : '';
+        const btnHtml = isExecutable ? `<button class="run-btn" data-code="${encodedCode}" data-runid="${runId}" data-lang="${lang}">▶ Exécuter</button>` : '';
 
         return `
         <div class="code-block-wrapper">
@@ -2680,14 +2700,276 @@ setStatus("ok");
 checkLocalAuth();
 initAgentSelector();
 // ============================================================
-//  MOTEUR SANDBOX (Exécution Web)
+//  MOTEUR SANDBOX (Exécution Web + Python WASM + Téléchargement auto)
 // ============================================================
+
+// ── Cache Pyodide — une seule instance par session ───────────
+let _pyodideInstance = null;
+let _pyodideLoading  = false;
+
+async function _getPyodide() {
+    if (_pyodideInstance) return _pyodideInstance;
+    if (_pyodideLoading) {
+        while (_pyodideLoading) await new Promise(r => setTimeout(r, 80));
+        return _pyodideInstance;
+    }
+    _pyodideLoading = true;
+    try {
+        _pyodideInstance = await loadPyodide({
+            indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/"
+        });
+        await _pyodideInstance.loadPackage("micropip");
+    } finally {
+        _pyodideLoading = false;
+    }
+    return _pyodideInstance;
+}
+
+// ── Mapping imports Python → noms pip ───────────────────────
+const _PIP_MAP = {
+    cv2: 'opencv-python', PIL: 'Pillow', sklearn: 'scikit-learn',
+    bs4: 'beautifulsoup4', dateutil: 'python-dateutil',
+    docx: 'python-docx', pptx: 'python-pptx',
+    yaml: 'pyyaml', dotenv: 'python-dotenv',
+    reportlab: 'reportlab', fpdf: 'fpdf2',
+    openpyxl: 'openpyxl', xlsxwriter: 'XlsxWriter'
+};
+const _STDLIB = new Set([
+    'os','sys','math','json','re','datetime','collections','itertools',
+    'functools','random','time','pathlib','io','abc','copy','typing',
+    'dataclasses','enum','string','struct','base64','hashlib','zipfile',
+    'csv','html','xml','traceback','threading','urllib','http','socket',
+    'builtins','inspect','logging','warnings','textwrap','shutil','glob',
+    'calendar','fractions','decimal','statistics','unicodedata','codecs'
+]);
+
+// ── MIME types pour les téléchargements ─────────────────────
+const _MIME_MAP = {
+    png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
+    gif:'image/gif', webp:'image/webp', svg:'image/svg+xml',
+    pdf:'application/pdf', csv:'text/csv', txt:'text/plain',
+    json:'application/json', xml:'application/xml',
+    xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls:'application/vnd.ms-excel',
+    docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    zip:'application/zip', tar:'application/x-tar', gz:'application/gzip',
+    wav:'audio/wav', mp3:'audio/mpeg', ogg:'audio/ogg',
+    mp4:'video/mp4', webm:'video/webm',
+    html:'text/html', md:'text/markdown'
+};
+
+// ── Déclencheur de téléchargement ───────────────────────────
+function _triggerDownload(b64, filename, mime) {
+    const a = document.createElement('a');
+    a.href = `data:${mime};base64,${b64}`;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// ── Moteur d'exécution Python WASM ──────────────────────────
+async function _executePython(btn, container, rawCode) {
+    const uid = container.id;
+
+    btn.innerHTML = '⏳ Initialisation Python…';
+    btn.disabled  = true;
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div id="pyshell-${uid}" style="
+            font-family:'JetBrains Mono',monospace;
+            background:var(--code-bg,#060810);
+            color:var(--text,#dde2ee);
+            padding:16px;border-radius:10px;font-size:13px;
+            border:1px solid var(--border,rgba(255,255,255,0.06));">
+            <div style="color:var(--accent,#00e5a0);font-size:10px;
+                        text-transform:uppercase;margin-bottom:10px;letter-spacing:.1em;">
+                Python · WASM · Sécurisé
+            </div>
+            <pre id="pyout-${uid}" style="white-space:pre-wrap;word-break:break-all;margin:0;min-height:16px;"></pre>
+            <div id="pyfiles-${uid}" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>`;
+
+    const outEl   = document.getElementById(`pyout-${uid}`);
+    const filesEl = document.getElementById(`pyfiles-${uid}`);
+
+    const appendOut = (txt, color) => {
+        if (!txt) return;
+        const span = document.createElement('span');
+        if (color) span.style.color = color;
+        span.textContent = txt.endsWith('\n') ? txt : txt + '\n';
+        outEl.appendChild(span);
+        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    const addFileBtn = (name, b64data) => {
+        const ext  = name.split('.').pop().toLowerCase();
+        const mime = _MIME_MAP[ext] || 'application/octet-stream';
+
+        // Prévisualisation inline pour les images
+        if (['png','jpg','jpeg','gif','webp','svg'].includes(ext)) {
+            const img = document.createElement('img');
+            img.src = `data:${mime};base64,${b64data}`;
+            img.style.cssText = 'max-width:100%;border-radius:8px;margin:12px 0 4px;display:block;';
+            document.getElementById(`pyshell-${uid}`).insertBefore(img, filesEl);
+        }
+
+        // Bouton téléchargement aux couleurs de Pensée
+        const dlBtn = document.createElement('button');
+        dlBtn.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:5px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>${name}`;
+        dlBtn.style.cssText = `
+            background:rgba(0,229,160,0.10);color:var(--accent,#00e5a0);
+            border:1px solid rgba(0,229,160,0.35);border-radius:8px;
+            padding:7px 14px;font-size:12px;cursor:pointer;
+            font-family:'JetBrains Mono',monospace;font-weight:500;
+            transition:background 0.2s,border-color 0.2s;`;
+        dlBtn.onmouseover = () => dlBtn.style.background = 'rgba(0,229,160,0.20)';
+        dlBtn.onmouseout  = () => dlBtn.style.background = 'rgba(0,229,160,0.10)';
+        dlBtn.onclick = () => _triggerDownload(b64data, name, mime);
+        filesEl.appendChild(dlBtn);
+    };
+
+    try {
+        const pyodide = await _getPyodide();
+        btn.innerHTML = '⏳ Exécution…';
+
+        // ── Détection et chargement automatique des imports ──────
+        const importMatches = [...rawCode.matchAll(/^\s*(?:import|from)\s+([\w]+)/gm)];
+        const toLoad = [...new Set(
+            importMatches.map(m => m[1]).filter(m => !_STDLIB.has(m) && m !== '__future__')
+        )];
+
+        if (toLoad.length > 0) {
+            appendOut(`📦 Chargement : ${toLoad.join(', ')}…`);
+            for (const mod of toLoad) {
+                const pipName = _PIP_MAP[mod] || mod;
+                try {
+                    await pyodide.loadPackage(pipName);
+                } catch {
+                    try {
+                        const micropip = pyodide.pyimport("micropip");
+                        await micropip.install(pipName);
+                        appendOut(`✓ ${mod} installé.`);
+                    } catch {
+                        appendOut(`⚠️ "${mod}" non disponible en WASM.`, '#f0c040');
+                    }
+                }
+            }
+        }
+
+        // ── Initialisation du contexte d'exécution ───────────────
+        pyodide.globals.set("__pensee_files__", []);
+
+        await pyodide.runPythonAsync(`
+import sys, io, base64, builtins as _bi
+
+# ── Redirection stdout / stderr vers buffer ──────────────────
+_pensee_buf = []
+class _PWriter:
+    def write(self, s):
+        if s and s.strip(): _pensee_buf.append(('out', s))
+    def flush(self): pass
+sys.stdout = _PWriter()
+sys.stderr = _PWriter()
+
+# ── Interception open() : capture tout fichier ouvert en écriture binaire ──
+_real_open = _bi.open
+def _pensee_open(path, mode='r', *args, **kwargs):
+    if isinstance(mode, str) and 'w' in mode and ('b' in mode or mode in ('w','wb','xb')):
+        buf = io.BytesIO()
+        buf._pensee_path = str(path)
+        buf._pensee_mode = mode
+        return buf
+    return _real_open(path, mode, *args, **kwargs)
+_bi.open = _pensee_open
+
+# ── Patch BytesIO.close : capture le contenu avant fermeture ──
+_orig_bclose = io.BytesIO.close
+def _patched_close(self):
+    if hasattr(self, '_pensee_path') and not self.closed:
+        try:
+            self.seek(0)
+            raw = self.read()
+            if raw:
+                b64 = base64.b64encode(raw).decode()
+                __pensee_files__.append({'name': self._pensee_path, 'data': b64})
+        except Exception: pass
+    _orig_bclose(self)
+io.BytesIO.close = _patched_close
+`);
+
+        // ── Patch matplotlib : plt.show() → savefig PNG auto ────
+        let code = rawCode;
+        if (code.includes('matplotlib') || code.includes('plt.')) {
+            try { await pyodide.loadPackage('matplotlib'); } catch {}
+            // Remplace plt.show() par une capture PNG silencieuse
+            code = code.replace(/plt\.show\s*\(\s*\)/g, `
+_fig_io = __import__('io').BytesIO()
+_fig_io._pensee_path = 'graphique_pensee.png'
+import matplotlib.pyplot as _plt_capture
+_plt_capture.savefig(_fig_io, format='png', bbox_inches='tight', dpi=120)
+_fig_io.seek(0)
+__pensee_files__.append({'name':'graphique_pensee.png','data':__import__('base64').b64encode(_fig_io.read()).decode()})
+_plt_capture.close()
+`);
+        }
+
+        // ── Patch pandas : to_excel utilise openpyxl qui écrit sur disque ──
+        // Rien à faire — BytesIO est déjà intercepté par _pensee_open
+
+        // ── Exécution du code utilisateur ────────────────────────
+        await pyodide.runPythonAsync(`
+_pensee_buf.clear()
+try:
+${code.split('\n').map(l => '    ' + l).join('\n')}
+except Exception as _err:
+    import traceback as _tb
+    _pensee_buf.append(('err', _tb.format_exc()))
+`);
+
+        // ── Récupération et affichage de l'output texte ──────────
+        const buf = pyodide.globals.get("_pensee_buf").toJs();
+        if (buf.length === 0 && document.getElementById(`pyfiles-${uid}`).children.length === 0) {
+            appendOut('✓ Exécution terminée.', 'var(--accent,#00e5a0)');
+        }
+        for (const item of buf) {
+            const type = item.get ? item.get(0) : item[0];
+            const text = item.get ? item.get(1) : item[1];
+            appendOut(text, type === 'err' ? 'var(--red,#ff5f5f)' : null);
+        }
+
+        // ── Récupération et affichage des fichiers générés ───────
+        const files = pyodide.globals.get("__pensee_files__").toJs();
+        let fileCount = 0;
+        for (const f of files) {
+            const name = f.get ? f.get('name') : f.name;
+            const data = f.get ? f.get('data') : f.data;
+            if (!name || !data) continue;
+            addFileBtn(name, data);
+            fileCount++;
+        }
+        if (fileCount > 0) {
+            appendOut(`\n✓ ${fileCount} fichier(s) prêt(s) au téléchargement.`, 'var(--accent,#00e5a0)');
+        }
+
+        btn.innerHTML = '⏹ Fermer';
+        btn.disabled  = false;
+        btn.classList.add('running');
+
+    } catch(e) {
+        appendOut('❌ Erreur critique : ' + e.message, 'var(--red,#ff5f5f)');
+        btn.innerHTML = '▶ Réessayer';
+        btn.disabled  = false;
+    }
+}
+
+// ── Dispatcher principal ─────────────────────────────────────
 window.executeWebCode = function(btn, containerId, lang) {
     const container = document.getElementById(containerId);
-    // On décode le code brut mis en attente
-    const rawCode = decodeURIComponent(btn.getAttribute('data-code'));
+    const rawCode   = decodeURIComponent(btn.getAttribute('data-code'));
 
-    // Logique de fermeture
+    // Fermeture universelle (tous langages)
     if (btn.classList.contains('running')) {
         container.innerHTML = '';
         container.style.display = 'none';
@@ -2696,16 +2978,21 @@ window.executeWebCode = function(btn, containerId, lang) {
         return;
     }
 
-    // Création de l'environnement isolé
+    // ── Route Python → moteur WASM ───────────────────────────
+    if (lang === 'py' || lang === 'python') {
+        _executePython(btn, container, rawCode);
+        return;
+    }
+
+    // ── Route JS/HTML → iframe sandbox (comportement inchangé) ──
     container.innerHTML = '';
     container.style.display = 'block';
     const iframe = document.createElement('iframe');
-    iframe.sandbox = 'allow-scripts allow-modals'; // Autorise l'exécution et les alert()
+    iframe.sandbox = 'allow-scripts allow-modals';
     container.appendChild(iframe);
 
     let finalCode = rawCode;
 
-    // Si c'est du JS pur, on crée une fausse console pour voir le résultat à l'écran
     if (lang === 'js' || lang === 'javascript') {
         finalCode = `
         <!DOCTYPE html><html>
@@ -2726,14 +3013,11 @@ window.executeWebCode = function(btn, containerId, lang) {
                     out.style.color = '#e11d48';
                     out.textContent += '\\nErreur critique : ' + e.message;
                 }
-            </script>
+            <\/script>
         </body></html>`;
     }
 
-    // Injection dans l'Iframe
     iframe.srcdoc = finalCode;
-
-    // Mise à jour de l'UI
     btn.classList.add('running');
     btn.innerHTML = '⏹ Fermer';
 };
