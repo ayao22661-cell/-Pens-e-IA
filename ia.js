@@ -2979,9 +2979,13 @@ window.executeWebCode = function(btn, containerId, lang) {
         return;
     }
 
-    // ── Route Python → moteur WASM ───────────────────────────
+    // ── Route Python → serveur (fichiers) ou WASM (calculs simples) ──
     if (lang === 'py' || lang === 'python') {
-        _executePython(btn, container, rawCode);
+        if (_isFileGeneratingCode(rawCode)) {
+            _executePythonServer(btn, container, rawCode);
+        } else {
+            _executePython(btn, container, rawCode);
+        }
         return;
     }
 
@@ -3022,3 +3026,105 @@ window.executeWebCode = function(btn, containerId, lang) {
     btn.classList.add('running');
     btn.innerHTML = '⏹ Fermer';
 };
+
+// ============================================================
+//  MOTEUR PYTHON SERVEUR — via /api/run-python (Piston)
+// ============================================================
+
+// Détecte si le code Python génère un fichier (xlsx, pdf, csv, docx, zip, png...)
+function _isFileGeneratingCode(code) {
+    return /\.(xlsx|csv|pdf|docx|pptx|zip|png|jpg|json|txt)['"]\s*\)/.test(code)
+        || /workbook\.save|\.to_excel|\.to_csv|canvas\.save|doc\.save|zipfile/.test(code);
+}
+
+async function _executePythonServer(btn, container, rawCode) {
+    const uid = container.id;
+
+    btn.innerHTML = '⏳ Génération…';
+    btn.disabled  = true;
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div id="pyshell-${uid}" style="
+            font-family:'JetBrains Mono',monospace;
+            background:var(--code-bg,#060810);
+            color:var(--text,#dde2ee);
+            padding:16px;border-radius:10px;font-size:13px;
+            border:1px solid var(--border,rgba(255,255,255,0.06));">
+            <div style="color:var(--accent,#00e5a0);font-size:10px;
+                        text-transform:uppercase;margin-bottom:10px;letter-spacing:.1em;">
+                Python · Serveur · Sécurisé
+            </div>
+            <pre id="pyout-${uid}" style="white-space:pre-wrap;word-break:break-all;margin:0;min-height:16px;"></pre>
+            <div id="pyfiles-${uid}" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>`;
+
+    const outEl   = document.getElementById(`pyout-${uid}`);
+    const filesEl = document.getElementById(`pyfiles-${uid}`);
+
+    const appendOut = (txt, color) => {
+        const span = document.createElement('span');
+        if (color) span.style.color = color;
+        span.textContent = (txt.endsWith('\n') ? txt : txt + '\n');
+        outEl.appendChild(span);
+    };
+
+    try {
+        const res = await fetch('/api/run-python', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: rawCode })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            appendOut('❌ ' + (data.error || 'Erreur serveur'), 'var(--red,#ff5f5f)');
+        } else {
+            // Afficher les logs stdout
+            if (data.output) appendOut(data.output);
+
+            // Afficher l'erreur Python si présente
+            if (data.error) appendOut(data.error, 'var(--red,#ff5f5f)');
+
+            // Afficher les fichiers générés
+            if (data.files && data.files.length > 0) {
+                for (const f of data.files) {
+                    const ext  = f.name.split('.').pop().toLowerCase();
+                    const mime = _MIME_MAP[ext] || 'application/octet-stream';
+
+                    // Prévisualisation image
+                    if (['png','jpg','jpeg','gif','webp'].includes(ext)) {
+                        const img = document.createElement('img');
+                        img.src = `data:${mime};base64,${f.data}`;
+                        img.style.cssText = 'max-width:100%;border-radius:8px;margin:12px 0 4px;display:block;';
+                        document.getElementById(`pyshell-${uid}`).insertBefore(img, filesEl);
+                    }
+
+                    // Bouton téléchargement style Claude
+                    const dlBtn = document.createElement('button');
+                    dlBtn.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:5px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>${f.name}`;
+                    dlBtn.style.cssText = `
+                        background:rgba(0,229,160,0.10);color:var(--accent,#00e5a0);
+                        border:1px solid rgba(0,229,160,0.35);border-radius:8px;
+                        padding:7px 14px;font-size:12px;cursor:pointer;
+                        font-family:'JetBrains Mono',monospace;font-weight:500;
+                        transition:background 0.2s;`;
+                    dlBtn.onmouseover = () => dlBtn.style.background = 'rgba(0,229,160,0.20)';
+                    dlBtn.onmouseout  = () => dlBtn.style.background = 'rgba(0,229,160,0.10)';
+                    dlBtn.onclick = () => _triggerDownload(f.data, f.name, mime);
+                    filesEl.appendChild(dlBtn);
+                }
+                appendOut(`\n✓ ${data.files.length} fichier(s) prêt(s) au téléchargement.`, 'var(--accent,#00e5a0)');
+            } else if (!data.error && !data.output) {
+                appendOut('✓ Exécution terminée.', 'var(--accent,#00e5a0)');
+            }
+        }
+
+    } catch (err) {
+        appendOut('❌ Erreur réseau : ' + (err.message || err), 'var(--red,#ff5f5f)');
+    }
+
+    btn.innerHTML = '⏹ Fermer';
+    btn.disabled  = false;
+    btn.classList.add('running');
+}
