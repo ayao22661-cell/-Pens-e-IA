@@ -2916,10 +2916,11 @@ _plt_capture.close()
         }
 
         // ── 2. EXÉCUTION DU CODE UTILISATEUR ────────────────────────
+       pyodide.globals.set("_pensee_user_code", code);
         await pyodide.runPythonAsync(`
 _pensee_buf.clear()
 try:
-${code.split('\n').map(l => '    ' + l).join('\n')}
+    exec(_pensee_user_code, globals())
 except Exception as _err:
     import traceback as _tb
     _pensee_buf.append(('err', _tb.format_exc()))
