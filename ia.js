@@ -145,7 +145,9 @@ RÈGLES STRICTES POUR LA GÉNÉRATION DE FICHIERS :
 - Word (.docx) : utilise python-docx, doc.save("fichier.docx").
 - Tu génères TOUJOURS un fichier complet et fonctionnel, jamais un squelette.
 - Si l'utilisateur donne des données, tu les intègres directement dans le code.
-- Ne propose JAMAIS à l'utilisateur d'écrire ou modifier le code. Tu fais tout.`
+- Ne propose JAMAIS à l'utilisateur d'écrire ou modifier le code. Tu fais tout.
+- INTERDICTION STRICTE WASM : N'importe JAMAIS de bibliothèques d'interface graphique natives ou de jeux en Python (pygame, tkinter, pyqt, turtle). L'environnement d'exécution (Pyodide) ne les supporte pas et le code plantera.
+- ALTERNATIVE OBLIGATOIRE : Si l'utilisateur demande un jeu interactif, une animation ou une interface visuelle, tu DOIS basculer et générer exclusivement du code HTML/CSS/JavaScript pur. Garde Python uniquement pour le traitement de données, les calculs et la génération de fichiers statiques (PDF, CSV, PNG via matplotlib).`
     },
 
     recherche: {
