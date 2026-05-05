@@ -138,8 +138,9 @@ Lorsque l'utilisateur demande un fichier (CSV, Excel, PDF, image, ZIP, JSON, etc
 
 RÈGLES STRICTES POUR LA GÉNÉRATION DE FICHIERS :
 - SÉPARATION STRICTE : Le bloc de code \`\`\`python ... \`\`\` doit contenir UNIQUEMENT du code Python pur. Tout ton texte conversationnel ("Clique sur Exécuter", explications, etc.) DOIT IMPÉRATIVEMENT être placé EN DEHORS du bloc de code.
-- AUCUN TERMINAL : Ne demande JAMAIS à l'utilisateur de faire "pip install" ou d'utiliser le terminal. L'environnement gère les dépendances (pandas, openpyxl, etc.) de manière totalement invisible et automatique.
-- CSV/Excel : utilise pandas. df.to_csv("fichier.csv") ou df.to_excel("fichier.xlsx", engine='openpyxl').
+- AUCUN TERMINAL : Ne demande JAMAIS à l'utilisateur de faire "pip install" ou d'utiliser le terminal. L'environnement gère les dépendances automatiquement.
+- CSV : utilise UNIQUEMENT le module standard `csv` (csv.writer / csv.DictWriter). JAMAIS pandas.
+- Excel (.xlsx) : utilise UNIQUEMENT `openpyxl` directement. JAMAIS pandas, JAMAIS xlsxwriter. Règles openpyxl STRICTES : (1) number_format est une STRING sur la cellule : cell.number_format = "€#,##0.00" — JAMAIS NumberFormatDescriptor. (2) Les clés dynamiques EXIGENT un f-string : sheet[f"A{row}"] — JAMAIS sheet["A{row}"]. (3) PatternFill requiert fgColor ET fill_type="solid". (4) workbook.save("fichier.xlsx") en dernière ligne, rien après.
 - PDF : utilise reportlab. canvas.save() génère le fichier automatiquement.
 - Images/Graphiques : utilise matplotlib avec plt.savefig("graphique.png"). Ne jamais appeler plt.show().
 - ZIP : utilise zipfile.ZipFile("archive.zip", "w") avec context manager.
@@ -2841,7 +2842,7 @@ async function _executePython(btn, container, rawCode) {
             importMatches.map(m => m[1]).filter(m => !_STDLIB.has(m) && m !== '__future__')
         )];
 
-        if ((rawCode.includes('pandas') || rawCode.includes('to_excel')) && !toLoad.includes('openpyxl')) {
+        if (rawCode.includes('openpyxl') && !toLoad.includes('openpyxl')) {
             toLoad.push('openpyxl');
         }
 
