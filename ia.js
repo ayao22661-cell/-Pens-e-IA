@@ -2951,8 +2951,7 @@ except Exception as _err:
         btn.innerHTML = '⏹ Fermer';
         btn.disabled  = false;
         btn.classList.add('running');
-
-    } catch(e) {
+        
         } catch(e) {
         const msg = e?.message || e?.toString() || 'Erreur inconnue — voir F12 > Console';
         appendOut('❌ Erreur critique : ' + msg, 'var(--red,#ff5f5f)');
