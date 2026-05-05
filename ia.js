@@ -2870,6 +2870,7 @@ import sys, io, base64, builtins as _bi
 
 __pensee_files__ = []
 _pensee_buf = []
+
 class _PWriter:
     def write(self, s):
         if s and s.strip(): _pensee_buf.append(('out', s))
@@ -2877,28 +2878,30 @@ class _PWriter:
 sys.stdout = _PWriter()
 sys.stderr = _PWriter()
 
-_real_open = _bi.open
-def _pensee_open(path, mode='r', *args, **kwargs):
-    if isinstance(mode, str) and 'w' in mode and ('b' in mode or mode in ('w','wb','xb')):
-        buf = io.BytesIO()
-        buf._pensee_path = str(path)
-        buf._pensee_mode = mode
-        return buf
-    return _real_open(path, mode, *args, **kwargs)
-_bi.open = _pensee_open
+if not getattr(_bi, '_pensee_patched', False):
+    _real_open = _bi.open
+    def _pensee_open(path, mode='r', *args, **kwargs):
+        if isinstance(mode, str) and 'w' in mode and ('b' in mode or mode in ('w','wb','xb')):
+            buf = io.BytesIO()
+            buf._pensee_path = str(path)
+            buf._pensee_mode = mode
+            return buf
+        return _real_open(path, mode, *args, **kwargs)
+    _bi.open = _pensee_open
 
-_orig_bclose = io.BytesIO.close
-def _patched_close(self):
-    if hasattr(self, '_pensee_path') and not self.closed:
-        try:
-            self.seek(0)
-            raw = self.read()
-            if raw:
-                b64 = base64.b64encode(raw).decode()
-                __pensee_files__.append({'name': self._pensee_path, 'data': b64})
-        except Exception: pass
-    _orig_bclose(self)
-io.BytesIO.close = _patched_close
+    _orig_bclose = io.BytesIO.close
+    def _patched_close(self):
+        if hasattr(self, '_pensee_path') and not self.closed:
+            try:
+                self.seek(0)
+                raw = self.read()
+                if raw:
+                    b64 = base64.b64encode(raw).decode()
+                    __pensee_files__.append({'name': self._pensee_path, 'data': b64})
+            except Exception: pass
+        _orig_bclose(self)
+    io.BytesIO.close = _patched_close
+    _bi._pensee_patched = True
 `);
 
         let code = rawCode;
