@@ -2797,7 +2797,7 @@ async function _executePython(btn, container, rawCode) {
     const filesEl = document.getElementById(`pyfiles-${uid}`);
 
     const appendOut = (txt, color) => {
-        if (!txt || !document.body.contains(outEl)) return; // Stoppe si la fenêtre est fermée
+        if (!txt || !document.body.contains(outEl)) return;
         const span = document.createElement('span');
         if (color) span.style.color = color;
         span.textContent = txt.endsWith('\n') ? txt : txt + '\n';
@@ -2809,7 +2809,6 @@ async function _executePython(btn, container, rawCode) {
         const ext  = name.split('.').pop().toLowerCase();
         const mime = _MIME_MAP[ext] || 'application/octet-stream';
 
-        // Prévisualisation inline pour les images
         if (['png','jpg','jpeg','gif','webp','svg'].includes(ext)) {
             const img = document.createElement('img');
             img.src = `data:${mime};base64,${b64data}`;
@@ -2817,7 +2816,6 @@ async function _executePython(btn, container, rawCode) {
             document.getElementById(`pyshell-${uid}`).insertBefore(img, filesEl);
         }
 
-        // Bouton téléchargement aux couleurs de Pensée
         const dlBtn = document.createElement('button');
         dlBtn.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:5px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>${name}`;
         dlBtn.style.cssText = `
@@ -2836,13 +2834,11 @@ async function _executePython(btn, container, rawCode) {
         const pyodide = await _getPyodide();
         btn.innerHTML = '⏳ Exécution…';
 
-        // ── Détection et chargement automatique des imports ──────
         const importMatches = [...rawCode.matchAll(/^\s*(?:import|from)\s+([\w]+)/gm)];
         const toLoad = [...new Set(
             importMatches.map(m => m[1]).filter(m => !_STDLIB.has(m) && m !== '__future__')
         )];
 
-        // Injection auto de la dépendance Excel pour Pandas
         if ((rawCode.includes('pandas') || rawCode.includes('to_excel')) && !toLoad.includes('openpyxl')) {
             toLoad.push('openpyxl');
         }
@@ -2865,19 +2861,20 @@ async function _executePython(btn, container, rawCode) {
             }
         }
 
-        // ── Initialisation du contexte d'exécution ───────────────
+        // ── 1. INITIALISATION DU CONTEXTE (Réparé) ───────────────
         pyodide.globals.set("__pensee_files__", []);
 
-        pyodide.globals.set("_pensee_user_code", code);
         await pyodide.runPythonAsync(`
-_pensee_buf.clear()
-try:
-    exec(_pensee_user_code, globals())
-except Exception as _err:
-    import traceback as _tb
-    _pensee_buf.append(('err', _tb.format_exc()))
-`);
- ── Interception open() : capture tout fichier ouvert en écriture binaire ──
+import sys, io, base64, builtins as _bi
+
+_pensee_buf = []
+class _PWriter:
+    def write(self, s):
+        if s and s.strip(): _pensee_buf.append(('out', s))
+    def flush(self): pass
+sys.stdout = _PWriter()
+sys.stderr = _PWriter()
+
 _real_open = _bi.open
 def _pensee_open(path, mode='r', *args, **kwargs):
     if isinstance(mode, str) and 'w' in mode and ('b' in mode or mode in ('w','wb','xb')):
@@ -2888,7 +2885,6 @@ def _pensee_open(path, mode='r', *args, **kwargs):
     return _real_open(path, mode, *args, **kwargs)
 _bi.open = _pensee_open
 
-# ── Patch BytesIO.close : capture le contenu avant fermeture ──
 _orig_bclose = io.BytesIO.close
 def _patched_close(self):
     if hasattr(self, '_pensee_path') and not self.closed:
@@ -2903,11 +2899,9 @@ def _patched_close(self):
 io.BytesIO.close = _patched_close
 `);
 
-        // ── Patch matplotlib : plt.show() → savefig PNG auto ────
         let code = rawCode;
         if (code.includes('matplotlib') || code.includes('plt.')) {
             try { await pyodide.loadPackage('matplotlib'); } catch {}
-            // Remplace plt.show() par une capture PNG silencieuse
             code = code.replace(/plt\.show\s*\(\s*\)/g, `
 _fig_io = __import__('io').BytesIO()
 _fig_io._pensee_path = 'graphique_pensee.png'
@@ -2919,10 +2913,7 @@ _plt_capture.close()
 `);
         }
 
-        // ── Patch pandas : to_excel utilise openpyxl qui écrit sur disque ──
-        // Rien à faire — BytesIO est déjà intercepté par _pensee_open
-
-        // ── Exécution du code utilisateur ────────────────────────
+        // ── 2. EXÉCUTION DU CODE UTILISATEUR ────────────────────────
         await pyodide.runPythonAsync(`
 _pensee_buf.clear()
 try:
@@ -2932,7 +2923,6 @@ except Exception as _err:
     _pensee_buf.append(('err', _tb.format_exc()))
 `);
 
-        // ── Récupération et affichage de l'output texte ──────────
         const buf = pyodide.globals.get("_pensee_buf").toJs();
         if (buf.length === 0 && document.getElementById(`pyfiles-${uid}`).children.length === 0) {
             appendOut('✓ Exécution terminée.', 'var(--accent,#00e5a0)');
@@ -2943,7 +2933,6 @@ except Exception as _err:
             appendOut(text, type === 'err' ? 'var(--red,#ff5f5f)' : null);
         }
 
-        // ── Récupération et affichage des fichiers générés ───────
         const files = pyodide.globals.get("__pensee_files__").toJs();
         let fileCount = 0;
         for (const f of files) {
