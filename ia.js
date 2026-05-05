@@ -2877,11 +2877,6 @@ except Exception as _err:
     import traceback as _tb
     _pensee_buf.append(('err', _tb.format_exc()))
 `);
-        if s and s.strip(): _pensee_buf.append(('out', s))
-    def flush(self): pass
-sys.stdout = _PWriter()
-sys.stderr = _PWriter()
-
 # ── Interception open() : capture tout fichier ouvert en écriture binaire ──
 _real_open = _bi.open
 def _pensee_open(path, mode='r', *args, **kwargs):
