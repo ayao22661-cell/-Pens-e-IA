@@ -2797,7 +2797,7 @@ async function _executePython(btn, container, rawCode) {
     const filesEl = document.getElementById(`pyfiles-${uid}`);
 
     const appendOut = (txt, color) => {
-        if (!txt) return;
+        if (!txt || !document.body.contains(outEl)) return; // Stoppe si la fenêtre est fermée
         const span = document.createElement('span');
         if (color) span.style.color = color;
         span.textContent = txt.endsWith('\n') ? txt : txt + '\n';
