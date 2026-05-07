@@ -286,15 +286,20 @@ async function sendToAI(text) {
     const agentId = (typeof window.activeAgentId !== 'undefined' && window.activeAgentId) ? window.activeAgentId : 'default';
 
     try {
-        // FIX : Récupération du token Supabase pour l'authentification
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token || "";
+        // FIX : Récupération du token Supabase pour l'authentification (défensif)
+        let token = "";
+        try {
+            if (typeof supabase !== 'undefined') {
+                const { data: { session } } = await supabase.auth.getSession();
+                token = session?.access_token || "";
+            }
+        } catch (_) {}
 
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                ...(token && { 'Authorization': `Bearer ${token}` })
             },
             body: JSON.stringify({ prompt: text, systemInstruction, agentId })
         });
