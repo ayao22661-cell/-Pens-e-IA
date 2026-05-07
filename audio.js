@@ -22,8 +22,7 @@ const AudioState = {
     currentUtterance: null,
     voices: [],
     selectedVoice: null,
-    finalTranscript: '',
-    silenceTimer: null       // Timer pour détecter la fin de parole
+    finalTranscript: ''
 };
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -185,18 +184,6 @@ function buildOverlay() {
 // ============================================================
 //  RECONNAISSANCE VOCALE
 // ============================================================
-// Durée de silence avant d'envoyer (ms). 2500ms = confortable pour les pauses naturelles.
-const SILENCE_DELAY_MS = 2500;
-
-function resetSilenceTimer(onSilence) {
-    if (AudioState.silenceTimer) clearTimeout(AudioState.silenceTimer);
-    AudioState.silenceTimer = setTimeout(onSilence, SILENCE_DELAY_MS);
-}
-
-function clearSilenceTimer() {
-    if (AudioState.silenceTimer) { clearTimeout(AudioState.silenceTimer); AudioState.silenceTimer = null; }
-}
-
 function startListening() {
     if (AudioState.isListening) return;
     stopSpeaking();
@@ -205,27 +192,17 @@ function startListening() {
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 3;
-    recognition.continuous = true;
+    recognition.continuous = false;
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
     AudioState.finalTranscript = '';
 
     setOrbState('listening');
-    setStatus('Ecoute... (parle puis fais une pause)', 'listening');
+    setStatus('Ecoute...', 'listening');
     clearInput();
 
-    // GARDE ANTI-DOUBLON : sendToAI ne peut être appelé qu'une seule fois par session
-    let _alreadySent = false;
-
-    const commitAndSend = () => {
-        clearSilenceTimer();
-        if (_alreadySent || !AudioState.isListening) return;
-        AudioState.recognition?.stop(); // déclenche onend
-    };
-
     recognition.onresult = (event) => {
-        if (_alreadySent) return; // ignorer les résultats après envoi
         let interim = '';
         let final = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -236,19 +213,17 @@ function startListening() {
         AudioState.finalTranscript += final;
         const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
         setInputText(display, !!interim && !AudioState.finalTranscript);
-
-        if (interim || final) {
-            resetSilenceTimer(commitAndSend);
-        }
     };
 
+    // Garde anti-doublon : onend peut être appelé plusieurs fois par le navigateur
+    let _sent = false;
+
     recognition.onend = () => {
-        clearSilenceTimer();
         AudioState.isListening = false;
-        if (_alreadySent) return; // PROTECTION : onend peut se déclencher plusieurs fois
+        if (_sent) return;
         const text = AudioState.finalTranscript.trim();
         if (text) {
-            _alreadySent = true; // verrouillage immédiat avant l'appel async
+            _sent = true;
             setInputText(text, false);
             sendToAI(text);
         } else {
@@ -258,16 +233,10 @@ function startListening() {
     };
 
     recognition.onerror = (event) => {
-        clearSilenceTimer();
-        if (event.error === 'no-speech') {
-            if (AudioState.finalTranscript.trim()) {
-                AudioState.recognition?.stop();
-            }
-            return;
-        }
         AudioState.isListening = false;
         setOrbState('idle');
         const msgs = {
+            'no-speech': 'Rien entendu - reessaie',
             'not-allowed': 'Micro refuse - autorise le micro',
             'network': 'Erreur reseau'
         };
@@ -278,7 +247,6 @@ function startListening() {
 }
 
 function stopListening() {
-    clearSilenceTimer();
     AudioState.recognition?.stop();
     AudioState.recognition = null;
     AudioState.isListening = false;
