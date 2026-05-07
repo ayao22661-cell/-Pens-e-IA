@@ -306,7 +306,7 @@ async function sendToAI(text) {
                 'Content-Type': 'application/json',
                 ...(token && { 'Authorization': `Bearer ${token}` })
             },
-            body: JSON.stringify({ prompt: text, systemInstruction, agentId })
+            body: JSON.stringify({ prompt: text, systemInstruction, agentId: "default", voiceMode: true })
         });
 
         if (!response.ok) {
