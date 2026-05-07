@@ -322,10 +322,25 @@ async function sendToAI(text) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullReply = '';
+        let buffer = '';
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            fullReply += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const dataStr = line.slice(6).trim();
+                if (dataStr === '[DONE]') continue;
+                try {
+                    const obj = JSON.parse(dataStr);
+                    const parts = obj.candidates?.[0]?.content?.parts || [];
+                    const chunk = parts.filter(p => typeof p.text === 'string').map(p => p.text).join('');
+                    if (chunk) fullReply += chunk;
+                } catch (_) {}
+            }
         }
 
         const clean = cleanForSpeech(fullReply);
