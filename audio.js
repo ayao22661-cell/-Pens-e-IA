@@ -268,24 +268,48 @@ async function sendToAI(text) {
     const agentId = (typeof window.activeAgentId !== 'undefined' && window.activeAgentId) ? window.activeAgentId : 'default';
 
     try {
+        let token = "";
+        try {
+            const raw = localStorage.getItem('sb-uhrdoxllxqtvucxmzcww-auth-token');
+            if (raw) token = JSON.parse(raw)?.access_token || "";
+        } catch (_) {}
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
         const response = await fetch('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify({ prompt: text, systemInstruction, agentId })
         });
 
-        if (!response.ok) { setStatus('Erreur API', 'error'); setOrbState('idle'); return; }
+        if (!response.ok) { setStatus('Erreur API (' + response.status + ')', 'error'); setOrbState('idle'); return; }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullReply = '';
+        let buffer = '';
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            fullReply += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const dataStr = line.slice(6).trim();
+                if (dataStr === '[DONE]') continue;
+                try {
+                    const obj = JSON.parse(dataStr);
+                    const parts = obj.candidates?.[0]?.content?.parts || [];
+                    const chunk = parts.filter(p => typeof p.text === 'string').map(p => p.text).join('');
+                    if (chunk) fullReply += chunk;
+                } catch (_) {}
+            }
         }
 
         const clean = cleanForSpeech(fullReply);
+        if (!clean) { setStatus('Reponse vide', 'error'); setOrbState('idle'); return; }
         setOutputText(clean);
         speak(clean);
 
