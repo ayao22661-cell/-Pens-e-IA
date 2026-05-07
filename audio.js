@@ -204,8 +204,8 @@ function startListening() {
     const recognition = new SpeechRecognition();
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 3;   // FIX: 3 hypothèses pour choisir la meilleure transcription
-    recognition.continuous = true;     // FIX: ne pas couper automatiquement après un silence court
+    recognition.maxAlternatives = 3;
+    recognition.continuous = true;
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
@@ -215,18 +215,20 @@ function startListening() {
     setStatus('Ecoute... (parle puis fais une pause)', 'listening');
     clearInput();
 
-    // Fonction qui finalise et envoie après le silence
+    // GARDE ANTI-DOUBLON : sendToAI ne peut être appelé qu'une seule fois par session
+    let _alreadySent = false;
+
     const commitAndSend = () => {
         clearSilenceTimer();
-        if (!AudioState.isListening) return;
+        if (_alreadySent || !AudioState.isListening) return;
         AudioState.recognition?.stop(); // déclenche onend
     };
 
     recognition.onresult = (event) => {
+        if (_alreadySent) return; // ignorer les résultats après envoi
         let interim = '';
         let final = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
-            // Prend la meilleure alternative (index 0 = plus haute confiance)
             const t = event.results[i][0].transcript;
             if (event.results[i].isFinal) final += t;
             else interim += t;
@@ -235,8 +237,6 @@ function startListening() {
         const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
         setInputText(display, !!interim && !AudioState.finalTranscript);
 
-        // FIX: relance le timer à chaque nouveau mot détecté
-        // → envoi seulement après 2.5s de vrai silence
         if (interim || final) {
             resetSilenceTimer(commitAndSend);
         }
@@ -245,8 +245,10 @@ function startListening() {
     recognition.onend = () => {
         clearSilenceTimer();
         AudioState.isListening = false;
+        if (_alreadySent) return; // PROTECTION : onend peut se déclencher plusieurs fois
         const text = AudioState.finalTranscript.trim();
         if (text) {
+            _alreadySent = true; // verrouillage immédiat avant l'appel async
             setInputText(text, false);
             sendToAI(text);
         } else {
@@ -257,13 +259,10 @@ function startListening() {
 
     recognition.onerror = (event) => {
         clearSilenceTimer();
-        // 'no-speech' en mode continuous = silence trop long, on relance
         if (event.error === 'no-speech') {
             if (AudioState.finalTranscript.trim()) {
-                // Du texte existe déjà → on envoie
                 AudioState.recognition?.stop();
             }
-            // sinon on laisse tourner, l'utilisateur n'a pas encore parlé
             return;
         }
         AudioState.isListening = false;
