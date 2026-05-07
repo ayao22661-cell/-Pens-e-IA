@@ -22,7 +22,8 @@ const AudioState = {
     currentUtterance: null,
     voices: [],
     selectedVoice: null,
-    finalTranscript: ''
+    finalTranscript: '',
+    silenceTimer: null       // Timer pour détecter la fin de parole
 };
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -184,6 +185,18 @@ function buildOverlay() {
 // ============================================================
 //  RECONNAISSANCE VOCALE
 // ============================================================
+// Durée de silence avant d'envoyer (ms). 2500ms = confortable pour les pauses naturelles.
+const SILENCE_DELAY_MS = 2500;
+
+function resetSilenceTimer(onSilence) {
+    if (AudioState.silenceTimer) clearTimeout(AudioState.silenceTimer);
+    AudioState.silenceTimer = setTimeout(onSilence, SILENCE_DELAY_MS);
+}
+
+function clearSilenceTimer() {
+    if (AudioState.silenceTimer) { clearTimeout(AudioState.silenceTimer); AudioState.silenceTimer = null; }
+}
+
 function startListening() {
     if (AudioState.isListening) return;
     stopSpeaking();
@@ -191,21 +204,29 @@ function startListening() {
     const recognition = new SpeechRecognition();
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
+    recognition.maxAlternatives = 3;   // FIX: 3 hypothèses pour choisir la meilleure transcription
+    recognition.continuous = true;     // FIX: ne pas couper automatiquement après un silence court
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
     AudioState.finalTranscript = '';
 
     setOrbState('listening');
-    setStatus('Ecoute...', 'listening');
+    setStatus('Ecoute... (parle puis fais une pause)', 'listening');
     clearInput();
+
+    // Fonction qui finalise et envoie après le silence
+    const commitAndSend = () => {
+        clearSilenceTimer();
+        if (!AudioState.isListening) return;
+        AudioState.recognition?.stop(); // déclenche onend
+    };
 
     recognition.onresult = (event) => {
         let interim = '';
         let final = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
+            // Prend la meilleure alternative (index 0 = plus haute confiance)
             const t = event.results[i][0].transcript;
             if (event.results[i].isFinal) final += t;
             else interim += t;
@@ -213,9 +234,16 @@ function startListening() {
         AudioState.finalTranscript += final;
         const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
         setInputText(display, !!interim && !AudioState.finalTranscript);
+
+        // FIX: relance le timer à chaque nouveau mot détecté
+        // → envoi seulement après 2.5s de vrai silence
+        if (interim || final) {
+            resetSilenceTimer(commitAndSend);
+        }
     };
 
     recognition.onend = () => {
+        clearSilenceTimer();
         AudioState.isListening = false;
         const text = AudioState.finalTranscript.trim();
         if (text) {
@@ -228,10 +256,19 @@ function startListening() {
     };
 
     recognition.onerror = (event) => {
+        clearSilenceTimer();
+        // 'no-speech' en mode continuous = silence trop long, on relance
+        if (event.error === 'no-speech') {
+            if (AudioState.finalTranscript.trim()) {
+                // Du texte existe déjà → on envoie
+                AudioState.recognition?.stop();
+            }
+            // sinon on laisse tourner, l'utilisateur n'a pas encore parlé
+            return;
+        }
         AudioState.isListening = false;
         setOrbState('idle');
         const msgs = {
-            'no-speech': 'Rien entendu - reessaie',
             'not-allowed': 'Micro refuse - autorise le micro',
             'network': 'Erreur reseau'
         };
@@ -242,6 +279,7 @@ function startListening() {
 }
 
 function stopListening() {
+    clearSilenceTimer();
     AudioState.recognition?.stop();
     AudioState.recognition = null;
     AudioState.isListening = false;
