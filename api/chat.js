@@ -125,7 +125,7 @@ export default async function handler(req) {
     //  2. TRAITEMENT DE LA REQUÊTE
     // ============================================================
     const bodyReq = await req.json().catch(() => ({}));
-    const { prompt, files, systemInstruction, agentId } = bodyReq;
+    const { prompt, files, systemInstruction, agentId, voiceMode } = bodyReq;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
@@ -137,6 +137,9 @@ export default async function handler(req) {
     }
 
     const agentConfig = AGENTS[agentId] || AGENTS.default;
+
+    // Mode vocal : bridage tokens pour réponse rapide
+    if (voiceMode) agentConfig.maxOutputTokens = 400;
 
     // ============================================================
     //  3. MODEL ROUTING INTELLIGENT
@@ -150,11 +153,11 @@ export default async function handler(req) {
             "gemini-2.5-flash", 
             "gemini-2.0-flash"
         ];
-    } else if (agentId === 'creatif' || (prompt.length < 150 && (!files || files.length === 0))) {
-        // Tâches simples ou purement créatives : Rapidité et Économie (Flash en priorité)
+    } else if (voiceMode || agentId === 'creatif' || (prompt.length < 150 && (!files || files.length === 0))) {
+        // Mode vocal / tâches simples : gemini-2.0-flash en priorité (plus rapide et stable)
         modelsToTry = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash"
+            "gemini-2.0-flash",
+            "gemini-2.5-flash"
         ];
     } else {
         // Mix standard pour recherche, stratégie, visionnaire
