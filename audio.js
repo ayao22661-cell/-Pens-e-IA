@@ -10,7 +10,7 @@ const AUDIO_CONFIG = {
     voiceRate: 1.05,
     voicePitch: 1.0,
     voiceVolume: 1.0,
-    version: '3.0.0'
+    version: '3.1.0'
 };
 
 const AudioState = {
@@ -191,8 +191,8 @@ function startListening() {
     const recognition = new SpeechRecognition();
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 3;
-    recognition.continuous = true;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false; // IMPORTANT: false = stable, pas de double-fire onend
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
@@ -202,19 +202,7 @@ function startListening() {
     setStatus('Ecoute...', 'listening');
     clearInput();
 
-    // Timer silence : envoie après 2.5s sans parole
-    let _silenceTimer = null;
-    let _sent = false;
-
-    const _commit = () => {
-        if (_sent || !AudioState.isListening) return;
-        clearTimeout(_silenceTimer);
-        recognition.stop(); // déclenche onend une seule fois
-    };
-
     recognition.onresult = (event) => {
-        if (_sent) return;
-        clearTimeout(_silenceTimer);
         let interim = '';
         let final = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -225,17 +213,12 @@ function startListening() {
         AudioState.finalTranscript += final;
         const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
         setInputText(display, !!interim && !AudioState.finalTranscript);
-        // Relance le timer après chaque mot détecté
-        _silenceTimer = setTimeout(_commit, 2500);
     };
 
     recognition.onend = () => {
-        clearTimeout(_silenceTimer);
         AudioState.isListening = false;
-        if (_sent) return;
         const text = AudioState.finalTranscript.trim();
         if (text) {
-            _sent = true;
             setInputText(text, false);
             sendToAI(text);
         } else {
@@ -246,13 +229,25 @@ function startListening() {
 
     recognition.onerror = (event) => {
         AudioState.isListening = false;
+        if (event.error === 'no-speech') {
+            // Pas une vraie erreur : l'utilisateur n'a pas parlé
+            setOrbState('idle');
+            setStatus('Appuie pour parler', '');
+            return;
+        }
         setOrbState('idle');
         const msgs = {
-            'no-speech': 'Rien entendu - reessaie',
             'not-allowed': 'Micro refuse - autorise le micro',
-            'network': 'Erreur reseau'
+            'network': 'Erreur reseau',
+            'aborted': ''
         };
-        setStatus(msgs[event.error] || 'Erreur : ' + event.error, 'error');
+        const msg = msgs[event.error];
+        if (msg !== undefined) {
+            if (msg) setStatus(msg, 'error');
+            else setStatus('Appuie pour parler', '');
+        } else {
+            setStatus('Erreur : ' + event.error, 'error');
+        }
     };
 
     recognition.start();
@@ -263,7 +258,6 @@ function stopListening() {
     AudioState.recognition = null;
     AudioState.isListening = false;
     setOrbState('idle');
-    setStatus('Appuie pour parler', '');
 }
 
 function toggleListening() {
