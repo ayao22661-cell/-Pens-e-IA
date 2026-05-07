@@ -10,7 +10,7 @@ const AUDIO_CONFIG = {
     voiceRate: 1.05,
     voicePitch: 1.0,
     voiceVolume: 1.0,
-    version: '3.0.0'
+    version: '3.0.1'
 };
 
 const AudioState = {
@@ -191,8 +191,8 @@ function startListening() {
     const recognition = new SpeechRecognition();
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
+    recognition.maxAlternatives = 3;
+    recognition.continuous = true;
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
@@ -202,7 +202,19 @@ function startListening() {
     setStatus('Ecoute...', 'listening');
     clearInput();
 
+    // Timer silence : envoie après 2.5s sans parole
+    let _silenceTimer = null;
+    let _sent = false;
+
+    const _commit = () => {
+        if (_sent || !AudioState.isListening) return;
+        clearTimeout(_silenceTimer);
+        recognition.stop(); // déclenche onend une seule fois
+    };
+
     recognition.onresult = (event) => {
+        if (_sent) return;
+        clearTimeout(_silenceTimer);
         let interim = '';
         let final = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -213,12 +225,17 @@ function startListening() {
         AudioState.finalTranscript += final;
         const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
         setInputText(display, !!interim && !AudioState.finalTranscript);
+        // Relance le timer après chaque mot détecté
+        _silenceTimer = setTimeout(_commit, 2500);
     };
 
     recognition.onend = () => {
+        clearTimeout(_silenceTimer);
         AudioState.isListening = false;
+        if (_sent) return;
         const text = AudioState.finalTranscript.trim();
         if (text) {
+            _sent = true;
             setInputText(text, false);
             sendToAI(text);
         } else {
@@ -246,6 +263,7 @@ function stopListening() {
     AudioState.recognition = null;
     AudioState.isListening = false;
     setOrbState('idle');
+    setStatus('Appuie pour parler', '');
 }
 
 function toggleListening() {
@@ -268,13 +286,38 @@ async function sendToAI(text) {
     const agentId = (typeof window.activeAgentId !== 'undefined' && window.activeAgentId) ? window.activeAgentId : 'default';
 
     try {
+        // FIX : Token Supabase via localStorage (indépendant de l'ordre de chargement des scripts)
+        let token = "";
+        try {
+            const raw = localStorage.getItem('sb-uhrdoxllxqtvucxmzcww-auth-token');
+            if (raw) token = JSON.parse(raw)?.access_token || "";
+        } catch (_) {}
+        // Fallback si l'objet supabase est déjà disponible
+        if (!token && typeof supabase !== 'undefined') {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                token = session?.access_token || "";
+            } catch (_) {}
+        }
+
         const response = await fetch('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token && { 'Authorization': `Bearer ${token}` })
+            },
             body: JSON.stringify({ prompt: text, systemInstruction, agentId })
         });
 
-        if (!response.ok) { setStatus('Erreur API', 'error'); setOrbState('idle'); return; }
+        if (!response.ok) {
+            const msg = response.status === 503 ? 'Serveurs satures - reessaie'
+                      : response.status === 401 ? 'Non authentifie'
+                      : response.status === 403 ? 'Quota epuise (20/20)'
+                      : `Erreur API (${response.status})`;
+            setStatus(msg, 'error');
+            setOrbState('idle');
+            return;
+        }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
