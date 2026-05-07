@@ -286,6 +286,7 @@ async function sendToAI(text) {
         }
 
         const clean = cleanForSpeech(fullReply);
+        if (!clean) { setStatus('Reponse vide', 'error'); setOrbState('idle'); return; }
         setOutputText(clean);
         speak(clean);
 
@@ -367,32 +368,53 @@ async function speak(text) {
 
 function speakWebSpeech(text) {
     if (!AudioState.synth) return;
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+
+    // Normalisation : s'assurer que le texte se termine bien par un séparateur
+    const normalized = text.trim().replace(/([^.!?])$/, '$1.');
+    const sentences = normalized.match(/[^.!?]+[.!?]+/g) || [normalized];
     let index = 0;
+    let cancelled = false;
 
     function next() {
-        if (index >= sentences.length || !AudioState.isOpen) {
-            AudioState.isSpeaking = false;
-            setOrbState('idle');
-            setStatus('Appuie pour parler', '');
+        if (cancelled || index >= sentences.length || !AudioState.isOpen) {
+            if (!cancelled) {
+                AudioState.isSpeaking = false;
+                setOrbState('idle');
+                setStatus('Appuie pour parler', '');
+            }
             return;
         }
-        const utt = new SpeechSynthesisUtterance(sentences[index].trim());
+        const chunk = sentences[index].trim();
+        if (!chunk) { index++; next(); return; }
+
+        const utt = new SpeechSynthesisUtterance(chunk);
         utt.lang   = AUDIO_CONFIG.lang;
         utt.rate   = AUDIO_CONFIG.voiceRate;
         utt.pitch  = AUDIO_CONFIG.voicePitch;
         utt.volume = AUDIO_CONFIG.voiceVolume;
         if (AudioState.selectedVoice) utt.voice = AudioState.selectedVoice;
         utt.onstart = () => { AudioState.isSpeaking = true; setOrbState('speaking'); setStatus('Pensee parle...', 'speaking'); };
-        utt.onend   = () => { index++; next(); };
-        utt.onerror = () => { index++; next(); };
+        utt.onend   = () => { if (!cancelled) { index++; next(); } };
+        utt.onerror = (e) => {
+            // 'interrupted' = stopSpeaking() appelé volontairement, pas une vraie erreur
+            if (e.error === 'interrupted') { cancelled = true; return; }
+            index++; next();
+        };
         AudioState.currentUtterance = utt;
+
+        // Garde anti-bug Chrome : synth peut se bloquer silencieusement
+        if (AudioState.synth.speaking) AudioState.synth.cancel();
         AudioState.synth.speak(utt);
     }
+
+    // Stocker le cancel pour stopSpeaking()
+    AudioState._cancelSpeech = () => { cancelled = true; };
     next();
 }
 
 function stopSpeaking() {
+    // Annuler la boucle interne de speakWebSpeech
+    if (AudioState._cancelSpeech) { AudioState._cancelSpeech(); AudioState._cancelSpeech = null; }
     // Stop Web Audio (ElevenLabs / Google)
     if (AudioState.currentSource) {
         try { AudioState.currentSource.stop(); } catch(e) {}
