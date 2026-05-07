@@ -192,7 +192,7 @@ function startListening() {
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 3;
-    recognition.continuous = false;
+    recognition.continuous = true;
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
@@ -202,7 +202,19 @@ function startListening() {
     setStatus('Ecoute...', 'listening');
     clearInput();
 
+    // Timer silence : envoie après 2.5s sans parole
+    let _silenceTimer = null;
+    let _sent = false;
+
+    const _commit = () => {
+        if (_sent || !AudioState.isListening) return;
+        clearTimeout(_silenceTimer);
+        recognition.stop(); // déclenche onend une seule fois
+    };
+
     recognition.onresult = (event) => {
+        if (_sent) return;
+        clearTimeout(_silenceTimer);
         let interim = '';
         let final = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -213,12 +225,12 @@ function startListening() {
         AudioState.finalTranscript += final;
         const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
         setInputText(display, !!interim && !AudioState.finalTranscript);
+        // Relance le timer après chaque mot détecté
+        _silenceTimer = setTimeout(_commit, 2500);
     };
 
-    // Garde anti-doublon : onend peut être appelé plusieurs fois par le navigateur
-    let _sent = false;
-
     recognition.onend = () => {
+        clearTimeout(_silenceTimer);
         AudioState.isListening = false;
         if (_sent) return;
         const text = AudioState.finalTranscript.trim();
@@ -251,6 +263,7 @@ function stopListening() {
     AudioState.recognition = null;
     AudioState.isListening = false;
     setOrbState('idle');
+    setStatus('Appuie pour parler', '');
 }
 
 function toggleListening() {
