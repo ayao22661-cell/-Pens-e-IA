@@ -224,7 +224,7 @@ export default async function handler(req) {
         };
 
         let activeTools = [];
-        if (canUseSearch) activeTools.push({ google_search: {} });
+        if (canUseSearch) activeTools.push({ googleSearch: {} }); // Changement ici (S majuscule et pas d'underscore)
         if (canUseCodeExecution) activeTools.push({ codeExecution: {} });
         if (activeTools.length > 0) body.tools = activeTools;
 
@@ -294,9 +294,18 @@ export default async function handler(req) {
                 });
             }
 
-            if (response.status === 404 || response.status === 400 || response.status === 429 || response.status >= 500) {
-                continue; // Failover sur le modèle suivant
-            }
+            // Si c'est une erreur 400, on arrête tout et on affiche la vraie erreur
+if (response.status === 400) {
+    const errorData = await response.json().catch(() => ({}));
+    return new Response(JSON.stringify({ 
+        error: `Requête invalide (400) : ${errorData.error?.message || 'Vérifiez la syntaxe des outils'}` 
+    }), { status: 400 });
+}
+
+// On ne fait le "failover" (test du modèle suivant) que pour les erreurs de serveur ou de quota
+if (response.status === 404 || response.status === 429 || response.status >= 500) {
+    continue; 
+}
 
             const errorData = await response.json().catch(() => ({}));
             return new Response(JSON.stringify({ error: errorData.error?.message || `Erreur API (${response.status})` }), { status: response.status });
