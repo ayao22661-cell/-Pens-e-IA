@@ -1,9 +1,23 @@
 // ============================================================
 //  PENSÉE IA — api/image.js
 //  Génération d'images : Imagen 3 (Google) → Pollinations.ai
+//  Modèle auto-sélectionné selon le contexte du prompt
 // ============================================================
 
 export const config = { runtime: 'edge' };
+
+// ── Détection contextuelle du meilleur modèle ────────────────
+function selectModel(prompt) {
+    const p = prompt.toLowerCase();
+    const realismKeywords = [
+        'personne','homme','femme','fille','garçon','enfant','visage','portrait',
+        'photo','photographe','photoréaliste','réaliste','realistic','photorealistic',
+        'person','man','woman','girl','boy','face','people','human','skin','body',
+        'rue','ville','abidjan','marché','quartier','foule','restaurant','intérieur',
+        'street','city','crowd','indoor','outdoor','lifestyle'
+    ];
+    return realismKeywords.some(kw => p.includes(kw)) ? 'flux-realism' : 'flux-pro';
+}
 
 export default async function handler(req) {
     if (req.method !== "POST") {
@@ -55,16 +69,63 @@ export default async function handler(req) {
         }
     }
 
-    // ── FALLBACK : Pollinations.ai (gratuit, sans clé) ─────────
+    // ── FALLBACK : Pollinations.ai — avec prompt enhancement ──
     try {
-        const encodedPrompt = encodeURIComponent(prompt);
+        // Étape 1 : Enrichissement du prompt via Gemini
+        let enhancedPrompt = prompt;
+
+        if (GEMINI_API_KEY) {
+            try {
+                const enhanceUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+                const enhanceRes = await fetch(enhanceUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: `You are an expert image prompt engineer for AI image generation.
+Transform the user prompt into a rich, detailed generation prompt optimized for quality and realism.
+
+Rules:
+- If the prompt involves a person/portrait: add "RAW photo, DSLR, 8K UHD, photorealistic, Canon EOS R5, natural lighting, sharp focus, f/2.8, bokeh, ultra-detailed skin texture, catchlights in eyes"
+- If it's a scene/environment: add atmosphere, lighting direction, time of day, depth of field, lens type
+- If it's an object/product: add studio lighting, surface texture, material detail, shadows
+- If it's abstract/concept: add art style, color palette, mood, composition rules
+- Always end with quality boosters: "masterpiece, best quality, highly detailed, 8K"
+- Output ONLY the enhanced prompt. No explanation, no quotes, no preamble.
+
+User prompt: "${prompt}"`
+                            }]
+                        }],
+                        generationConfig: { temperature: 0.7, maxOutputTokens: 400 }
+                    }),
+                    signal: AbortSignal.timeout(8000)
+                });
+
+                if (enhanceRes.ok) {
+                    const enhanceData = await enhanceRes.json();
+                    const enhanced = enhanceData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                    if (enhanced && enhanced.length > 20) {
+                        enhancedPrompt = enhanced;
+                    }
+                }
+            } catch (e) {
+                console.warn("Prompt enhancement skipped:", e.message);
+            }
+        }
+
+        // Étape 2 : Sélection du modèle selon le contexte du prompt original
+        const model = selectModel(prompt);
+        const encodedPrompt = encodeURIComponent(enhancedPrompt);
         const seed = Math.floor(Math.random() * 999999);
-        const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&seed=${seed}&nologo=true`;
+        const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=${model}&seed=${seed}&nologo=true&enhance=false`;
 
         return new Response(JSON.stringify({
             source: "pollinations",
+            model,
             type: "url",
-            url: pollinationsUrl
+            url: pollinationsUrl,
+            enhanced: enhancedPrompt !== prompt
         }), { status: 200, headers: { "Content-Type": "application/json" } });
 
     } catch (e) {
