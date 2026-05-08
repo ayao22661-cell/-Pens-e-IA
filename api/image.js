@@ -1,15 +1,15 @@
 // ============================================================
 //  PENSÉE IA — api/image.js
-//  Optimisé pour la netteté et la fidélité de Flux
+//  Optimisé Anti-Timeout (Modèles rapides) & Netteté
 // ============================================================
 
 export const config = { runtime: 'edge' };
 
 const MODELS = {
     portrait: 'flux-realism',
-    horror:   'flux-pro',
+    horror:   'flux',         // Remplacé flux-pro par flux
     realism:  'flux-realism',
-    default:  'flux-pro',
+    default:  'flux',         // Remplacé flux-pro par flux
 };
 
 function selectModel(prompt) {
@@ -26,23 +26,18 @@ function selectModel(prompt) {
 function enrichPrompt(prompt) {
     const p = prompt.toLowerCase();
     
-    // Flux nécessite du langage naturel descriptif plutôt que des listes de tags.
-    // L'ajout de "High quality photograph of..." force le modèle dans un espace latent plus net.
     if (/visage|portrait|personne|homme|femme|face|person|skin|peau/.test(p)) {
-        return `A highly detailed, ultra-sharp professional photograph of ${prompt}. Studio lighting, visible skin texture and pores, extreme focus on the subject, photorealistic.`;
+        return `Ultra-sharp professional photograph of ${prompt}. Studio lighting, visible skin texture, extreme focus, 8k resolution.`;
     } else if (/horreur|horror|dark|ghost|génie|lagune|demon|fantôme|shadow|nuit/.test(p)) {
-        return `A cinematic, intensely sharp and atmospheric shot of ${prompt}. Dramatic chiaroscuro lighting, deep contrast, highly detailed textures, photorealistic realism.`;
+        return `Intensely sharp cinematic shot of ${prompt}. Dramatic lighting, deep contrast, highly detailed textures.`;
     } else if (/rue|ville|abidjan|marché|street|city|outdoor|architecture/.test(p)) {
-        return `A perfectly focused, ultra-clear architectural street photography of ${prompt}. Taken during golden hour with vivid colors, extremely detailed environments and sharp edges.`;
+        return `Crystal clear street photography of ${prompt}. Golden hour, vivid colors, extremely detailed and sharp edges.`;
     } else {
-        return `A masterfully captured, crystal clear, sharp photograph of ${prompt}. High resolution, highly detailed, perfect lighting and focus.`;
+        return `Masterfully captured, crystal clear, sharp photograph of ${prompt}. High resolution, highly detailed perfect focus.`;
     }
 }
 
 function pollinationsUrl(prompt, model, w, h, seed) {
-    // Utilisation des paramètres d'URL pour sécuriser la requête. 
-    // enhance=false est conservé car enhance=true (LLM de Pollinations) risque de diluer 
-    // tes spécificités géographiques (comme Abidjan) par des décors génériques.
     return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&model=${model}&seed=${seed}&nologo=true&enhance=false`;
 }
 
@@ -70,9 +65,7 @@ export default async function handler(req) {
     const enriched = enrichPrompt(prompt.trim());
     const seed     = Math.floor(Math.random() * 99999) + 1;
     
-    // VERROUILLAGE RÉSOLUTION :
-    // On limite à 1024 max pour éviter le flou d'upscaling côté serveur gratuit
-    // 1024x1024 est le "sweet spot" (environ 1 Megapixel) pour des détails tranchants sur Flux
+    // Résolution fixée à 1024 max pour garantir la vitesse de génération côté serveur
     const finalW   = Math.min(width  || 1024, 1024);
     const finalH   = Math.min(height || 1024, 1024);
 
