@@ -926,7 +926,10 @@ function closeSidebarMobile() {
 })();
 
 // ── Initialisation des onglets ─────────────────────────────────────────────
+let _tabsInitialized = false;
 async function initTabs() {
+    if (_tabsInitialized) return;
+    _tabsInitialized = true;
     tabs = await loadTabs();
     
     if (tabs && tabs.length > 0) {
