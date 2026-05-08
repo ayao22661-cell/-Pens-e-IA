@@ -1,244 +1,110 @@
 // ============================================================
 //  PENSÉE IA — api/image.js
-//  100% Pollinations.ai — Gratuit, Illimité
-//  Pipeline : Sélection modèle → Enrichissement prompt → HD net
+//  100% Pollinations.ai — Gratuit, Illimité, Anti-timeout
+//  Pas de dépendance Gemini pour l'enrichissement
+//  Edge-safe : tout tient dans 25s max
 // ============================================================
 
 export const config = { runtime: 'edge' };
 
-// ── Modèles disponibles sur Pollinations ─────────────────────
-// flux         → meilleur équilibre qualité/vitesse (défaut)
-// flux-realism → portraits, photos réalistes, scènes urbaines
-// flux-pro     → qualité maximale, plus lent
-// turbo        → rapide, bon pour les previews
-
 const MODELS = {
-    portrait:     'flux-realism',   // visages, personnes, peau
-    realism:      'flux-realism',   // photos, rues, villes
-    artistic:     'flux-pro',       // illustration, art, horreur
-    default:      'flux-pro',       // tout le reste
+    portrait: 'flux-realism',
+    horror:   'flux-pro',
+    realism:  'flux-realism',
+    default:  'flux-pro',
 };
 
-// ── Sélection intelligente du modèle ─────────────────────────
 function selectModel(prompt) {
     const p = prompt.toLowerCase();
-
-    const portraitKw = [
-        'visage','portrait','personne','homme','femme','fille','garçon','enfant',
-        'face','person','man','woman','girl','boy','people','human','skin','body',
-        'peau','regard','yeux','bouche','cheveux'
-    ];
-    const realismKw = [
-        'photo','photographe','photoréaliste','réaliste','realistic','photorealistic',
-        'rue','ville','abidjan','marché','quartier','foule','restaurant','intérieur',
-        'street','city','crowd','indoor','outdoor','lifestyle','building','architecture'
-    ];
-    const artisticKw = [
-        'horreur','horror','fantastique','fantasy','illustration','painting','art',
-        'dessin','cartoon','anime','dark','dystopie','mystère','génie','esprit','lagune',
-        'supernatural','ghost','spirit','water','eau','nuit','night','ombre','shadow'
-    ];
-
-    if (portraitKw.some(kw => p.includes(kw))) return MODELS.portrait;
-    if (artisticKw.some(kw => p.includes(kw))) return MODELS.artistic;
-    if (realismKw.some(kw => p.includes(kw))) return MODELS.realism;
+    if (/visage|portrait|personne|homme|femme|face|person|skin|peau|human/.test(p))
+        return MODELS.portrait;
+    if (/horreur|horror|dark|ghost|spirit|génie|lagune|shadow|nuit|demon|fantôme/.test(p))
+        return MODELS.horror;
+    if (/photo|réaliste|realistic|rue|ville|abidjan|street|city|outdoor/.test(p))
+        return MODELS.realism;
     return MODELS.default;
 }
 
-// ── Enrichissement du prompt selon le type de contenu ────────
-// Clé anti-flou : les suffixes de netteté sont critiques pour Flux
-function buildSharpPrompt(prompt, model) {
+function enrichPrompt(prompt) {
     const p = prompt.toLowerCase();
+    let boost = '';
 
-    // Suffixes universels anti-flou pour Flux
-    const sharpness = [
-        'tack sharp', 'razor sharp focus', 'high frequency detail',
-        'crisp edges', 'ultra-detailed', '8K resolution', 'no blur',
-        'perfect focus', 'maximum sharpness', 'HDR'
-    ].join(', ');
-
-    let styleBoost = '';
-
-    // Portrait / Personnes
     if (/visage|portrait|personne|homme|femme|face|person|skin|peau/.test(p)) {
-        styleBoost = [
-            'RAW photo', 'DSLR photography', 'Canon EOS R5', '85mm f/1.4 lens',
-            'studio lighting', 'Rembrandt lighting', 'catchlights in eyes',
-            'ultra-detailed skin texture', 'pore-level detail', 'subsurface scattering',
-            'photorealistic', 'hyperrealistic', 'editorial photography'
-        ].join(', ');
-    }
-    // Scène urbaine / Abidjan / Extérieur
-    else if (/rue|ville|abidjan|marché|quartier|street|city|outdoor|architecture/.test(p)) {
-        styleBoost = [
-            'architectural photography', 'wide angle lens 24mm', 'golden hour lighting',
-            'volumetric light', 'atmospheric depth', 'cinematic composition',
-            'rule of thirds', 'leading lines', 'vivid colors', 'high contrast'
-        ].join(', ');
-    }
-    // Horreur / Fantastique / Série TikTok
-    else if (/horreur|horror|dark|ghost|spirit|génie|eau|lagune|shadow|ombre|nuit/.test(p)) {
-        styleBoost = [
-            'cinematic horror', 'dramatic chiaroscuro lighting', 'deep shadows',
-            'atmospheric fog', 'backlit silhouette', 'moody color grading',
-            'desaturated palette with accent colors', 'film grain', 'anamorphic lens flare',
-            'hyperdetailed textures', 'photorealistic horror'
-        ].join(', ');
-    }
-    // Artistique / Illustration
-    else if (/illustration|painting|art|dessin|anime|fantasy/.test(p)) {
-        styleBoost = [
-            'digital art', 'concept art', 'artstation trending', 'Greg Rutkowski style',
-            'intricate details', 'rich color palette', 'professional illustration',
-            'highly rendered', 'detailed linework'
-        ].join(', ');
-    }
-    // Défaut : photoréaliste général
-    else {
-        styleBoost = [
-            'professional photography', 'natural lighting', 'high dynamic range',
-            'vivid colors', 'sharp focus throughout', 'commercial photography quality'
-        ].join(', ');
+        boost = 'RAW photo, Canon EOS R5, 85mm f/1.4, sharp focus, studio lighting, ultra-detailed skin, catchlights, photorealistic, 8K UHD, no blur, crisp edges';
+    } else if (/horreur|horror|dark|ghost|génie|lagune|demon|fantôme|shadow|nuit/.test(p)) {
+        boost = 'cinematic horror, dramatic chiaroscuro, atmospheric fog, deep shadows, backlit silhouette, desaturated tones, film grain, anamorphic lens, hyperdetailed, tack sharp, 8K';
+    } else if (/rue|ville|abidjan|marché|street|city|outdoor|architecture/.test(p)) {
+        boost = 'architectural photography, 24mm wide angle, golden hour, volumetric light, vivid colors, high contrast, tack sharp, 8K UHD, crisp edges';
+    } else {
+        boost = 'professional photography, natural lighting, high dynamic range, ultra-detailed, tack sharp, razor sharp focus, 8K UHD, masterpiece, no blur';
     }
 
-    // Négatif implicite via prompt (Flux ne supporte pas neg prompt natif via URL)
-    const antiBlur = 'avoid: blur, soft focus, noise, grain, pixelation, low quality, watermark, overexposed, underexposed';
-
-    return `${prompt}, ${styleBoost}, ${sharpness}, masterpiece, best quality — ${antiBlur}`;
+    const antiBlur = 'avoid blur, soft focus, noise, pixelation, low quality, watermark';
+    return `${prompt}, ${boost}, best quality — ${antiBlur}`;
 }
 
-// ── Enrichissement via Gemini (optionnel si clé dispo) ────────
-async function geminiEnhance(prompt, apiKey) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{
-                parts: [{
-                    text: `You are an expert AI image prompt engineer specializing in Flux image models.
-
-Your task: Transform the user's prompt into a highly detailed, sharp, photorealistic generation prompt optimized specifically for Flux-Pro and Flux-Realism models.
-
-Critical rules for Flux models:
-1. Be extremely descriptive about lighting (direction, color temperature, intensity)
-2. Specify lens and camera settings for realism (85mm, f/2.8, ISO 100, etc.)
-3. Add texture descriptors (fabric weave, skin pores, surface roughness)
-4. Include composition rules (rule of thirds, leading lines, foreground/background separation)
-5. Add sharpness keywords: "tack sharp", "razor sharp focus", "ultra-detailed", "8K"
-6. NEVER add blur, softness, or dreamy effects
-7. If horror/dark content: use "cinematic chiaroscuro", "atmospheric fog", "deep shadow pools"
-8. Output ONLY the enhanced prompt. No explanation, no quotes.
-
-User prompt: "${prompt}"`
-                }]
-            }],
-            generationConfig: { temperature: 0.6, maxOutputTokens: 600 }
-        }),
-        signal: AbortSignal.timeout(8000)
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return (text && text.length > 30) ? text : null;
+function pollinationsUrl(prompt, model, w, h, seed) {
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&model=${model}&seed=${seed}&nologo=true&enhance=false`;
 }
 
-// ── Construction URL Pollinations optimisée ───────────────────
-function buildPollinationsUrl(prompt, model, width, height, seed) {
-    const encoded = encodeURIComponent(prompt);
-    // enhance=false car on gère nous-mêmes l'enrichissement
-    // nologo=true pour images propres
-    return `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=${model}&seed=${seed}&nologo=true&enhance=false`;
-}
-
-// ── Handler principal ─────────────────────────────────────────
 export default async function handler(req) {
     if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Méthode non autorisée' }), { status: 405 });
+        return new Response(
+            JSON.stringify({ error: 'Méthode non autorisée' }),
+            { status: 405, headers: { 'Content-Type': 'application/json' } }
+        );
     }
 
-    const body = await req.json().catch(() => ({}));
+    let body = {};
+    try { body = await req.json(); } catch {}
+
     const { prompt, width, height } = body;
 
-    if (!prompt || prompt.trim().length === 0) {
-        return new Response(JSON.stringify({ error: 'Prompt manquant.' }), { status: 400 });
+    if (!prompt || !prompt.trim()) {
+        return new Response(
+            JSON.stringify({ error: 'Prompt manquant.' }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
     }
 
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const model    = selectModel(prompt);
+    const enriched = enrichPrompt(prompt.trim());
+    const seed     = Math.floor(Math.random() * 99999) + 1;
+    const finalW   = Math.min(width  || 1280, 1536);
+    const finalH   = Math.min(height || 1280, 1536);
 
-    // ── Résolution finale ─────────────────────────────────────
-    // Pollinations supporte jusqu'à ~2048px mais 1280px = meilleur ratio qualité/netteté
-    const finalWidth  = Math.min(width  || 1280, 1792);
-    const finalHeight = Math.min(height || 1280, 1792);
-
-    // ── Sélection du modèle ───────────────────────────────────
-    const model = selectModel(prompt);
-
-    // ── Enrichissement du prompt ──────────────────────────────
-    let enhancedPrompt = null;
-    let enhanceSource  = 'none';
-
-    // Essai 1 : Gemini si clé disponible
-    if (GEMINI_API_KEY) {
-        try {
-            enhancedPrompt = await geminiEnhance(prompt, GEMINI_API_KEY);
-            if (enhancedPrompt) enhanceSource = 'gemini';
-        } catch (e) {
-            console.warn('Gemini enhance failed:', e.message);
-        }
-    }
-
-    // Essai 2 : Enrichissement local (toujours disponible, 0 dépendance)
-    if (!enhancedPrompt) {
-        enhancedPrompt = buildSharpPrompt(prompt, model);
-        enhanceSource  = 'local';
-    }
-
-    // ── Génération seed fixe + variante ──────────────────────
-    // Seed fixe = reproductibilité / seed+1 = variante légère
-    const seed = Math.floor(Math.random() * 99999) + 1;
-
-    // ── Couches de rendu ──────────────────────────────────────
-    // On retourne 3 URLs :
-    // - preview  : 512px  — affichage immédiat pendant le chargement
-    // - standard : 768px  — qualité intermédiaire
-    // - hd       : résolution finale demandée
+    // On retourne uniquement les URLs — zéro fetch côté Edge
+    // Le frontend charge les couches directement depuis le navigateur
+    // → Plus aucun risque de timeout Edge Function
     const layers = [
         {
-            layer:  'preview',
-            width:  512,
-            height: 512,
-            url:    buildPollinationsUrl(enhancedPrompt, 'turbo', 512, 512, seed),
+            layer: 'preview',
+            width: 512, height: 512,
+            url: pollinationsUrl(enriched, 'turbo', 512, 512, seed),
         },
         {
-            layer:  'standard',
-            width:  768,
-            height: 768,
-            url:    buildPollinationsUrl(enhancedPrompt, model, 768, 768, seed),
+            layer: 'standard',
+            width: 768, height: 768,
+            url: pollinationsUrl(enriched, model, 768, 768, seed),
         },
         {
-            layer:  'hd',
-            width:  finalWidth,
-            height: finalHeight,
-            url:    buildPollinationsUrl(enhancedPrompt, model, finalWidth, finalHeight, seed),
+            layer: 'hd',
+            width: finalW, height: finalH,
+            url: pollinationsUrl(enriched, model, finalW, finalH, seed),
         },
     ];
 
     return new Response(JSON.stringify({
-        source:        'pollinations',
+        source:         'pollinations',
         model,
-        enhanceSource,
         seed,
-        // Image principale HD
-        image:         layers[2].url,
-        width:         finalWidth,
-        height:        finalHeight,
-        pixelCount:    finalWidth * finalHeight,
-        // Couches progressives pour rendu animé côté frontend
+        image:          layers[2].url,
+        width:          finalW,
+        height:         finalH,
+        pixelCount:     finalW * finalH,
         layers,
-        // Prompts pour debug / transparence
         promptOriginal: prompt,
-        promptUsed:     enhancedPrompt,
+        promptUsed:     enriched,
     }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
