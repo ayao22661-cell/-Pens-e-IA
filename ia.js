@@ -2309,9 +2309,13 @@ function setStatus(state) {
 // ============================================================
 
 const IMAGE_TRIGGERS = [
-    "/image ", "génère une image", "génère l'image", "génère moi",
-    "dessine", "crée une image", "crée moi une image", "illustre",
-    "visualise", "montre moi une image", "fais moi une image"
+    "/image ", "génère une image", "génère l'image", "génère moi une image",
+    "génère moi", "dessine", "crée une image", "crée moi une image",
+    "crée moi un", "crée une illustration", "illustre", "visualise",
+    "montre moi une image", "fais moi une image", "fais une image",
+    "génère un portrait", "génère une photo", "génère un dessin",
+    "image de ", "photo de ", "portrait de ", "illustration de ",
+    "imagine ", "draw ", "generate an image", "create an image"
 ];
 
 async function generateImage(prompt) {
@@ -2471,7 +2475,11 @@ async function sendMessage() {
     const lowerText = text.toLowerCase();
     const imageIntent = IMAGE_TRIGGERS.find(t => lowerText.startsWith(t) || lowerText.includes(t));
     if (imageIntent) {
-        const imagePrompt = text.replace(/^\/image\s*/i, "").trim() || text;
+        const imagePrompt = text
+    .replace(/^\/(image)\s*/i, "")
+    .replace(/^(génère|crée|fais|dessine|illustre|visualise|montre|imagine)\s+(moi\s+)?(une?\s+)?(image|photo|portrait|illustration|dessin)\s+(de\s+)?/i, "")
+    .replace(/^(image|photo|portrait|illustration)\s+d[e']\s+/i, "")
+    .trim() || text;
         addMessage("user", text, false);
         userInput.value = "";
         userInput.style.height = "auto";
