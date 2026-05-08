@@ -77,13 +77,21 @@ Limite technique atteinte ou donnée manquante = balise [DIAGNOSTIC INCERTAIN] o
 ━━━ MODE COMPAGNON ━━━
 En dehors du code pur, sois un partenaire chaleureux, cultivé et profondément humain. La profondeur d'analyse s'adapte au contexte, mais l'exigence reste totale.
 
-━━━ GÉNÉRATION AUTOMATIQUE DE FICHIERS ━━━
-Tu peux générer des fichiers téléchargeables (CSV, Excel, PDF, images, ZIP, JSON, Word, etc.) à tout moment.
-Lorsque l'utilisateur demande un fichier ou un export :
-1. Génère directement un bloc de code Python complet, fonctionnel, sans demander à l'utilisateur d'écrire une seule ligne.
-2. Utilise open("nom.ext", "wb") pour écrire — le fichier sera capturé automatiquement et proposé en téléchargement avec un bouton ⬇.
-3. Pour les graphiques matplotlib : utilise plt.savefig("graphique.png") — NE JAMAIS appeler plt.show().
-4. Termine toujours par : Clique sur Exécuter pour générer le fichier.
+━━━ GÉNÉRATION AUTOMATIQUE DE FICHIERS (TOUJOURS DISPONIBLE) ━━━
+Tu peux générer des fichiers téléchargeables (Excel, CSV, PowerPoint, Word, JSON, etc.) à tout moment, automatiquement, sans que l'utilisateur n'ait à cliquer sur quoi que ce soit.
+
+RÈGLE ABSOLUE : Pour tout fichier Excel (.xlsx), PowerPoint (.pptx), Word (.docx), CSV ou JSON demandé par l'utilisateur, tu DOIS terminer ta réponse par le marqueur EXACT suivant sur une ligne seule :
+[GENERATE_FILE: xlsx | {"filename": "rapport.xlsx", "sheets": [{"name": "Données", "headers": ["Col1", "Col2"], "rows": [["val1", "val2"]]}]}]
+[GENERATE_FILE: pptx | {"filename": "presentation.pptx", "slides": [{"title": "Titre", "content": "Contenu de la slide"}]}]
+[GENERATE_FILE: docx | {"filename": "document.docx", "sections": [{"heading": "Titre", "text": "Contenu"}]}]
+[GENERATE_FILE: csv | {"filename": "data.csv", "headers": ["Col1", "Col2"], "rows": [["val1", "val2"]]}]
+
+RÈGLES STRICTES :
+- Le marqueur [GENERATE_FILE:] est OBLIGATOIRE pour tout fichier demandé. JAMAIS de bloc Python visible par l'utilisateur.
+- Mets TOUTES les données réelles demandées par l'utilisateur dans le JSON — jamais de données exemples sauf si l'utilisateur n'en a pas fourni.
+- Le JSON doit être complet et valide sur UNE SEULE LIGNE après le "|".
+- Pour les graphiques/images uniquement : utilise matplotlib avec plt.savefig() dans un bloc python (uniquement pour les images PNG).
+- Ne dis JAMAIS "clique sur Exécuter". Le fichier se génère et se télécharge automatiquement.
 Ne dis JAMAIS que tu ne peux pas générer de fichier. Cette capacité est toujours active.
 
 ━━━ GÉNÉRATION DE DOCUMENT PDF (TOUJOURS DISPONIBLE) ━━━
@@ -133,26 +141,18 @@ Si l'utilisateur demande un rapport, une documentation ou un audit exportable en
 [GENERATE_PDF: Titre Court et Descriptif | <contenu_html_complet>]
 
 ━━━ GÉNÉRATION AUTOMATIQUE DE FICHIERS (PRIORITÉ ABSOLUE) ━━━
-Lorsque l'utilisateur demande un fichier (CSV, Excel, PDF, image, ZIP, JSON, etc.), tu DOIS :
-1. Générer directement un bloc de code Python prêt à l'exécution, sans demander à l'utilisateur d'écrire quoi que ce soit.
-2. Le bloc Python doit utiliser open("nom_fichier.ext", "wb") pour écrire le fichier — il sera automatiquement intercepté et proposé en téléchargement.
-3. Terminer ta réponse par une instruction claire : Clique sur Exécuter ci-dessus pour générer et télécharger le fichier.
+Pour tout fichier Excel, PowerPoint, Word, CSV ou JSON demandé, tu DOIS terminer ta réponse par le marqueur EXACT ci-dessous — JAMAIS de bloc Python visible par l'utilisateur, JAMAIS de bouton "Exécuter" :
+[GENERATE_FILE: xlsx | {"filename":"nom.xlsx","sheets":[{"name":"Feuille1","headers":["Col1","Col2"],"rows":[["val1","val2"]]}]}]
+[GENERATE_FILE: pptx | {"filename":"nom.pptx","slides":[{"title":"Titre slide","content":"Contenu de la slide"}]}]
+[GENERATE_FILE: docx | {"filename":"nom.docx","sections":[{"heading":"Titre section","text":"Paragraphe de contenu"}]}]
+[GENERATE_FILE: csv  | {"filename":"nom.csv","headers":["Col1","Col2"],"rows":[["val1","val2"]]}]
 
-RÈGLES STRICTES POUR LA GÉNÉRATION DE FICHIERS :
-- SÉPARATION STRICTE : Le bloc de code \`\`\`python ... \`\`\` doit contenir UNIQUEMENT du code Python pur. Tout ton texte conversationnel ("Clique sur Exécuter", explications, etc.) DOIT IMPÉRATIVEMENT être placé EN DEHORS du bloc de code.
-- AUCUN TERMINAL : Ne demande JAMAIS à l'utilisateur de faire "pip install" ou d'utiliser le terminal. L'environnement gère les dépendances automatiquement.
-- CSV : utilise UNIQUEMENT le module standard \`csv\` (csv.writer / csv.DictWriter). JAMAIS pandas.
-- Excel (.xlsx) : utilise UNIQUEMENT \`openpyxl\` directement. JAMAIS pandas, JAMAIS xlsxwriter. Règles openpyxl STRICTES : (1) number_format est une STRING sur la cellule : cell.number_format = "€#,##0.00" — JAMAIS NumberFormatDescriptor. (2) Les clés dynamiques EXIGENT un f-string : sheet[f"A{row}"] — JAMAIS sheet["A{row}"]. (3) PatternFill requiert fgColor ET fill_type="solid". (4) workbook.save("fichier.xlsx") en dernière ligne, rien après.
-- PDF : utilise reportlab. canvas.save() génère le fichier automatiquement.
-- Images/Graphiques : utilise matplotlib avec plt.savefig("graphique.png"). Ne jamais appeler plt.show().
-- ZIP : utilise zipfile.ZipFile("archive.zip", "w") avec context manager.
-- JSON : json.dump(data, open("fichier.json", "w")).
-- Word (.docx) : utilise python-docx, doc.save("fichier.docx").
-- Tu génères TOUJOURS un fichier complet et fonctionnel, jamais un squelette.
-- Si l'utilisateur donne des données, tu les intègres directement dans le code.
-- Ne propose JAMAIS à l'utilisateur d'écrire ou modifier le code. Tu fais tout.
-- INTERDICTION STRICTE WASM : N'importe JAMAIS de bibliothèques d'interface graphique natives ou de jeux en Python (pygame, tkinter, pyqt, turtle). L'environnement d'exécution (Pyodide) ne les supporte pas et le code plantera.
-- ALTERNATIVE OBLIGATOIRE : Si l'utilisateur demande un jeu interactif, une animation ou une interface visuelle, tu DOIS basculer et générer exclusivement du code HTML/CSS/JavaScript pur. Garde Python uniquement pour le traitement de données, les calculs et la génération de fichiers statiques (PDF, CSV, PNG via matplotlib).`
+RÈGLES ABSOLUES :
+- Le JSON doit contenir TOUTES les données réelles demandées par l'utilisateur — jamais de données exemples si l'utilisateur en a fourni.
+- Le marqueur doit être sur UNE SEULE LIGNE. Le JSON doit être valide et complet.
+- Ne mentionne JAMAIS "Exécuter", "Python", "openpyxl" ou tout terme technique à l'utilisateur.
+- Pour les graphiques/images uniquement : bloc python avec plt.savefig("graphique.png") est autorisé.
+- INTERDICTION : pygame, tkinter, pyqt, turtle. Jeux/animations → HTML/CSS/JS uniquement.
     },
 
     recherche: {
@@ -2068,9 +2068,84 @@ if (!response.ok) {
         // FIN DE L'AJOUT : INTERCEPTEUR PDF
         // ==========================================
 
-        // Si un PDF est en cours de génération, ne pas écraser la bulle —
-        // l'async block ci-dessus s'en charge avec appendChild.
-        if (!pdfMatch) {
+        // ==========================================
+        // INTERCEPTEUR GENERATE_FILE (xlsx, pptx, docx, csv)
+        // ==========================================
+        const fileMarkerRegex = /\[GENERATE_FILE:\s*(xlsx|pptx|docx|csv)\s*\|\s*({[\s\S]+?})\]/i;
+        const fileMatch = fullReply.match(fileMarkerRegex);
+
+        if (fileMatch) {
+            const fileType = fileMatch[1].toLowerCase();
+            let fileData;
+            try { fileData = JSON.parse(fileMatch[2]); } catch(e) {
+                addMessage("bot", "· Erreur : données de fichier invalides.", false);
+                fileMatch = null;
+            }
+
+            if (fileData) {
+                // Supprimer le marqueur de la bulle
+                fullReply = fullReply.replace(fileMatch[0], "").trim();
+
+                // Badge de génération
+                const fileBadge = document.createElement("div");
+                fileBadge.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
+                const fileIcons = { xlsx: "📊", pptx: "📑", docx: "📄", csv: "🗃️" };
+                fileBadge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:5px;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg> Génération du fichier ${fileType.toUpperCase()}...`;
+                messagesEl.appendChild(fileBadge);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+
+                (async () => {
+                    try {
+                        const { data: { session: fileSession } } = await supabase.auth.getSession();
+
+                        const fileRes = await fetch("/api/generate-file", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${fileSession?.access_token || ""}`,
+                            },
+                            body: JSON.stringify({ type: fileType, data: fileData }),
+                        });
+
+                        fileBadge.remove();
+
+                        if (!fileRes.ok) {
+                            const errData = await fileRes.json().catch(() => ({}));
+                            addMessage("bot", `· Génération échouée : ${errData.error || "Erreur inconnue"}`, false);
+                            return;
+                        }
+
+                        const result = await fileRes.json();
+
+                        // Chip de téléchargement — même style que le PDF
+                        const label     = fileData.filename || `fichier.${fileType}`;
+                        const svgFile   = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg>`;
+                        const svgDown   = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
+                        const chipStyle = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s;margin-top:10px;`;
+                        const chipHtml  = `<a href="${result.data}" download="${label}" class="file-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
+
+                        bubble.innerHTML = formatResponse(fullReply);
+                        if (typeof hljs !== "undefined") {
+                            bubble.querySelectorAll("pre code").forEach(b => hljs.highlightElement(b));
+                        }
+                        const chipNode = document.createElement("div");
+                        chipNode.innerHTML = chipHtml;
+                        bubble.appendChild(chipNode);
+
+                    } catch (fileErr) {
+                        fileBadge.remove();
+                        console.error("[FILE] Erreur :", fileErr);
+                        addMessage("bot", `· Erreur fichier : ${fileErr.message}`, false);
+                    }
+                })();
+            }
+        }
+        // ==========================================
+        // FIN INTERCEPTEUR GENERATE_FILE
+        // ==========================================
+
+        // Si un PDF ou fichier est en cours de génération, ne pas écraser la bulle
+        if (!pdfMatch && !fileMatch) {
             bubble.innerHTML = formatResponse(fullReply);
         }
         // Coloration syntaxique sur les blocs de code rendus
