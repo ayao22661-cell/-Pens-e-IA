@@ -2094,35 +2094,82 @@ if (!response.ok) {
                 messagesEl.appendChild(fileBadge);
                 messagesEl.scrollTop = messagesEl.scrollHeight;
 
-                (async () => {
+(async () => {
                     try {
-                        const { data: { session: fileSession } } = await supabase.auth.getSession();
-
-                        const fileRes = await fetch("/api/generate-file", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": `Bearer ${fileSession?.access_token || ""}`,
-                            },
-                            body: JSON.stringify({ type: fileType, data: fileData }),
+                        const loadScript = (src) => new Promise((resolve, reject) => {
+                            if (document.querySelector(`script[src="${src}"]`)) return resolve();
+                            const s = document.createElement('script'); s.src = src;
+                            s.onload = resolve; s.onerror = reject;
+                            document.head.appendChild(s);
                         });
+
+                        let dataUri;
+                        const label = fileData.filename || `fichier.${fileType}`;
+
+                        if (fileType === 'csv') {
+                            const lines = [
+                                (fileData.headers || []).join(','),
+                                ...(fileData.rows || []).map(row =>
+                                    row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')
+                                )
+                            ].join('\n');
+                            const b64 = btoa(unescape(encodeURIComponent('\uFEFF' + lines)));
+                            dataUri = `data:text/csv;base64,${b64}`;
+
+                        } else if (fileType === 'xlsx') {
+                            await loadScript('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js');
+                            const wb = XLSX.utils.book_new();
+                            for (const sheet of (fileData.sheets || [])) {
+                                const wsData = [sheet.headers || [], ...(sheet.rows || [])];
+                                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                                ws['!cols'] = (sheet.headers || []).map((h, ci) => ({
+                                    wch: Math.min(Math.max(String(h).length, ...(sheet.rows||[]).map(r => String(r[ci]??'').length)) + 4, 40)
+                                }));
+                                XLSX.utils.book_append_sheet(wb, ws, sheet.name || `Feuille${wb.SheetNames.length + 1}`);
+                            }
+                            const buf = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+                            dataUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${buf}`;
+
+                        } else if (fileType === 'pptx') {
+                            await loadScript('https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js');
+                            const prs = new PptxGenJS();
+                            for (const slide of (fileData.slides || [])) {
+                                const s = prs.addSlide();
+                                s.background = { color: 'FFFFFF' };
+                                s.addText(slide.title || '', {
+                                    x: 0.5, y: 0.3, w: '90%', h: 1.0,
+                                    fontSize: 28, bold: true, color: '1A7A5E', fontFace: 'Calibri'
+                                });
+                                if (slide.content) s.addText(slide.content, {
+                                    x: 0.5, y: 1.5, w: '90%', h: '70%',
+                                    fontSize: 16, color: '333333', fontFace: 'Calibri', valign: 'top', wrap: true
+                                });
+                            }
+                            const b64 = await prs.write({ outputType: 'base64' });
+                            dataUri = `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${b64}`;
+
+                        } else if (fileType === 'docx') {
+                            await loadScript('https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js');
+                            const { Document, Paragraph, TextRun, HeadingLevel, Packer } = docx;
+                            const headingMap = { 1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLevel.HEADING_3 };
+                            const children = [];
+                            for (const section of (fileData.sections || [])) {
+                                children.push(
+                                    new Paragraph({ text: section.heading || '', heading: headingMap[section.level || 1] || HeadingLevel.HEADING_1 }),
+                                    new Paragraph({ children: [new TextRun({ text: section.text || '', size: 24 })], spacing: { after: 200 } })
+                                );
+                            }
+                            const doc = new Document({ sections: [{ children }] });
+                            const buf = await Packer.toBase64String(doc);
+                            dataUri = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${buf}`;
+                        }
 
                         fileBadge.remove();
 
-                        if (!fileRes.ok) {
-                            const errData = await fileRes.json().catch(() => ({}));
-                            addMessage("bot", `· Génération échouée : ${errData.error || "Erreur inconnue"}`, false);
-                            return;
-                        }
-
-                        const result = await fileRes.json();
-
-                        // Chip de téléchargement — même style que le PDF
-                        const label     = fileData.filename || `fichier.${fileType}`;
                         const svgFile   = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg>`;
                         const svgDown   = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
                         const chipStyle = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s;margin-top:10px;`;
-                        const chipHtml  = `<a href="${result.data}" download="${label}" class="file-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
+                        const chipHtml  = `<a href="${dataUri}" download="${label}" class="file-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
 
                         bubble.innerHTML = formatResponse(fullReply);
                         if (typeof hljs !== "undefined") {
