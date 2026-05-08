@@ -16,6 +16,8 @@ const CONFIG = {
         sh:'Shell', bash:'Bash', md:'Markdown', txt:'Texte',
         vue:'Vue', svelte:'Svelte', dart:'Dart', r:'R', lua:'Lua',
         pdf:'Document PDF', docx:'Document Word', doc:'Document Word',
+        jpg:'Image JPEG', jpeg:'Image JPEG', png:'Image PNG', gif:'Image GIF', 
+        webp:'Image WebP', svg:'Image SVG', ico:'Icône',
         mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG',
         mp4:'Vidéo MP4', webm:'Vidéo WebM', mov:'Vidéo MOV', avi:'Vidéo AVI'
     },
