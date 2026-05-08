@@ -2360,10 +2360,10 @@ async function generateImage(prompt) {
                    style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Télécharger</a>`;
         } else {
             bubble.innerHTML = `${sourceLabel}<br>
-                <img src="${data.url}" alt="${escapeHtml(prompt)}"
+                <img src="${data.image || data.layers?.[2]?.url || data.url}" alt="${escapeHtml(prompt)}"
                      style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy"
                      onerror="this.parentElement.innerHTML+='<em style=color:var(--red)>Timeout. Réessaie.</em>'">
-                <a href="${data.url}" download target="_blank"
+               <a href="${data.image || data.layers?.[2]?.url || data.url}" download target="_blank"
                    style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Télécharger</a>`;
         }
 
@@ -2410,7 +2410,7 @@ async function generateImage(prompt) {
             }
         } else {
             // URL externe (Pollinations) : on stocke l'URL + le path storage vide
-            await saveMessageToDB("assistant", `[IMAGE_URL:${data.url}|${escapeHtml(prompt)}|]`);
+            await saveMessageToDB("assistant", `[IMAGE_URL:${data.image || data.layers?.[2]?.url || data.url}|${escapeHtml(prompt)}|]`);
         }
 
     } catch (err) {
