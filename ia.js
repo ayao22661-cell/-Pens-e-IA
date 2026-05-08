@@ -1049,6 +1049,41 @@ async function loadHistoryFromDB() {
             msgDiv.appendChild(bubble);
             messagesEl.appendChild(msgDiv);
             messagesEl.scrollTop = messagesEl.scrollHeight;
+        // Détection du marqueur fichier (format : [FILE_URL:url|label|storagePath])
+        } else if (finalContent.match(/^\[FILE_URL:([^|]*)\|([^|]*)\|([^\]]*)\]$/)) {
+            const fileUrlMatch = finalContent.match(/^\[FILE_URL:([^|]*)\|([^|]*)\|([^\]]*)\]$/);
+            const fileUrl      = fileUrlMatch[1];
+            const fileLabel    = fileUrlMatch[2];
+            const storagePath  = fileUrlMatch[3];
+
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "msg bot";
+            const lbl = document.createElement("span");
+            lbl.className = "msg-label";
+            lbl.textContent = "Pensée · Fichier généré";
+            msgDiv.appendChild(lbl);
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+
+            // Régénérer une URL signée fraîche depuis le storagePath
+            let displayUrl = fileUrl;
+            if (storagePath) {
+                try {
+                    const { data: signed } = await supabase.storage
+                        .from("attachments")
+                        .createSignedUrl(storagePath, 60 * 60 * 24 * 30);
+                    if (signed?.signedUrl) displayUrl = signed.signedUrl;
+                } catch(e) { /* garde l'URL originale */ }
+            }
+
+            const svgFile   = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg>`;
+            const svgDown   = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
+            const chipStyle = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s;margin-top:10px;`;
+            bubble.innerHTML = `<a href="${displayUrl}" target="_blank" class="file-chip" style="${chipStyle}">${svgFile} ${escapeHtml(fileLabel)} ${svgDown}</a><div style="font-size:10px;color:var(--text2);margin-top:5px;opacity:0.7;">⏳ Disponible pendant 30 jours</div>`;
+
+            msgDiv.appendChild(bubble);
+            messagesEl.appendChild(msgDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
         } else {
             // Extraction des sources sérialisées si présentes dans le contenu DB
             const sourcesMatch = finalContent.match(/\[WEB_SOURCES:(\[[\s\S]*?\])\]/);
@@ -2166,10 +2201,50 @@ if (!response.ok) {
 
                         fileBadge.remove();
 
+                        // ── Upload Supabase Storage pour persistance (30 jours) ──
+                        let finalUrl = dataUri;
+                        let isSupabase = false;
+                        let filePath = "";
+                        try {
+                            const mimeMap = {
+                                xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                                docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                csv:  'text/csv',
+                            };
+                            const base64Part = dataUri.split(',')[1];
+                            const byteChars  = atob(base64Part);
+                            const byteArr    = new Uint8Array(byteChars.length);
+                            for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+                            const blob = new Blob([byteArr], { type: mimeMap[fileType] });
+
+                            const userId = currentUser ? currentUser.id : "anon";
+                            filePath = `fichiers/${userId}/${Date.now()}_${label}`;
+
+                            const { error: upErr } = await supabase.storage
+                                .from("attachments")
+                                .upload(filePath, blob, { contentType: mimeMap[fileType], upsert: false });
+
+                            if (!upErr) {
+                                const { data: signed } = await supabase.storage
+                                    .from("attachments")
+                                    .createSignedUrl(filePath, 60 * 60 * 24 * 30); // 30 jours
+                                if (signed?.signedUrl) { finalUrl = signed.signedUrl; isSupabase = true; }
+                            }
+                        } catch (storageErr) {
+                            console.warn("[FILE] Upload Supabase échoué, fallback local :", storageErr);
+                        }
+
+                        // Sauvegarder le marqueur en DB pour persistance au rechargement
+                        if (isSupabase) {
+                            await saveMessageToDB("assistant", `[FILE_URL:${finalUrl}|${label}|${filePath}]`);
+                        }
+
                         const svgFile   = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg>`;
                         const svgDown   = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
                         const chipStyle = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s;margin-top:10px;`;
-                        const chipHtml  = `<a href="${dataUri}" download="${label}" class="file-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
+                        const expiryNote = isSupabase ? `<div style="font-size:10px;color:var(--text2);margin-top:5px;opacity:0.7;">⏳ Disponible pendant 30 jours</div>` : '';
+                        const chipHtml  = `<a href="${finalUrl}" ${isSupabase ? 'target="_blank"' : `download="${label}"`} class="file-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>${expiryNote}`;
 
                         bubble.innerHTML = formatResponse(fullReply);
                         if (typeof hljs !== "undefined") {
