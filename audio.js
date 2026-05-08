@@ -12,6 +12,20 @@ const AUDIO_CONFIG = {
     voiceVolume: 1.0,
     version: '3.0.0'
 };
+// ============================================================
+// FIX : Contexte audio global pour éviter les plantages
+// ============================================================
+let globalAudioContext = null;
+
+function getAudioContext() {
+    if (!globalAudioContext) {
+        globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (globalAudioContext.state === 'suspended') {
+        globalAudioContext.resume();
+    }
+    return globalAudioContext;
+}
 
 const AudioState = {
     isOpen: false,
@@ -192,14 +206,14 @@ function startListening() {
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false;
+    recognition.continuous = true; // FIX : Maintient le micro ouvert
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
     AudioState.finalTranscript = '';
 
     setOrbState('listening');
-    setStatus('Ecoute...', 'listening');
+    setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
     clearInput();
 
     recognition.onresult = (event) => {
@@ -210,9 +224,11 @@ function startListening() {
             if (event.results[i].isFinal) final += t;
             else interim += t;
         }
-        AudioState.finalTranscript += final;
+        
+        if (final) AudioState.finalTranscript += final;
+        
         const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
-        setInputText(display, !!interim && !AudioState.finalTranscript);
+        setInputText(display, !!interim && !final);
     };
 
     recognition.onend = () => {
@@ -231,9 +247,9 @@ function startListening() {
         AudioState.isListening = false;
         setOrbState('idle');
         const msgs = {
-            'no-speech': 'Rien entendu - reessaie',
-            'not-allowed': 'Micro refuse - autorise le micro',
-            'network': 'Erreur reseau'
+            'no-speech': 'Rien entendu - réessaie',
+            'not-allowed': 'Micro refusé - autorise le micro',
+            'network': 'Erreur réseau'
         };
         setStatus(msgs[event.error] || 'Erreur : ' + event.error, 'error');
     };
@@ -249,6 +265,7 @@ function stopListening() {
 }
 
 function toggleListening() {
+    getAudioContext(); // Débloque l'audio immédiatement lors du clic
     if (AudioState.isSpeaking) { stopSpeaking(); return; }
     if (AudioState.isListening) stopListening();
     else startListening();
@@ -340,7 +357,7 @@ async function speak(text) {
         if (ct.includes('audio/mpeg')) {
             // Lecture via Web Audio API (ElevenLabs ou Google WaveNet)
             const buf = await response.arrayBuffer();
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const ctx = getAudioContext(); // FIX : Utilise le contexte global
             const decoded = await ctx.decodeAudioData(buf);
             const src = ctx.createBufferSource();
             src.buffer = decoded;
