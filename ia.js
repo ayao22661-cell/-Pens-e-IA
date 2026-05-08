@@ -152,7 +152,7 @@ RÈGLES ABSOLUES :
 - Le marqueur doit être sur UNE SEULE LIGNE. Le JSON doit être valide et complet.
 - Ne mentionne JAMAIS "Exécuter", "Python", "openpyxl" ou tout terme technique à l'utilisateur.
 - Pour les graphiques/images uniquement : bloc python avec plt.savefig("graphique.png") est autorisé.
-- INTERDICTION : pygame, tkinter, pyqt, turtle. Jeux/animations → HTML/CSS/JS uniquement.
+- INTERDICTION : pygame, tkinter, pyqt, turtle. Jeux/animations → HTML/CSS/JS uniquement.`
     },
 
 recherche: {
