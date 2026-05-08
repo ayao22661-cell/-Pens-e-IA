@@ -2321,12 +2321,11 @@ const IMAGE_TRIGGERS = [
 ];
 
 async function generateImage(prompt) {
-    // ── VÉRIFICATION CRÉDIT (même logique que callAPI) ────────
+    // ── VÉRIFICATION CRÉDIT ───────────────────────────────────
     if (creditsLeft <= 0) {
         addMessage("bot", "· Crédits épuisés. Reviens demain !", false);
         return;
     }
-
     showTyping();
     try {
         const response = await fetch("/api/image", {
@@ -2421,7 +2420,7 @@ async function generateImage(prompt) {
             await saveMessageToDB("assistant", `[IMAGE_URL:${data.image || data.layers?.[2]?.url || data.url}|${escapeHtml(prompt)}|]`);
         }
 
-        // ── DÉDUCTION DU CRÉDIT APRÈS SUCCÈS ─────────────────
+        // ── DÉDUCTION CRÉDIT ──────────────────────────────────
         creditsLeft--;
         updateCredits();
         useCreditInDB();
