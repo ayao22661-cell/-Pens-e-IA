@@ -1,140 +1,110 @@
 // ============================================================
 //  PENSÉE IA — api/generate-file.js
-//  Génération automatique de fichiers (xlsx, pptx, docx, csv)
-//  Appelé par l'intercepteur GENERATE_FILE dans ia.js
-//  Retourne : { data: "data:mime;base64,..." }
+//  Génération fichiers (xlsx, pptx, docx, csv) — SANS Piston
+//  Packages requis : xlsx, pptxgenjs, docx
+//  npm install xlsx pptxgenjs docx
 // ============================================================
 
-export const config = { runtime: 'edge' };
+// ⚠️  Edge runtime ne supporte pas les packages npm natifs avec Buffer.
+//     Passe en runtime Node.js standard (plus fiable pour les libs de fichiers).
+export const config = { runtime: 'nodejs' };
 
-// ── GÉNÉRATEURS DE CODE PYTHON PAR TYPE ──────────────────────
+// ── GÉNÉRATEURS ───────────────────────────────────────────────
 
-function buildXlsxCode(data) {
-    const sheets = data.sheets || [];
-    const filename = data.filename || 'fichier.xlsx';
+async function buildXlsx(data) {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
 
-    const sheetsCode = sheets.map((sheet, si) => {
-        const name = (sheet.name || `Feuille${si + 1}`).replace(/'/g, "\\'");
-        const headers = JSON.stringify(sheet.headers || []);
-        const rows    = JSON.stringify(sheet.rows    || []);
-        return `
-# ── Feuille ${si + 1} : ${name}
-ws${si} = wb.create_sheet("${name}")
-headers_${si} = ${headers}
-rows_${si}    = ${rows}
+    for (const sheet of (data.sheets || [])) {
+        const wsData = [sheet.headers || [], ...(sheet.rows || [])];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-# En-têtes — style gras + fond vert
-for ci, h in enumerate(headers_${si}, 1):
-    cell = ws${si}.cell(row=1, column=ci, value=h)
-    cell.font      = Font(bold=True, color="FFFFFF", size=11)
-    cell.fill      = PatternFill(fill_type="solid", fgColor="1A7A5E")
-    cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws${si}.column_dimensions[get_column_letter(ci)].width = max(len(str(h)) + 4, 12)
+        // Largeur auto des colonnes
+        const colWidths = (sheet.headers || []).map((h, ci) => {
+            const maxLen = Math.max(
+                String(h).length,
+                ...(sheet.rows || []).map(r => String(r[ci] ?? '').length)
+            );
+            return { wch: Math.min(maxLen + 4, 40) };
+        });
+        ws['!cols'] = colWidths;
 
-# Données
-for ri, row in enumerate(rows_${si}, 2):
-    for ci, val in enumerate(row, 1):
-        cell = ws${si}.cell(row=ri, column=ci, value=val)
-        if ri % 2 == 0:
-            cell.fill = PatternFill(fill_type="solid", fgColor="F0FAF6")
-`;
-    }).join('\n');
+        XLSX.utils.book_append_sheet(wb, ws, sheet.name || `Feuille${wb.SheetNames.length + 1}`);
+    }
 
-    return `
-import openpyxl, io, base64
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.utils import get_column_letter
-
-wb = openpyxl.Workbook()
-wb.remove(wb.active)  # Supprimer la feuille vide par défaut
-${sheetsCode}
-buf = io.BytesIO()
-wb.save(buf)
-buf.seek(0)
-print(base64.b64encode(buf.read()).decode())
-`;
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    return Buffer.from(buf).toString('base64');
 }
 
-function buildCsvCode(data) {
-    const headers  = data.headers || [];
-    const rows     = data.rows    || [];
-    const filename = data.filename || 'fichier.csv';
-
-    return `
-import csv, io, base64
-
-output = io.StringIO()
-writer = csv.writer(output)
-writer.writerow(${JSON.stringify(headers)})
-for row in ${JSON.stringify(rows)}:
-    writer.writerow(row)
-
-encoded = base64.b64encode(output.getvalue().encode('utf-8-sig')).decode()
-print(encoded)
-`;
+async function buildCsv(data) {
+    const lines = [
+        (data.headers || []).join(','),
+        ...(data.rows || []).map(row =>
+            row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')
+        )
+    ];
+    return Buffer.from('\uFEFF' + lines.join('\n'), 'utf-8').toString('base64');
 }
 
-function buildPptxCode(data) {
-    const slides   = data.slides   || [];
-    const filename = data.filename || 'presentation.pptx';
+async function buildPptx(data) {
+    const PptxGenJS = (await import('pptxgenjs')).default;
+    const prs = new PptxGenJS();
 
-    const slidesCode = slides.map((slide, i) => {
-        const title   = (slide.title   || `Slide ${i + 1}`).replace(/'/g, "\\'").replace(/\n/g, '\\n');
-        const content = (slide.content || '').replace(/'/g, "\\'").replace(/\n/g, '\\n');
-        return `
-# Slide ${i + 1}
-slide${i} = prs.slides.add_slide(layout)
-slide${i}.shapes.title.text = '${title}'
-tf${i} = slide${i}.placeholders[1].text_frame
-tf${i}.text = '${content}'
-tf${i}.paragraphs[0].font.size = Pt(18)
-tf${i}.paragraphs[0].font.color.rgb = RGBColor(0x33, 0x33, 0x33)
-`;
-    }).join('\n');
+    for (const slide of (data.slides || [])) {
+        const s = prs.addSlide();
 
-    return `
-import io, base64
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
+        // Fond blanc
+        s.background = { color: 'FFFFFF' };
 
-prs = Presentation()
-layout = prs.slide_layouts[1]  # Titre + contenu
-${slidesCode}
-buf = io.BytesIO()
-prs.save(buf)
-buf.seek(0)
-print(base64.b64encode(buf.read()).decode())
-`;
+        // Titre
+        s.addText(slide.title || '', {
+            x: 0.5, y: 0.3, w: '90%', h: 1.0,
+            fontSize: 28, bold: true, color: '1A7A5E',
+            fontFace: 'Calibri',
+        });
+
+        // Contenu
+        if (slide.content) {
+            s.addText(slide.content, {
+                x: 0.5, y: 1.5, w: '90%', h: '70%',
+                fontSize: 16, color: '333333',
+                fontFace: 'Calibri', valign: 'top',
+                wrap: true,
+            });
+        }
+    }
+
+    const buf = await prs.write({ outputType: 'arraybuffer' });
+    return Buffer.from(buf).toString('base64');
 }
 
-function buildDocxCode(data) {
-    const sections = data.sections || [];
-    const filename = data.filename || 'document.docx';
+async function buildDocx(data) {
+    const { Document, Paragraph, TextRun, HeadingLevel, Packer } = await import('docx');
 
-    const sectionsCode = sections.map((section, i) => {
-        const heading = (section.heading || '').replace(/'/g, "\\'").replace(/\n/g, '\\n');
-        const text    = (section.text    || '').replace(/'/g, "\\'").replace(/\n/g, '\\n');
-        const level   = section.level || 1;
-        return `
-doc.add_heading('${heading}', level=${level})
-doc.add_paragraph('${text}')
-`;
-    }).join('\n');
+    const children = [];
+    for (const section of (data.sections || [])) {
+        const level = section.level || 1;
+        const headingMap = {
+            1: HeadingLevel.HEADING_1,
+            2: HeadingLevel.HEADING_2,
+            3: HeadingLevel.HEADING_3,
+        };
 
-    return `
-import io, base64
-from docx import Document
-from docx.shared import Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+        children.push(
+            new Paragraph({
+                text: section.heading || '',
+                heading: headingMap[level] || HeadingLevel.HEADING_1,
+            }),
+            new Paragraph({
+                children: [new TextRun({ text: section.text || '', size: 24 })],
+                spacing: { after: 200 },
+            })
+        );
+    }
 
-doc = Document()
-${sectionsCode}
-buf = io.BytesIO()
-doc.save(buf)
-buf.seek(0)
-print(base64.b64encode(buf.read()).decode())
-`;
+    const doc = new Document({ sections: [{ children }] });
+    const buf = await Packer.toBuffer(doc);
+    return buf.toString('base64');
 }
 
 // ── MIME TYPES ────────────────────────────────────────────────
@@ -145,78 +115,35 @@ const MIME = {
     csv:  'text/csv',
 };
 
-// ── APPEL PISTON ──────────────────────────────────────────────
-async function runPython(code) {
-    const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            language: 'python',
-            version:  '3.10.0',
-            files:    [{ name: 'main.py', content: code }],
-            stdin:    '',
-            args:     [],
-            run_timeout:     25000,
-            compile_timeout: 5000,
-        }),
-        signal: AbortSignal.timeout(30000),
-    });
-
-    if (!res.ok) throw new Error(`Piston HTTP ${res.status}`);
-
-    const result = await res.json();
-    const stdout = (result?.run?.stdout || '').trim();
-    const stderr = (result?.run?.stderr || '').trim();
-
-    if (!stdout) throw new Error(stderr || 'Piston : aucune sortie');
-    return stdout;
-}
-
 // ── HANDLER ───────────────────────────────────────────────────
-export default async function handler(req) {
+export default async function handler(req, res) {
     if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Méthode non autorisée' }), { status: 405 });
+        return res.status(405).json({ error: 'Méthode non autorisée' });
     }
 
-    let body = {};
-    try { body = await req.json(); } catch {
-        return new Response(JSON.stringify({ error: 'Corps JSON invalide' }), { status: 400 });
-    }
-
-    const { type, data } = body;
+    const { type, data } = req.body || {};
 
     if (!type || !data) {
-        return new Response(JSON.stringify({ error: 'Paramètres manquants.' }), { status: 400 });
+        return res.status(400).json({ error: 'Paramètres manquants.' });
     }
 
-    // Génération du code Python selon le type
-    let pythonCode;
-    try {
-        switch (type) {
-            case 'xlsx': pythonCode = buildXlsxCode(data); break;
-            case 'csv':  pythonCode = buildCsvCode(data);  break;
-            case 'pptx': pythonCode = buildPptxCode(data); break;
-            case 'docx': pythonCode = buildDocxCode(data); break;
-            default:
-                return new Response(JSON.stringify({ error: `Type non supporté : ${type}` }), { status: 400 });
-        }
-    } catch (e) {
-        return new Response(JSON.stringify({ error: 'Erreur construction code : ' + e.message }), { status: 500 });
-    }
-
-    // Exécution via Piston
     let base64Data;
     try {
-        base64Data = await runPython(pythonCode);
+        switch (type) {
+            case 'xlsx': base64Data = await buildXlsx(data); break;
+            case 'csv':  base64Data = await buildCsv(data);  break;
+            case 'pptx': base64Data = await buildPptx(data); break;
+            case 'docx': base64Data = await buildDocx(data); break;
+            default:
+                return res.status(400).json({ error: `Type non supporté : ${type}` });
+        }
     } catch (e) {
-        return new Response(JSON.stringify({ error: 'Génération échouée : ' + e.message }), { status: 502 });
+        console.error('[generate-file] Erreur :', e);
+        return res.status(500).json({ error: 'Génération échouée : ' + e.message });
     }
 
-    const mime     = MIME[type] || 'application/octet-stream';
-    const dataUri  = `data:${mime};base64,${base64Data}`;
+    const mime    = MIME[type] || 'application/octet-stream';
+    const dataUri = `data:${mime};base64,${base64Data}`;
 
-    return new Response(JSON.stringify({ data: dataUri }), {
-        status:  200,
-        headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(200).json({ data: dataUri });
 }
