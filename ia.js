@@ -2364,7 +2364,7 @@ async function generateImage(prompt) {
             bubble.innerHTML = `${sourceLabel}<br>
                 <img src="${data.image || data.layers?.[2]?.url || data.url}" alt="${escapeHtml(prompt)}"
                      style="max-width:100%;border-radius:12px;margin-top:8px;display:block;" loading="lazy"
-                     onerror="this.parentElement.innerHTML+='<em style=color:var(--red)>Timeout. Réessaie.</em>'">
+                     onerror="if(!this.dataset.failed){this.dataset.failed='1';this.style.display='none';const e=document.createElement('em');e.style.color='var(--red)';e.textContent='Timeout. Réessaie.';this.parentElement.appendChild(e);}">
                <a href="${data.image || data.layers?.[2]?.url || data.url}" download target="_blank"
                    style="font-size:11px;color:var(--accent);margin-top:6px;display:inline-block;text-decoration:none;"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Télécharger</a>`;
         }
