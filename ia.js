@@ -7,18 +7,29 @@ const CONFIG = {
     maxFileSizeMB: 10,
     storageKey:  'pensee_ia_history',
     creditsKey:  'pensee_ia_credits',
-    langMap: {
-        js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
-        py:'Python', html:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
-        php:'PHP', java:'Java', c:'C', cpp:'C++', cs:'C#',
-        go:'Go', rs:'Rust', rb:'Ruby', swift:'Swift', kt:'Kotlin',
-        sql:'SQL', json:'JSON', xml:'XML', yaml:'YAML', yml:'YAML',
-        sh:'Shell', bash:'Bash', md:'Markdown', txt:'Texte',
-        vue:'Vue', svelte:'Svelte', dart:'Dart', r:'R', lua:'Lua',
-        pdf:'Document PDF', docx:'Document Word', doc:'Document Word',
-        mp3:'Audio MP3', m4a:'Audio M4A', wav:'Audio WAV', ogg:'Audio OGG',
-        mp4:'Vidéo MP4', webm:'Vidéo WebM', mov:'Vidéo MOV', avi:'Vidéo AVI'
-    },
+    langMap:{
+    js: 'JavaScript', ts: 'TypeScript', jsx: 'React JSX', tsx: 'React TSX',
+    py: 'Python', html: 'HTML', css: 'CSS', scss: 'SCSS', sass: 'SASS',
+    php: 'PHP', java: 'Java', c: 'C', cpp: 'C++', cs: 'C#',
+    go: 'Go', rs: 'Rust', rb: 'Ruby', swift: 'Swift', kt: 'Kotlin',
+    sql: 'SQL', json: 'JSON', xml: 'XML', yaml: 'YAML', yml: 'YAML',
+    sh: 'Shell', bash: 'Bash', md: 'Markdown', txt: 'Texte',
+    vue: 'Vue', svelte: 'Svelte', dart: 'Dart', r: 'R', lua: 'Lua',
+
+    // Images
+    jpg: 'Image JPEG', jpeg: 'Image JPEG', png: 'Image PNG', 
+    gif: 'Image GIF', webp: 'Image WebP', svg: 'Image SVG', 
+    bmp: 'Image BMP', ico: 'Icône', tiff: 'Image TIFF',
+
+    // Documents
+    pdf: 'Document PDF', docx: 'Document Word', doc: 'Document Word',
+    
+    // Audio
+    mp3: 'Audio MP3', m4a: 'Audio M4A', wav: 'Audio WAV', ogg: 'Audio OGG',
+    
+    // Vidéo
+    mp4: 'Vidéo MP4', webm: 'Vidéo WebM', mov: 'Vidéo MOV', avi: 'Vidéo AVI'
+}
     systemPrompt: `Tu es PENSÉE — intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un simple assistant, mais un partenaire cognitif avec une voix, une exigence et une vision architecturale.
 
 ━━━ IDENTITÉ — VERROUILLAGE ABSOLU ━━━
