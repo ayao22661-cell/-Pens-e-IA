@@ -7,9 +7,9 @@ export const config = { runtime: 'edge' };
 
 const MODELS = {
     portrait: 'flux-realism',
-    horror:   'flux',         // Remplacé flux-pro par flux
+    horror:   'flux',         
     realism:  'flux-realism',
-    default:  'flux',         // Remplacé flux-pro par flux
+    default:  'flux',         
 };
 
 function selectModel(prompt) {
@@ -38,7 +38,8 @@ function enrichPrompt(prompt) {
 }
 
 function pollinationsUrl(prompt, model, w, h, seed) {
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&model=${model}&seed=${seed}&nologo=true&enhance=false`;
+    // MODIFICATION ICI : Retrait de nologo=true pour éviter les blocages de l'API gratuite
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&model=${model}&seed=${seed}&enhance=false`;
 }
 
 export default async function handler(req) {
@@ -65,7 +66,6 @@ export default async function handler(req) {
     const enriched = enrichPrompt(prompt.trim());
     const seed     = Math.floor(Math.random() * 99999) + 1;
     
-    // Résolution fixée à 1024 max pour garantir la vitesse de génération côté serveur
     const finalW   = Math.min(width  || 1024, 1024);
     const finalH   = Math.min(height || 1024, 1024);
 
