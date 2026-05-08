@@ -20,6 +20,10 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
     }
 
+    // CORRECTION 1 : Troncature de sécurité. 
+    // text-embedding-004 accepte max ~2048 tokens (soit environ 7500 caractères).
+    const safeText = text.slice(0, 7500);
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_API_KEY}`;
 
     try {
@@ -28,18 +32,23 @@ export default async function handler(req) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "models/text-embedding-004",
-                content: { parts: [{ text: text }] }
+                content: { parts: [{ text: safeText }] }
             })
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(`API Google rejetée (${response.status}) : ${errorData.error?.message || "Inconnue"}`);
+            
+            // CORRECTION 2 : On renvoie le vrai code d'erreur Google (400, 404, etc.) 
+            // au lieu de tout transformer en 500.
+            return new Response(JSON.stringify({ 
+                error: `Erreur API Google (${response.status}) : ${errorData.error?.message || "Inconnue"}` 
+            }), { status: response.status });
         }
         
         const data = await response.json();
         if (!data.embedding || !data.embedding.values) {
-            throw new Error("Structure de vecteur invalide retournée par Google.");
+            return new Response(JSON.stringify({ error: "Structure de vecteur invalide retournée par Google." }), { status: 500 });
         }
 
         return new Response(JSON.stringify({ embedding: data.embedding.values }), {
