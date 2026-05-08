@@ -155,7 +155,7 @@ RÈGLES ABSOLUES :
 - INTERDICTION : pygame, tkinter, pyqt, turtle. Jeux/animations → HTML/CSS/JS uniquement.
     },
 
-    recherche: {
+recherche: {
         id: "recherche",
         label: "Recherche",
         icon: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5"/><line x1="13" y1="13" x2="17" y2="17"/></svg>`,
