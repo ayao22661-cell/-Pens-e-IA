@@ -5,30 +5,7 @@
   "author": "Yao Baba Ange Emmanuel",
   "license": "UNLICENSED",
   "private": true,
-
-  "scripts": {
-    "dev":   "vercel dev",
-    "build": "vercel build",
-    "start": "vercel start"
-  },
-
-  "dependencies": {
-    "docx":      "^8.5.0",
-    "pptxgenjs": "^3.12.0",
-    "xlsx": "^0.18.5"
-  },
-
-  "devDependencies": {},
-
   "engines": {
-    "node": ">=18.0.0"
-  },
-
-  "keywords": [
-    "ia",
-    "assistant",
-    "french",
-    "gemini",
-    "pensee-ia"
-  ]
+    "node": "18.x"
+  }
 }
