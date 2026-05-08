@@ -1,8 +1,6 @@
 // ============================================================
 //  PENSÉE IA — api/image.js
-//  100% Pollinations.ai — Gratuit, Illimité, Anti-timeout
-//  Pas de dépendance Gemini pour l'enrichissement
-//  Edge-safe : tout tient dans 25s max
+//  Optimisé pour la netteté et la fidélité de Flux
 // ============================================================
 
 export const config = { runtime: 'edge' };
@@ -27,23 +25,24 @@ function selectModel(prompt) {
 
 function enrichPrompt(prompt) {
     const p = prompt.toLowerCase();
-    let boost = '';
-
+    
+    // Flux nécessite du langage naturel descriptif plutôt que des listes de tags.
+    // L'ajout de "High quality photograph of..." force le modèle dans un espace latent plus net.
     if (/visage|portrait|personne|homme|femme|face|person|skin|peau/.test(p)) {
-        boost = 'RAW photo, Canon EOS R5, 85mm f/1.4, sharp focus, studio lighting, ultra-detailed skin, catchlights, photorealistic, 8K UHD, no blur, crisp edges';
+        return `A highly detailed, ultra-sharp professional photograph of ${prompt}. Studio lighting, visible skin texture and pores, extreme focus on the subject, photorealistic.`;
     } else if (/horreur|horror|dark|ghost|génie|lagune|demon|fantôme|shadow|nuit/.test(p)) {
-        boost = 'cinematic horror, dramatic chiaroscuro, atmospheric fog, deep shadows, backlit silhouette, desaturated tones, film grain, anamorphic lens, hyperdetailed, tack sharp, 8K';
+        return `A cinematic, intensely sharp and atmospheric shot of ${prompt}. Dramatic chiaroscuro lighting, deep contrast, highly detailed textures, photorealistic realism.`;
     } else if (/rue|ville|abidjan|marché|street|city|outdoor|architecture/.test(p)) {
-        boost = 'architectural photography, 24mm wide angle, golden hour, volumetric light, vivid colors, high contrast, tack sharp, 8K UHD, crisp edges';
+        return `A perfectly focused, ultra-clear architectural street photography of ${prompt}. Taken during golden hour with vivid colors, extremely detailed environments and sharp edges.`;
     } else {
-        boost = 'professional photography, natural lighting, high dynamic range, ultra-detailed, tack sharp, razor sharp focus, 8K UHD, masterpiece, no blur';
+        return `A masterfully captured, crystal clear, sharp photograph of ${prompt}. High resolution, highly detailed, perfect lighting and focus.`;
     }
-
-    const antiBlur = 'avoid blur, soft focus, noise, pixelation, low quality, watermark';
-    return `${prompt}, ${boost}, best quality — ${antiBlur}`;
 }
 
 function pollinationsUrl(prompt, model, w, h, seed) {
+    // Utilisation des paramètres d'URL pour sécuriser la requête. 
+    // enhance=false est conservé car enhance=true (LLM de Pollinations) risque de diluer 
+    // tes spécificités géographiques (comme Abidjan) par des décors génériques.
     return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&model=${model}&seed=${seed}&nologo=true&enhance=false`;
 }
 
@@ -70,12 +69,13 @@ export default async function handler(req) {
     const model    = selectModel(prompt);
     const enriched = enrichPrompt(prompt.trim());
     const seed     = Math.floor(Math.random() * 99999) + 1;
-    const finalW   = Math.min(width  || 1280, 1536);
-    const finalH   = Math.min(height || 1280, 1536);
+    
+    // VERROUILLAGE RÉSOLUTION :
+    // On limite à 1024 max pour éviter le flou d'upscaling côté serveur gratuit
+    // 1024x1024 est le "sweet spot" (environ 1 Megapixel) pour des détails tranchants sur Flux
+    const finalW   = Math.min(width  || 1024, 1024);
+    const finalH   = Math.min(height || 1024, 1024);
 
-    // On retourne uniquement les URLs — zéro fetch côté Edge
-    // Le frontend charge les couches directement depuis le navigateur
-    // → Plus aucun risque de timeout Edge Function
     const layers = [
         {
             layer: 'preview',
