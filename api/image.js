@@ -1,17 +1,15 @@
 // ============================================================
 //  PENSÉE IA — api/image.js
-//  100% Pollinations.ai — Gratuit, Illimité, Anti-timeout
-//  Pas de dépendance Gemini pour l'enrichissement
-//  Edge-safe : tout tient dans 25s max
+//  Optimisé Anti-Timeout (Modèles rapides) & Netteté
 // ============================================================
 
 export const config = { runtime: 'edge' };
 
 const MODELS = {
     portrait: 'flux-realism',
-    horror:   'flux-pro',
+    horror:   'flux',         // Remplacé flux-pro par flux
     realism:  'flux-realism',
-    default:  'flux-pro',
+    default:  'flux',         // Remplacé flux-pro par flux
 };
 
 function selectModel(prompt) {
@@ -27,20 +25,16 @@ function selectModel(prompt) {
 
 function enrichPrompt(prompt) {
     const p = prompt.toLowerCase();
-    let boost = '';
-
+    
     if (/visage|portrait|personne|homme|femme|face|person|skin|peau/.test(p)) {
-        boost = 'RAW photo, Canon EOS R5, 85mm f/1.4, sharp focus, studio lighting, ultra-detailed skin, catchlights, photorealistic, 8K UHD, no blur, crisp edges';
+        return `Ultra-sharp professional photograph of ${prompt}. Studio lighting, visible skin texture, extreme focus, 8k resolution.`;
     } else if (/horreur|horror|dark|ghost|génie|lagune|demon|fantôme|shadow|nuit/.test(p)) {
-        boost = 'cinematic horror, dramatic chiaroscuro, atmospheric fog, deep shadows, backlit silhouette, desaturated tones, film grain, anamorphic lens, hyperdetailed, tack sharp, 8K';
+        return `Intensely sharp cinematic shot of ${prompt}. Dramatic lighting, deep contrast, highly detailed textures.`;
     } else if (/rue|ville|abidjan|marché|street|city|outdoor|architecture/.test(p)) {
-        boost = 'architectural photography, 24mm wide angle, golden hour, volumetric light, vivid colors, high contrast, tack sharp, 8K UHD, crisp edges';
+        return `Crystal clear street photography of ${prompt}. Golden hour, vivid colors, extremely detailed and sharp edges.`;
     } else {
-        boost = 'professional photography, natural lighting, high dynamic range, ultra-detailed, tack sharp, razor sharp focus, 8K UHD, masterpiece, no blur';
+        return `Masterfully captured, crystal clear, sharp photograph of ${prompt}. High resolution, highly detailed perfect focus.`;
     }
-
-    const antiBlur = 'avoid blur, soft focus, noise, pixelation, low quality, watermark';
-    return `${prompt}, ${boost}, best quality — ${antiBlur}`;
 }
 
 function pollinationsUrl(prompt, model, w, h, seed) {
@@ -70,22 +64,22 @@ export default async function handler(req) {
     const model    = selectModel(prompt);
     const enriched = enrichPrompt(prompt.trim());
     const seed     = Math.floor(Math.random() * 99999) + 1;
-    const finalW   = Math.min(width  || 1280, 1536);
-    const finalH   = Math.min(height || 1280, 1536);
+    
+    // Résolution fixée à 768 max pour garantir la vitesse de génération côté serveur
+    // (1024 cause des timeouts fréquents sur Pollinations — 768 est le bon équilibre qualité/vitesse)
+    const finalW   = Math.min(width  || 768, 768);
+    const finalH   = Math.min(height || 768, 768);
 
-    // On retourne uniquement les URLs — zéro fetch côté Edge
-    // Le frontend charge les couches directement depuis le navigateur
-    // → Plus aucun risque de timeout Edge Function
     const layers = [
         {
             layer: 'preview',
-            width: 512, height: 512,
-            url: pollinationsUrl(enriched, 'turbo', 512, 512, seed),
+            width: 384, height: 384,
+            url: pollinationsUrl(enriched, 'turbo', 384, 384, seed),
         },
         {
             layer: 'standard',
-            width: 768, height: 768,
-            url: pollinationsUrl(enriched, model, 768, 768, seed),
+            width: 512, height: 512,
+            url: pollinationsUrl(enriched, model, 512, 512, seed),
         },
         {
             layer: 'hd',
