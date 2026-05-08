@@ -1,0 +1,34 @@
+{
+  "name": "pensee-ia",
+  "version": "1.0.0",
+  "description": "PENSÉE IA — Assistant IA français personnalisé, créé par Yao Baba Ange Emmanuel",
+  "author": "Yao Baba Ange Emmanuel",
+  "license": "UNLICENSED",
+  "private": true,
+
+  "scripts": {
+    "dev":   "vercel dev",
+    "build": "vercel build",
+    "start": "vercel start"
+  },
+
+  "dependencies": {
+    "docx":      "^8.5.0",
+    "pptxgenjs": "^3.12.0",
+    "xlsx":      "^0.20.3"
+  },
+
+  "devDependencies": {},
+
+  "engines": {
+    "node": ">=18.0.0"
+  },
+
+  "keywords": [
+    "ia",
+    "assistant",
+    "french",
+    "gemini",
+    "pensee-ia"
+  ]
+}
