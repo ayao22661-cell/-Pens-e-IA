@@ -2071,16 +2071,16 @@ if (!response.ok) {
         // ==========================================
         // INTERCEPTEUR GENERATE_FILE (xlsx, pptx, docx, csv)
         // ==========================================
-        const fileMarkerRegex = /\[GENERATE_FILE:\s*(xlsx|pptx|docx|csv)\s*\|\s*({[\s\S]+?})\]/i;
+        const fileMarkerRegex = /\[GENERATE_FILE:\s*(xlsx|pptx|docx|csv)\s*\|\s*(\{[\s\S]*\})\]/i;
         const fileMatch = fullReply.match(fileMarkerRegex);
 
         if (fileMatch) {
             const fileType = fileMatch[1].toLowerCase();
             let fileData;
             try { fileData = JSON.parse(fileMatch[2]); } catch(e) {
-                addMessage("bot", "· Erreur : données de fichier invalides.", false);
-                fileMatch = null;
-            }
+    addMessage("bot", "· Erreur : données de fichier invalides.", false);
+    fileData = null;  // ← on met fileData à null, pas fileMatch
+}
 
             if (fileData) {
                 // Supprimer le marqueur de la bulle
