@@ -138,34 +138,32 @@ export default async function handler(req) {
 
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
-    // ============================================================
-    //  3. MODEL ROUTING INTELLIGENT
+// ============================================================
+    //  3. MODEL ROUTING INTELLIGENT (Corrigé selon tes quotas)
     // ============================================================
     let modelsToTry = [];
     
     if (agentId === 'code' || agentId === 'audit') {
-        // Tâches complexes : Priorité absolue à Gemini 2.5 Pro (1M tokens)
-        modelsToTry = [
-            "gemini-2.5-pro",
-            "gemini-2.5-flash", 
-            "gemini-2.0-flash"
-        ];
-    } else if (agentId === 'creatif' || (prompt.length < 150 && (!files || files.length === 0))) {
-        // Tâches simples ou purement créatives : Rapidité et Économie (Flash en priorité)
+        // Plus de version Pro car quota à 0. On utilise le Flash.
         modelsToTry = [
             "gemini-2.5-flash",
-            "gemini-2.0-flash"
+            "gemini-2.5-flash-lite"
+        ];
+    } else if (agentId === 'creatif' || (prompt.length < 150 && (!files || files.length === 0))) {
+        // Tâches simples ou purement créatives
+        modelsToTry = [
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash"
         ];
     } else {
         // Mix standard pour recherche, stratégie, visionnaire
         modelsToTry = [
             "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-2.5-pro"
+            "gemini-2.5-flash-lite"
         ];
     }
 
-    // Fallback de sécurité global si Google censure/rate
+    // Fallback de sécurité global avec les modèles où tu as du quota (30/jour)
     modelsToTry.push("gemma-3-27b-it", "gemma-3-12b-it");
 
     // ============================================================
