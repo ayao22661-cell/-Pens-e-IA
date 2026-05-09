@@ -50,26 +50,6 @@
             .eq('id', convId);
     }
 
-    // ── SUPABASE — ARTEFACTS ───────────────────────────────────
-
-    async function dbGetArtifacts() {
-        const { data } = await SB.from('artifacts')
-            .select('id, title, conversation_id, created_at')
-            .eq('user_id', UID)
-            .order('created_at', { ascending: false });
-        return data || [];
-    }
-
-    async function dbCreateArtifact(conversationId, title) {
-        const { data } = await SB.from('artifacts')
-            .insert([{ user_id: UID, conversation_id: conversationId, title }])
-            .select().single();
-        return data;
-    }
-
-    async function dbDeleteArtifact(id) {
-        await SB.from('artifacts').delete().eq('id', id);
-    }
 
     // ── RENDER — NOM UTILISATEUR ───────────────────────────────
 
@@ -223,7 +203,6 @@
         const section = document.createElement('div');
         section.id = 'enrichSections';
         section.innerHTML = `
-            <!-- DOSSIERS -->
             <div class="enrich-section">
                 <div class="enrich-section-header">
                     <span class="enrich-section-title">
@@ -234,24 +213,11 @@
                 </div>
                 <div id="folderList" class="enrich-list"></div>
             </div>
-
-            <!-- ARTEFACTS -->
-            <div class="enrich-section">
-                <div class="enrich-section-header">
-                    <span class="enrich-section-title">
-                        <svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 4,11 10,11 8,18 16,9 10,9"/></svg>
-                        Projets
-                    </span>
-                    <button class="enrich-add-btn" id="addArtifactBtn" title="Épingler conversation active">+</button>
-                </div>
-                <div id="artifactList" class="enrich-list"></div>
-            </div>
         `;
 
         newConvBtn.parentNode.insertBefore(section, newConvBtn.nextSibling);
 
         document.getElementById('addFolderBtn')?.addEventListener('click', createFolder);
-        document.getElementById('addArtifactBtn')?.addEventListener('click', pinCurrentConv);
     }
 
     // ── TOAST ──────────────────────────────────────────────────
@@ -431,7 +397,7 @@
             renderUser(user);
             injectSidebarSections();
 
-            await Promise.all([renderFolders(), renderArtifacts()]);
+            await renderFolders();
 
             // Expose tabs pour le drag & drop
             // ia.js utilise `tabs` en variable locale — on observe window._pensee_tabs
