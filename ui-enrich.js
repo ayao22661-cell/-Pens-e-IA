@@ -189,26 +189,22 @@
     // MutationObserver : rebranché à chaque fois que renderTabs() vide convList
 
     function attachDragToConvItems() {
-        document.querySelectorAll('#convList .conv-item').forEach(el => {
-            if (el.dataset.dragReady) return; // déjà branché
-            el.dataset.dragReady = '1';
-            el.draggable = true;
-            el.style.cursor = 'grab';
+    document.querySelectorAll('#convList .conv-item').forEach(el => {
+        if (el.dataset.dragReady) return;
+        el.dataset.dragReady = '1';
+        el.draggable = true;
+        el.style.cursor = 'grab';
 
-            el.addEventListener('dragstart', e => {
-                // Récupère l'id de la conv depuis le listener de switchTab
-                // On l'identifie via le titre et le tableau tabs exposé
-                const titleText = el.querySelector('.conv-item-title')?.textContent;
-                const tabs = window._pensee_tabs || [];
-                const tab = tabs.find(t => t.title === titleText);
-                if (tab) {
-                    e.dataTransfer.setData('convId', tab.id);
-                    el.classList.add('dragging');
-                }
-            });
-            el.addEventListener('dragend', () => el.classList.remove('dragging'));
+        el.addEventListener('dragstart', e => {
+            const convId = el.dataset.id; // direct, fiable
+            if (convId) {
+                e.dataTransfer.setData('convId', convId);
+                el.classList.add('dragging');
+            }
         });
-    }
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+    });
+}
 
     function observeConvList() {
         const list = document.getElementById('convList');
