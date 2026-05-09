@@ -2850,15 +2850,21 @@ if (SpeechRecognition && micBtn) {
     };
 
     recognition.onresult = (event) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript;
+    let finalPart = "";
+    let interimPart = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+            finalPart += event.results[i][0].transcript;
+        } else {
+            interimPart += event.results[i][0].transcript;
         }
-        userInput.value = initialText + transcript;
-        userInput.style.height = "auto";
-        userInput.style.height = Math.min(userInput.scrollHeight, 120) + "px";
-        toggleSendButton();
-    };
+    }
+    if (finalPart) initialText += finalPart;
+    userInput.value = initialText + interimPart;
+    userInput.style.height = "auto";
+    userInput.style.height = Math.min(userInput.scrollHeight, 120) + "px";
+    toggleSendButton();
+};
 
     recognition.onerror = (event) => {
         console.error("Erreur micro:", event.error);
