@@ -1289,6 +1289,28 @@
             background: var(--accent-dim);
             transform: rotate(20deg);
         }
+        /* ── CORRECTION UX MOBILE : BOUTONS CONVERSATION ── */
+        @media (max-width: 768px) {
+            .conv-item {
+                padding-right: 65px !important; 
+            }
+            
+            .conv-item > svg, 
+            .conv-item .del-btn {
+                width: 16px !important;
+                height: 16px !important;
+                padding: 4px !important;
+                right: 6px !important;
+                margin: 0 !important;
+                min-width: unset !important;
+            }
+
+            .mobile-move-btn {
+                right: 30px !important;
+                padding: 2px 4px !important;
+                font-size: 9px !important;
+            }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
