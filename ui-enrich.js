@@ -285,21 +285,36 @@
             document.addEventListener('click', closer);
         }, 10);
     }
-    // ── MENU DE DÉPLACEMENT (DESIGN ÉPURÉ) ──────────────────────
-    // ── MENU DE DÉPLACEMENT (DESIGN ÉPURÉ) ──────────────────────
+    // ── MENU DE DÉPLACEMENT (RÉSOLUTION DU BUG DE MASQUAGE) ─────
     async function showMoveMenu(anchor, convId) {
         // Nettoie les anciens menus
         document.querySelectorAll('.move-menu').forEach(m => m.remove());
 
         const menu = document.createElement('div');
         menu.className = 'move-menu';
+        
+        // 1. On calcule la position exacte du bouton à l'écran
+        const rect = anchor.getBoundingClientRect();
+        
+        // 2. On utilise 'fixed' pour s'affranchir de la barre latérale
         menu.style.cssText = `
-            position: absolute; right: 0; top: 25px;
+            position: fixed; 
             background: var(--bg2); border: 1px solid var(--border);
-            border-radius: 6px; padding: 4px; z-index: 9999;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-            display: flex; flex-direction: column; min-width: 130px;
+            border-radius: 6px; padding: 4px; z-index: 99999;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            display: flex; flex-direction: column; min-width: 140px;
         `;
+
+        // 3. Positionnement intelligent (vers le haut si on est en bas de l'écran)
+        if (rect.bottom + 150 > window.innerHeight) {
+            menu.style.top = (rect.top - 5) + 'px';
+            menu.style.transform = 'translateY(-100%)'; // Ouvre vers le haut
+        } else {
+            menu.style.top = (rect.bottom + 5) + 'px';  // Ouvre vers le bas
+        }
+        
+        // On aligne le menu sur la droite du bouton
+        menu.style.left = (rect.right - 140) + 'px';
 
         const createOption = (label, action) => {
             const opt = document.createElement('div');
@@ -319,7 +334,7 @@
             return opt;
         };
 
-        // Option: Menu principal (folder_id = null)
+        // Option: Menu principal
         menu.appendChild(createOption('🏠 Menu Principal', async () => {
             await dbMoveConvToFolder(convId, null);
             showToast('Déplacé vers le Menu Principal');
@@ -336,7 +351,6 @@
                 await dbMoveConvToFolder(convId, f.id);
                 showToast(`Conversation déplacée dans « ${f.name} »`);
                 
-                // Logique identique à votre événement "drop"
                 if (activeFolderId === f.id) {
                     const convs = await dbGetConvsInFolder(f.id);
                     if (window._pensee_filterTabs) window._pensee_filterTabs(convs);
@@ -345,8 +359,10 @@
             }));
         });
 
-        anchor.appendChild(menu);
+        // TRÈS IMPORTANT: On attache le menu au "body", pas au bouton !
+        document.body.appendChild(menu);
 
+        // Fermeture au clic à côté
         setTimeout(() => {
             const closer = (ev) => {
                 if (!menu.contains(ev.target)) {
