@@ -10,8 +10,9 @@ const AUDIO_CONFIG = {
     voiceRate: 1.05,
     voicePitch: 1.0,
     voiceVolume: 1.0,
-    version: '3.0.0'
+    version: '3.0.1'
 };
+
 // ============================================================
 // FIX : Contexte audio global pour éviter les plantages
 // ============================================================
@@ -29,15 +30,16 @@ function getAudioContext() {
 
 const AudioState = {
     isOpen: false,
-    isListening: false,
+    isListening: false,     // Etat réel du micro
+    isIntentional: false,   // Vrai tant que l'utilisateur veut parler (bloque l'envoi)
     isSpeaking: false,
-    isManuallyStopped: false, // <-- ETAPE 1 : AJOUT DU FLAG
     recognition: null,
     synth: window.speechSynthesis,
     currentUtterance: null,
     voices: [],
     selectedVoice: null,
-    finalTranscript: ''
+    finalTranscript: '',    // Historique des sessions
+    sessionTranscript: ''   // Session courante (évite les doublons)
 };
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -197,7 +199,7 @@ function buildOverlay() {
 }
 
 // ============================================================
-//  RECONNAISSANCE VOCALE
+//  RECONNAISSANCE VOCALE (FIX MOBILE & ANTI-HALLUCINATION)
 // ============================================================
 function startListening() {
     if (AudioState.isListening) return;
@@ -207,75 +209,60 @@ function startListening() {
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = true; 
+    recognition.continuous = true;
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
-    AudioState.isManuallyStopped = false; // <-- ETAPE 4 : Initialisation
+    AudioState.isIntentional = true; // L'utilisateur VEUT que ça écoute
     AudioState.finalTranscript = '';
+    AudioState.sessionTranscript = '';
 
     setOrbState('listening');
     setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
     clearInput();
 
-    // <-- ETAPE 3 : Anti-Doublons (On modifie la boucle)
     recognition.onresult = (event) => {
-        let interimTranscript = '';
-        let currentFinal = '';
+        let interim = '';
+        let final = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            let transcriptChunk = event.results[i][0].transcript;
-            
-            if (event.results[i].isFinal) {
-                currentFinal += transcriptChunk.trim() + ' ';
-            } else {
-                interimTranscript += transcriptChunk;
-            }
+        // FIX EXTRÊME : On boucle toujours depuis 0. On laisse l'API 
+        // corriger et espacer ses propres mots. Zéro duplication garantie.
+        for (let i = 0; i < event.results.length; i++) {
+            const t = event.results[i][0].transcript;
+            if (event.results[i].isFinal) final += t;
+            else interim += t;
         }
-
-        if (currentFinal) {
-            AudioState.finalTranscript += currentFinal;
-        }
-
-        const display = (AudioState.finalTranscript + interimTranscript).trim();
-        setInputText(display, interimTranscript !== '');
+        
+        AudioState.sessionTranscript = final;
+        
+        const display = AudioState.finalTranscript + AudioState.sessionTranscript + interim;
+        setInputText(display, !!interim);
     };
 
-    // <-- ETAPE 2 : Anti-coupure Mobile
     recognition.onend = () => {
-        // Si le mobile force la coupure, on relance en boucle
-        if (AudioState.isListening && !AudioState.isManuallyStopped) {
+        if (!AudioState.isIntentional) {
+            // ARRÊT MANUEL : L'utilisateur a cliqué pour envoyer.
+            finalizeAndSend();
+        } else {
+            // COUPURE SYSTÈME (Silence sur Mobile) : On sauvegarde la phrase et on relance le micro silencieusement.
+            if (AudioState.sessionTranscript) {
+                AudioState.finalTranscript += AudioState.sessionTranscript;
+                AudioState.sessionTranscript = '';
+            }
             try {
                 recognition.start();
             } catch (e) {
-                console.warn("[Audio] Impossible de relancer le micro", e);
+                // Failsafe : si le redémarrage échoue, on envoie le texte quand même
+                finalizeAndSend();
             }
-            return;
         }
-
-        // Si on arrive ici, c'est que l'utilisateur a cliqué sur le bouton (Arrêt manuel)
-        AudioState.isListening = false;
-        const text = AudioState.finalTranscript.trim();
-        
-        if (!text) {
-            setOrbState('idle');
-            setStatus('Appuie pour parler', '');
-            return;
-        }
-
-        // On affiche et on envoie directement à l'IA
-        setInputText(text, false);
-        sendToAI(text);
     };
 
     recognition.onerror = (event) => {
-        // Sur mobile, si on relance trop vite après un onend, ça peut faire une erreur 'no-speech'
-        // On l'ignore si on n'a pas arrêté manuellement
-        if (event.error === 'no-speech' && !AudioState.isManuallyStopped) {
-            return; 
-        }
-
+        if (event.error === 'no-speech') return; // Ignorer les faux positifs
+        
         AudioState.isListening = false;
+        AudioState.isIntentional = false;
         setOrbState('idle');
         const msgs = {
             'not-allowed': 'Micro refusé - autorise le micro',
@@ -287,17 +274,40 @@ function startListening() {
     recognition.start();
 }
 
+// Fonction centrale pour valider et envoyer
+function finalizeAndSend() {
+    AudioState.isListening = false;
+    AudioState.isIntentional = false;
+
+    if (AudioState.sessionTranscript) {
+        AudioState.finalTranscript += AudioState.sessionTranscript;
+        AudioState.sessionTranscript = '';
+    }
+
+    const text = AudioState.finalTranscript.trim();
+    if (!text) {
+        setOrbState('idle');
+        setStatus('Appuie pour parler', '');
+        return;
+    }
+
+    setInputText(text, false);
+    sendToAI(text);
+}
+
 function stopListening() {
-    AudioState.isManuallyStopped = true; // <-- ETAPE 4 : Arrêt volontaire
-    AudioState.isListening = false; 
-    AudioState.recognition?.stop(); // Ceci va déclencher le onend qui enverra à l'IA
-    setOrbState('idle');
+    AudioState.isIntentional = false; // Désactive la relance automatique
+    try {
+        AudioState.recognition?.stop(); // Provoque l'envoi via onend
+    } catch(e) {
+        finalizeAndSend();
+    }
 }
 
 function toggleListening() {
     getAudioContext(); 
     if (AudioState.isSpeaking) { stopSpeaking(); return; }
-    if (AudioState.isListening) stopListening();
+    if (AudioState.isIntentional) stopListening();
     else startListening();
 }
 
@@ -385,9 +395,8 @@ async function speak(text) {
         const ct = response.headers.get('Content-Type') || '';
 
         if (ct.includes('audio/mpeg')) {
-            // Lecture via Web Audio API (ElevenLabs ou Google WaveNet)
             const buf = await response.arrayBuffer();
-            const ctx = getAudioContext(); // FIX : Utilise le contexte global
+            const ctx = getAudioContext();
             const decoded = await ctx.decodeAudioData(buf);
             const src = ctx.createBufferSource();
             src.buffer = decoded;
@@ -402,7 +411,6 @@ async function speak(text) {
             return;
         }
 
-        // Fallback Web Speech demandé par le serveur
         const data = await response.json().catch(() => ({ fallback: true, text }));
         speakWebSpeech(data.text || text);
 
@@ -440,12 +448,10 @@ function speakWebSpeech(text) {
 }
 
 function stopSpeaking() {
-    // Stop Web Audio (ElevenLabs / Google)
     if (AudioState.currentSource) {
         try { AudioState.currentSource.stop(); } catch(e) {}
         AudioState.currentSource = null;
     }
-    // Stop Web Speech
     AudioState.synth?.cancel();
     AudioState.isSpeaking = false;
     AudioState.currentUtterance = null;
