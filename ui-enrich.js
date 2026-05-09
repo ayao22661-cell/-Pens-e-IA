@@ -286,6 +286,7 @@
         }, 10);
     }
     // ── MENU DE DÉPLACEMENT (DESIGN ÉPURÉ) ──────────────────────
+    // ── MENU DE DÉPLACEMENT (DESIGN ÉPURÉ) ──────────────────────
     async function showMoveMenu(anchor, convId) {
         // Nettoie les anciens menus
         document.querySelectorAll('.move-menu').forEach(m => m.remove());
@@ -318,10 +319,13 @@
             return opt;
         };
 
-        // Option: Menu principal
+        // Option: Menu principal (folder_id = null)
         menu.appendChild(createOption('🏠 Menu Principal', async () => {
-            // REMPLACER ICI PAR TA FONCTION DE DÉPLACEMENT
-            console.log("Déplacer vers Menu Principal", convId); 
+            await dbMoveConvToFolder(convId, null);
+            showToast('Déplacé vers le Menu Principal');
+            if (activeFolderId === null && window._pensee_restoreAllTabs) {
+                window._pensee_restoreAllTabs();
+            }
             renderFolders();
         }));
 
@@ -329,8 +333,14 @@
         const folders = await dbGetFolders();
         folders.forEach(f => {
             menu.appendChild(createOption(`📁 ${f.name}`, async () => {
-                // REMPLACER ICI PAR TA FONCTION DE DÉPLACEMENT
-                console.log(`Déplacer vers ${f.name}`, convId, f.id);
+                await dbMoveConvToFolder(convId, f.id);
+                showToast(`Conversation déplacée dans « ${f.name} »`);
+                
+                // Logique identique à votre événement "drop"
+                if (activeFolderId === f.id) {
+                    const convs = await dbGetConvsInFolder(f.id);
+                    if (window._pensee_filterTabs) window._pensee_filterTabs(convs);
+                }
                 renderFolders();
             }));
         });
@@ -354,7 +364,7 @@
             if (item.dataset.id && !item.querySelector('.mobile-move-btn')) {
                 const btn = document.createElement('div');
                 btn.className = 'mobile-move-btn';
-                btn.innerText = '⋮'; // Symbole menu classique
+                btn.innerText = '⋮'; 
                 btn.style.cssText = `
                     position: absolute; right: 28px; top: 50%; transform: translateY(-50%);
                     width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
