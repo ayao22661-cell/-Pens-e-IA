@@ -21,6 +21,7 @@
 
     let SB = null;   // client supabase
     let UID = null;  // user id
+    let activeFolderId = null; // dossier actuellement sélectionné (null = tous)
 
     // ── SUPABASE — DOSSIERS ────────────────────────────────────
 
@@ -48,6 +49,15 @@
         await SB.from('conversations')
             .update({ folder_id: folderId })
             .eq('id', convId);
+    }
+
+    async function dbGetConvsInFolder(folderId) {
+        const { data } = await SB.from('conversations')
+            .select('*')
+            .eq('user_id', UID)
+            .eq('folder_id', folderId)
+            .order('created_at', { ascending: false });
+        return data || [];
     }
 
 
@@ -79,8 +89,26 @@
 
         folders.forEach(f => {
             const row = document.createElement('div');
-            row.className = 'enrich-row enrich-folder-row';
+            row.className = 'enrich-row enrich-folder-row' + (activeFolderId === f.id ? ' folder-active' : '');
             row.dataset.folderId = f.id;
+
+            // Clic sur le dossier → filtrer les conversations
+            row.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('enrich-del-btn')) return;
+                if (activeFolderId === f.id) {
+                    // Deuxième clic = désélectionner → afficher toutes les convs
+                    activeFolderId = null;
+                    renderFolders();
+                    if (window._pensee_restoreAllTabs) window._pensee_restoreAllTabs();
+                } else {
+                    activeFolderId = f.id;
+                    renderFolders();
+                    const convs = await dbGetConvsInFolder(f.id);
+                    if (window._pensee_filterTabs) window._pensee_filterTabs(convs);
+                    else showToast(`${convs.length} conversation(s) dans « ${f.name} »`);
+                }
+            });
+
             // Zone de drop
             row.addEventListener('dragover', e => {
                 e.preventDefault();
@@ -94,6 +122,11 @@
                 if (!convId) return;
                 await dbMoveConvToFolder(convId, f.id);
                 showToast(`Conversation déplacée dans « ${f.name} »`);
+                // Si ce dossier est actif, rafraîchir la liste filtrée
+                if (activeFolderId === f.id) {
+                    const convs = await dbGetConvsInFolder(f.id);
+                    if (window._pensee_filterTabs) window._pensee_filterTabs(convs);
+                }
             });
 
             row.innerHTML = `
@@ -343,6 +376,13 @@
                 background: var(--accent-dim);
                 border-color: var(--accent);
             }
+            .enrich-folder-row.folder-active {
+                background: var(--bg3);
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+            .enrich-folder-row.folder-active .enrich-section-title,
+            .enrich-folder-row.folder-active svg { color: var(--accent); stroke: var(--accent); }
 
             /* Artefact hover */
             .enrich-artifact-row:hover { border-color: rgba(0,229,160,0.2); }
