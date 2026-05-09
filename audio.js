@@ -222,28 +222,33 @@ function startNativeRecognition() {
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = true;
+    recognition.continuous = false; // ← CLEF : sur mobile, continuous:true est instable
 
-    AudioState.sessionTranscript = ''; // Toujours vide au démarrage de l'instance
+    AudioState.sessionTranscript = '';
     AudioState.recognition = recognition;
 
+    // Identifiant unique pour ignorer les events d'instances mortes
+    const instanceId = Date.now();
+    AudioState.currentInstanceId = instanceId;
+
     recognition.onresult = (event) => {
-    let interim = '';
-    let newFinal = '';
+        // Ignorer si une nouvelle instance a déjà pris le relais
+        if (AudioState.currentInstanceId !== instanceId) return;
 
-    // On lit SEULEMENT les nouveaux résultats depuis resultIndex
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript;
-        if (event.results[i].isFinal) newFinal += t;
-        else interim += t;
-    }
+        let interim = '';
+        let newFinal = '';
 
-    // Les finals nouveaux s'accumulent dans sessionTranscript (pas de réécriture)
-    if (newFinal) AudioState.sessionTranscript += newFinal;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const t = event.results[i][0].transcript;
+            if (event.results[i].isFinal) newFinal += t;
+            else interim += t;
+        }
 
-    const display = AudioState.finalTranscript + AudioState.sessionTranscript + interim;
-    setInputText(display, !!interim);
-};
+        if (newFinal) AudioState.sessionTranscript += newFinal;
+
+        const display = AudioState.finalTranscript + AudioState.sessionTranscript + interim;
+        setInputText(display, !!interim);
+    };
 
     recognition.onend = () => {
         if (!AudioState.isIntentional) {
