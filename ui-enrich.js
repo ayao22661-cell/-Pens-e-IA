@@ -285,44 +285,39 @@
             document.addEventListener('click', closer);
         }, 10);
     }
-    // ── MENU DE DÉPLACEMENT (RÉSOLUTION DU BUG DE MASQUAGE) ─────
+   // ── MENU DE DÉPLACEMENT (TEXTE PUR + POSITION FIXE) ────────
     async function showMoveMenu(anchor, convId) {
-        // Nettoie les anciens menus
         document.querySelectorAll('.move-menu').forEach(m => m.remove());
 
         const menu = document.createElement('div');
         menu.className = 'move-menu';
         
-        // 1. On calcule la position exacte du bouton à l'écran
         const rect = anchor.getBoundingClientRect();
         
-        // 2. On utilise 'fixed' pour s'affranchir de la barre latérale
         menu.style.cssText = `
             position: fixed; 
             background: var(--bg2); border: 1px solid var(--border);
-            border-radius: 6px; padding: 4px; z-index: 99999;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            border-radius: 4px; padding: 4px; z-index: 99999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             display: flex; flex-direction: column; min-width: 140px;
         `;
 
-        // 3. Positionnement intelligent (vers le haut si on est en bas de l'écran)
+        // Positionnement (évite que le menu sorte de l'écran)
         if (rect.bottom + 150 > window.innerHeight) {
-            menu.style.top = (rect.top - 5) + 'px';
-            menu.style.transform = 'translateY(-100%)'; // Ouvre vers le haut
+            menu.style.top = (rect.top - 2) + 'px';
+            menu.style.transform = 'translateY(-100%)';
         } else {
-            menu.style.top = (rect.bottom + 5) + 'px';  // Ouvre vers le bas
+            menu.style.top = (rect.bottom + 2) + 'px';
         }
-        
-        // On aligne le menu sur la droite du bouton
         menu.style.left = (rect.right - 140) + 'px';
 
         const createOption = (label, action) => {
             const opt = document.createElement('div');
             opt.innerText = label;
             opt.style.cssText = `
-                padding: 6px 10px; font-size: 11px; cursor: pointer; 
-                border-radius: 4px; transition: background 0.2s, color 0.2s;
-                color: var(--text2);
+                padding: 7px 10px; font-size: 11px; cursor: pointer; 
+                border-radius: 2px; transition: background 0.1s;
+                color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px;
             `;
             opt.onmouseover = () => { opt.style.background = 'rgba(255,255,255,0.05)'; opt.style.color = 'var(--text)'; };
             opt.onmouseout = () => { opt.style.background = 'transparent'; opt.style.color = 'var(--text2)'; };
@@ -334,23 +329,20 @@
             return opt;
         };
 
-        // Option: Menu principal
-        menu.appendChild(createOption('🏠 Menu Principal', async () => {
+        // Option 1 : Retour au menu principal
+        menu.appendChild(createOption('Menu Principal', async () => {
             await dbMoveConvToFolder(convId, null);
-            showToast('Déplacé vers le Menu Principal');
-            if (activeFolderId === null && window._pensee_restoreAllTabs) {
-                window._pensee_restoreAllTabs();
-            }
+            showToast('Deplace vers Menu Principal');
+            if (activeFolderId === null && window._pensee_restoreAllTabs) window._pensee_restoreAllTabs();
             renderFolders();
         }));
 
-        // Options: Dossiers
+        // Options suivantes : Les dossiers (texte uniquement)
         const folders = await dbGetFolders();
         folders.forEach(f => {
-            menu.appendChild(createOption(`📁 ${f.name}`, async () => {
+            menu.appendChild(createOption(f.name, async () => {
                 await dbMoveConvToFolder(convId, f.id);
-                showToast(`Conversation déplacée dans « ${f.name} »`);
-                
+                showToast(`Deplace vers ${f.name}`);
                 if (activeFolderId === f.id) {
                     const convs = await dbGetConvsInFolder(f.id);
                     if (window._pensee_filterTabs) window._pensee_filterTabs(convs);
@@ -359,10 +351,8 @@
             }));
         });
 
-        // TRÈS IMPORTANT: On attache le menu au "body", pas au bouton !
         document.body.appendChild(menu);
 
-        // Fermeture au clic à côté
         setTimeout(() => {
             const closer = (ev) => {
                 if (!menu.contains(ev.target)) {
@@ -374,22 +364,21 @@
         }, 10);
     }
 
-    // ── BOUTONS DISCRETS "⋮" ────────────────────────────────────
+    // ── BOUTON DE DÉCLENCHEMENT (TEXTE DISCRET) ────────────────
     function addMobileMoveButtons() {
         document.querySelectorAll('.conv-item').forEach(item => {
             if (item.dataset.id && !item.querySelector('.mobile-move-btn')) {
                 const btn = document.createElement('div');
                 btn.className = 'mobile-move-btn';
-                btn.innerText = '⋮'; 
+                btn.innerText = 'MOV'; // Texte court au lieu d'une icone
                 btn.style.cssText = `
-                    position: absolute; right: 28px; top: 50%; transform: translateY(-50%);
-                    width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
-                    font-size: 16px; font-weight: bold; color: var(--text3); cursor: pointer;
-                    border-radius: 4px; transition: background 0.2s, color 0.2s;
+                    position: absolute; right: 32px; top: 50%; transform: translateY(-50%);
+                    font-size: 9px; color: var(--text3); cursor: pointer;
+                    padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px;
                 `;
                 
-                btn.onmouseover = () => { btn.style.background = 'rgba(255,255,255,0.05)'; btn.style.color = 'var(--text)'; };
-                btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = 'var(--text3)'; };
+                btn.onmouseover = () => { btn.style.color = 'var(--accent)'; btn.style.borderColor = 'var(--accent)'; };
+                btn.onmouseout  = () => { btn.style.color = 'var(--text3)'; btn.style.borderColor = 'var(--border)'; };
 
                 btn.onclick = (e) => {
                     e.stopPropagation();
