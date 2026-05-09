@@ -31,6 +31,7 @@ const AudioState = {
     isOpen: false,
     isListening: false,
     isSpeaking: false,
+    isManuallyStopped: false, // <-- ETAPE 1 : AJOUT DU FLAG
     recognition: null,
     synth: window.speechSynthesis,
     currentUtterance: null,
@@ -206,59 +207,77 @@ function startListening() {
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = true; // FIX : Maintient le micro ouvert
+    recognition.continuous = true; 
 
     AudioState.recognition = recognition;
     AudioState.isListening = true;
+    AudioState.isManuallyStopped = false; // <-- ETAPE 4 : Initialisation
     AudioState.finalTranscript = '';
 
     setOrbState('listening');
     setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
     clearInput();
 
+    // <-- ETAPE 3 : Anti-Doublons (On modifie la boucle)
     recognition.onresult = (event) => {
-        let interim = '';
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const t = event.results[i][0].transcript;
-            if (event.results[i].isFinal) final += t;
-            else interim += t;
+        let interimTranscript = '';
+        let currentFinal = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            let transcriptChunk = event.results[i][0].transcript;
+            
+            if (event.results[i].isFinal) {
+                currentFinal += transcriptChunk.trim() + ' ';
+            } else {
+                interimTranscript += transcriptChunk;
+            }
         }
-        
-        if (final) AudioState.finalTranscript += final;
-        
-        const display = AudioState.finalTranscript + (interim ? ' ' + interim : '');
-        setInputText(display, !!interim && !final);
+
+        if (currentFinal) {
+            AudioState.finalTranscript += currentFinal;
+        }
+
+        const display = (AudioState.finalTranscript + interimTranscript).trim();
+        setInputText(display, interimTranscript !== '');
     };
 
+    // <-- ETAPE 2 : Anti-coupure Mobile
     recognition.onend = () => {
-    const wasManual = !AudioState.isListening;
-    AudioState.isListening = false;
-    const text = AudioState.finalTranscript.trim();
-    if (!text) {
-        setOrbState('idle');
-        setStatus('Appuie pour parler', '');
-        return;
-    }
-    if (wasManual) {
+        // Si le mobile force la coupure, on relance en boucle
+        if (AudioState.isListening && !AudioState.isManuallyStopped) {
+            try {
+                recognition.start();
+            } catch (e) {
+                console.warn("[Audio] Impossible de relancer le micro", e);
+            }
+            return;
+        }
+
+        // Si on arrive ici, c'est que l'utilisateur a cliqué sur le bouton (Arrêt manuel)
+        AudioState.isListening = false;
+        const text = AudioState.finalTranscript.trim();
+        
+        if (!text) {
+            setOrbState('idle');
+            setStatus('Appuie pour parler', '');
+            return;
+        }
+
+        // On affiche et on envoie directement à l'IA
         setInputText(text, false);
         sendToAI(text);
-    } else {
-        setStatus('Traitement...', 'thinking');
-        setTimeout(() => {
-            if (!AudioState.isListening) {
-                setInputText(AudioState.finalTranscript.trim(), false);
-                sendToAI(AudioState.finalTranscript.trim());
-            }
-        }, 800);
-    }
-};
+    };
 
     recognition.onerror = (event) => {
+        // Sur mobile, si on relance trop vite après un onend, ça peut faire une erreur 'no-speech'
+        // On l'ignore si on n'a pas arrêté manuellement
+        if (event.error === 'no-speech' && !AudioState.isManuallyStopped) {
+            return; 
+        }
+
         AudioState.isListening = false;
         setOrbState('idle');
         const msgs = {
-            'no-speech': 'Rien entendu - réessaie',
             'not-allowed': 'Micro refusé - autorise le micro',
             'network': 'Erreur réseau'
         };
@@ -269,14 +288,14 @@ function startListening() {
 }
 
 function stopListening() {
-    AudioState.isListening = false; // Marquer AVANT .stop()
-    AudioState.recognition?.stop();
-    AudioState.recognition = null;
+    AudioState.isManuallyStopped = true; // <-- ETAPE 4 : Arrêt volontaire
+    AudioState.isListening = false; 
+    AudioState.recognition?.stop(); // Ceci va déclencher le onend qui enverra à l'IA
     setOrbState('idle');
 }
 
 function toggleListening() {
-    getAudioContext(); // Débloque l'audio immédiatement lors du clic
+    getAudioContext(); 
     if (AudioState.isSpeaking) { stopSpeaking(); return; }
     if (AudioState.isListening) stopListening();
     else startListening();
