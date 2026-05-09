@@ -876,6 +876,7 @@ function renderTabs() {
         group.items.forEach(tab => {
             const el = document.createElement('div');
             el.className = 'conv-item' + (tab.id === activeTabId ? ' active' : '');
+            el.dataset.id = tab.id;
 
             const title = document.createElement('span');
             title.className = 'conv-item-title';
