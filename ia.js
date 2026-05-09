@@ -489,11 +489,11 @@ function handleAgentCommand(text) {
 // ============================================================
 //  SUPABASE & AUTH (Login / Sign Up)
 // ============================================================
-// ⚠️ À REMPLACER PAR TES CLÉS RÉELLES
 const supabaseUrl = 'https://uhrdoxllxqtvucxmzcww.supabase.co';
 const supabaseKey = 'sb_publishable_8EA5WSsRgDTcKbtpULEEFQ_Du2qoRIb';
 // Utilisation de l'objet global fourni par le CDN dans index.html
 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+window.supabase = supabase;
 
 let currentUser = null;
 let isSignUpMode = false;
@@ -813,9 +813,10 @@ async function deleteTab(id) {
         renderTabs();
     }
 }
-
+window.switchTab = switchTab;
 function switchTab(id) {
     activeTabId = id;
+    window.activeTabId = activeTabId;
     sessionStorage.setItem('pensee_ia_active_tab', id);
     history = [];
     CONFIG.storageKey = getHistoryKey(id);
@@ -841,6 +842,7 @@ async function updateTabTitle(id, firstUserMsg) {
 
 function renderTabs() {
     const list = document.getElementById('convList');
+    window._pensee_tabs = tabs;
     if (!list) return;
     list.innerHTML = '';
 
