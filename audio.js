@@ -228,20 +228,22 @@ function startNativeRecognition() {
     AudioState.recognition = recognition;
 
     recognition.onresult = (event) => {
-        let interim = '';
-        let final = '';
+    let interim = '';
+    let newFinal = '';
 
-        for (let i = 0; i < event.results.length; i++) {
-            const t = event.results[i][0].transcript;
-            if (event.results[i].isFinal) final += t + ' '; // Ajoute un espace
-            else interim += t;
-        }
-        
-        AudioState.sessionTranscript = final;
-        
-        const display = (AudioState.finalTranscript + AudioState.sessionTranscript + interim).trim();
-        setInputText(display, !!interim);
-    };
+    // On lit SEULEMENT les nouveaux résultats depuis resultIndex
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) newFinal += t;
+        else interim += t;
+    }
+
+    // Les finals nouveaux s'accumulent dans sessionTranscript (pas de réécriture)
+    if (newFinal) AudioState.sessionTranscript += newFinal;
+
+    const display = AudioState.finalTranscript + AudioState.sessionTranscript + interim;
+    setInputText(display, !!interim);
+};
 
     recognition.onend = () => {
         if (!AudioState.isIntentional) {
