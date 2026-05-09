@@ -583,6 +583,7 @@ loginScreen.style.display = "none";
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         currentUser = session.user;
+        window.currentUser = currentUser; // ← expose pour ui-enrich.js
         loginScreen.style.display = "none";
     }
 }
