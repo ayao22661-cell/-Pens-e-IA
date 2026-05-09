@@ -117,9 +117,17 @@ function enrichPrompt(prompt, category) {
 }
 
 // ── SÉLECTION DU MODÈLE PAR CATÉGORIE ────────────────────────
+// ── SÉLECTION DU MODÈLE PAR CATÉGORIE ────────────────────────
 function selectModel(category) {
-    // flux-realism sur tout sauf illustration pure
+    // On utilise flux-pro pour forcer l'IA à "prendre son temps" et générer 
+    // des détails de qualité maximale. La génération prendra plus de secondes.
+    if (category === CATEGORIES.PORTRAIT) return 'flux-pro';
+    if (category === CATEGORIES.SCENE_URBAINE) return 'flux-pro';
+    if (category === CATEGORIES.NATURE) return 'flux-pro';
+    
+    // On garde flux standard pour les dessins/illustrations
     if (category === CATEGORIES.ILLUSTRATION) return 'flux';
+    
     return 'flux-realism';
 }
 
