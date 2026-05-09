@@ -232,16 +232,27 @@ function startListening() {
     };
 
     recognition.onend = () => {
-        AudioState.isListening = false;
-        const text = AudioState.finalTranscript.trim();
-        if (text) {
-            setInputText(text, false);
-            sendToAI(text);
-        } else {
-            setOrbState('idle');
-            setStatus('Appuie pour parler', '');
-        }
-    };
+    const wasManual = !AudioState.isListening;
+    AudioState.isListening = false;
+    const text = AudioState.finalTranscript.trim();
+    if (!text) {
+        setOrbState('idle');
+        setStatus('Appuie pour parler', '');
+        return;
+    }
+    if (wasManual) {
+        setInputText(text, false);
+        sendToAI(text);
+    } else {
+        setStatus('Traitement...', 'thinking');
+        setTimeout(() => {
+            if (!AudioState.isListening) {
+                setInputText(AudioState.finalTranscript.trim(), false);
+                sendToAI(AudioState.finalTranscript.trim());
+            }
+        }, 800);
+    }
+};
 
     recognition.onerror = (event) => {
         AudioState.isListening = false;
@@ -258,9 +269,9 @@ function startListening() {
 }
 
 function stopListening() {
+    AudioState.isListening = false; // Marquer AVANT .stop()
     AudioState.recognition?.stop();
     AudioState.recognition = null;
-    AudioState.isListening = false;
     setOrbState('idle');
 }
 
