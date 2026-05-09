@@ -562,6 +562,9 @@ async function checkLocalAuth() {
         if (session && !isRecoveryMode) {
             currentUser = session.user;
             loginScreen.style.display = "none";
+            currentUser = session.user;
+window.currentUser = currentUser; // ← expose pour ui-enrich.js
+loginScreen.style.display = "none";
             
             // Nettoyage de l'URL (enlève le #access_token...)
             if (window.location.hash) {
@@ -641,6 +644,7 @@ async function handleAuth() {
             if (error) throw error;
 
             currentUser = data.user;
+            window.currentUser = currentUser;
             loginScreen.style.opacity = "0";
             setTimeout(() => { loginScreen.style.display = "none"; }, 300);
             
