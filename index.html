@@ -1293,6 +1293,15 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/default.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
+    <script>
+        MobileDragDrop.polyfill({
+            holdToDrag: 300 
+        });
+        window.addEventListener('touchmove', function() {}, {passive: false});
+    </script>
 </head>
 <body>
 
