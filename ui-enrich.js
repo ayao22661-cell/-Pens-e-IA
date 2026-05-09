@@ -22,6 +22,7 @@
     let SB = null;   // client supabase
     let UID = null;  // user id
     let activeFolderId = null; // dossier actuellement sélectionné (null = tous)
+    let currentFolders = [];
 
     // ── SUPABASE — DOSSIERS ────────────────────────────────────
 
@@ -80,6 +81,7 @@
         if (!container) return;
 
         const folders = await dbGetFolders();
+        currentFolders = folders;
         container.innerHTML = '';
 
         if (folders.length === 0) {
@@ -218,13 +220,180 @@
         el.addEventListener('dragend', () => el.classList.remove('dragging'));
     });
 }
+// ── MENU DE DÉPLACEMENT MOBILE ─────────────────────────────
+    function showMoveMenu(anchor, convId) {
+        // Ferme les autres menus ouverts
+        document.querySelectorAll('.move-menu').forEach(m => m.remove());
 
+        const menu = document.createElement('div');
+        menu.className = 'move-menu';
+        menu.style.cssText = `
+            position: absolute; right: 0; top: 30px;
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: 8px; padding: 6px; z-index: 9999;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; min-width: 140px;
+        `;
+
+        const title = document.createElement('div');
+        title.innerText = 'Déplacer vers :';
+        title.style.cssText = 'font-size:10px; color:var(--text3); padding:4px 8px; margin-bottom:4px; border-bottom:1px solid var(--border);';
+        menu.appendChild(title);
+
+        // Option "Général" (Retirer du dossier)
+        const rootOpt = document.createElement('div');
+        rootOpt.innerText = '🏠 Menu Principal';
+        rootOpt.style.cssText = 'padding:8px; font-size:11px; cursor:pointer; border-radius:4px; transition:background 0.2s;';
+        rootOpt.onmouseover = () => rootOpt.style.background = 'rgba(255,255,255,0.05)';
+        rootOpt.onmouseout = () => rootOpt.style.background = 'transparent';
+        rootOpt.onclick = async (e) => {
+            e.stopPropagation();
+            await dbMoveConversation(convId, null);
+            menu.remove();
+            renderFolders();
+            showToast('Déplacé vers le Menu Principal');
+        };
+        menu.appendChild(rootOpt);
+
+        // Liste des dossiers créés
+        currentFolders.forEach(f => {
+            const opt = document.createElement('div');
+            opt.innerText = '📁 ' + f.name;
+            opt.style.cssText = 'padding:8px; font-size:11px; cursor:pointer; border-radius:4px; transition:background 0.2s;';
+            opt.onmouseover = () => opt.style.background = 'rgba(0,229,160,0.1)';
+            opt.onmouseout = () => opt.style.background = 'transparent';
+            opt.onclick = async (e) => {
+                e.stopPropagation();
+                await dbMoveConversation(convId, f.id);
+                menu.remove();
+                renderFolders();
+                showToast(`Déplacé vers ${f.name}`);
+            };
+            menu.appendChild(opt);
+        });
+
+        anchor.appendChild(menu);
+
+        // Fermer le menu si on clique ailleurs
+        setTimeout(() => {
+            const closer = (ev) => {
+                if (!menu.contains(ev.target)) {
+                    menu.remove();
+                    document.removeEventListener('click', closer);
+                }
+            };
+            document.addEventListener('click', closer);
+        }, 10);
+    }
+    // ── MENU DE DÉPLACEMENT ─────────────────────────────────────
+    async function showMoveMenu(anchor, convId) {
+        // Ferme les autres menus ouverts
+        document.querySelectorAll('.move-menu').forEach(m => m.remove());
+
+        const menu = document.createElement('div');
+        menu.className = 'move-menu';
+        menu.style.cssText = `
+            position: absolute; right: 0; top: 30px;
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: 8px; padding: 6px; z-index: 9999;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; min-width: 140px;
+        `;
+
+        const title = document.createElement('div');
+        title.innerText = 'Déplacer vers :';
+        title.style.cssText = 'font-size:10px; color:var(--text3); padding:4px 8px; margin-bottom:4px; border-bottom:1px solid var(--border);';
+        menu.appendChild(title);
+
+        // Option "Menu Principal" (Retirer du dossier)
+        const rootOpt = document.createElement('div');
+        rootOpt.innerText = 'Menu Principal';
+        rootOpt.style.cssText = 'padding:8px; font-size:11px; cursor:pointer; border-radius:4px; transition:background 0.2s;';
+        rootOpt.onmouseover = () => rootOpt.style.background = 'rgba(255,255,255,0.05)';
+        rootOpt.onmouseout = () => rootOpt.style.background = 'transparent';
+        rootOpt.onclick = async (e) => {
+            e.stopPropagation();
+            await dbMoveConversation(convId, null);
+            menu.remove();
+            renderFolders();
+            showToast('Déplacé vers le Menu Principal');
+        };
+        menu.appendChild(rootOpt);
+
+        // Récupération instantanée des dossiers
+        const folders = await dbGetFolders();
+        folders.forEach(f => {
+            const opt = document.createElement('div');
+            opt.innerText = f.name;
+            opt.style.cssText = 'padding:8px; font-size:11px; cursor:pointer; border-radius:4px; transition:background 0.2s;';
+            opt.onmouseover = () => opt.style.background = 'rgba(0,229,160,0.1)';
+            opt.onmouseout = () => opt.style.background = 'transparent';
+            opt.onclick = async (e) => {
+                e.stopPropagation();
+                await dbMoveConversation(convId, f.id);
+                menu.remove();
+                renderFolders();
+                showToast(`Déplacé vers ${f.name}`);
+            };
+            menu.appendChild(opt);
+        });
+
+        anchor.appendChild(menu);
+
+        // Fermer le menu si on clique ailleurs sur l'écran
+        setTimeout(() => {
+            const closer = (ev) => {
+                if (!menu.contains(ev.target)) {
+                    menu.remove();
+                    document.removeEventListener('click', closer);
+                }
+            };
+            document.addEventListener('click', closer);
+        }, 10);
+    }
+
+    // ── CRÉATION DES BOUTONS SUR LES CONVERSATIONS ──────────────
+    function addMobileMoveButtons() {
+        const items = document.querySelectorAll('.conv-item');
+        items.forEach(item => {
+            // Si la conversation a un ID et n'a pas encore le bouton
+            if (item.dataset.id && !item.querySelector('.mobile-move-btn')) {
+                const btn = document.createElement('div');
+                btn.className = 'mobile-move-btn';
+                btn.innerText = 'Déplacer';
+                btn.style.cssText = `
+                    position: absolute; right: 35px; top: 50%; transform: translateY(-50%);
+                    padding: 4px 6px; font-size: 10px; color: var(--text3); cursor: pointer;
+                    display: flex; align-items: center; border-radius: 4px;
+                    transition: color 0.2s, background 0.2s;
+                `;
+                
+                btn.onmouseover = () => { btn.style.background = 'rgba(255,255,255,0.05)'; btn.style.color = 'var(--accent)'; };
+                btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = 'var(--text3)'; };
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    showMoveMenu(btn, item.dataset.id);
+                };
+                item.appendChild(btn);
+            }
+        });
+    }
+
+    // ── OBSERVATEUR DE LISTE MODIFIÉ ────────────────────────────
     function observeConvList() {
         const list = document.getElementById('convList');
         if (!list) return;
-        const observer = new MutationObserver(() => attachDragToConvItems());
+        
+        // À chaque fois qu'ia.js crée une nouvelle ligne, on ajoute le drag ET le bouton
+        const observer = new MutationObserver(() => {
+            attachDragToConvItems();
+            addMobileMoveButtons(); 
+        });
         observer.observe(list, { childList: true, subtree: true });
+        
         attachDragToConvItems(); // premier passage
+        addMobileMoveButtons();  // premier passage
     }
 
     // ── INJECTION HTML SIDEBAR ─────────────────────────────────
