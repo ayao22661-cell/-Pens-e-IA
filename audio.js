@@ -10,7 +10,7 @@ const AUDIO_CONFIG = {
     voiceRate: 1.05,
     voicePitch: 1.0,
     voiceVolume: 1.0,
-    version: '3.0.1'
+    version: '3.0.2' // <-- Version anti-doublons Android
 };
 
 // ============================================================
@@ -30,16 +30,16 @@ function getAudioContext() {
 
 const AudioState = {
     isOpen: false,
-    isListening: false,     // Etat réel du micro
-    isIntentional: false,   // Vrai tant que l'utilisateur veut parler (bloque l'envoi)
+    isListening: false,     
+    isIntentional: false,   
     isSpeaking: false,
     recognition: null,
     synth: window.speechSynthesis,
     currentUtterance: null,
     voices: [],
     selectedVoice: null,
-    finalTranscript: '',    // Historique des sessions
-    sessionTranscript: ''   // Session courante (évite les doublons)
+    finalTranscript: '',    
+    sessionTranscript: ''   
 };
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -199,43 +199,47 @@ function buildOverlay() {
 }
 
 // ============================================================
-//  RECONNAISSANCE VOCALE (FIX MOBILE & ANTI-HALLUCINATION)
+//  RECONNAISSANCE VOCALE (FIX ANDROID : NOUVELLE INSTANCE)
 // ============================================================
 function startListening() {
     if (AudioState.isListening) return;
     stopSpeaking();
 
+    AudioState.isListening = true;
+    AudioState.isIntentional = true; 
+    AudioState.finalTranscript = '';
+
+    setOrbState('listening');
+    setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
+    clearInput();
+
+    // On délègue à une fonction qui crée le micro proprement
+    startNativeRecognition();
+}
+
+function startNativeRecognition() {
     const recognition = new SpeechRecognition();
     recognition.lang = AUDIO_CONFIG.lang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.continuous = true;
 
+    AudioState.sessionTranscript = ''; // Toujours vide au démarrage de l'instance
     AudioState.recognition = recognition;
-    AudioState.isListening = true;
-    AudioState.isIntentional = true; // L'utilisateur VEUT que ça écoute
-    AudioState.finalTranscript = '';
-    AudioState.sessionTranscript = '';
-
-    setOrbState('listening');
-    setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
-    clearInput();
 
     recognition.onresult = (event) => {
         let interim = '';
         let final = '';
 
-        // FIX EXTRÊME : On boucle toujours depuis 0. On laisse l'API 
-        // corriger et espacer ses propres mots. Zéro duplication garantie.
         for (let i = 0; i < event.results.length; i++) {
             const t = event.results[i][0].transcript;
-            if (event.results[i].isFinal) final += t;
+            if (event.results[i].isFinal) final += t + ' '; // Ajoute un espace
             else interim += t;
         }
         
         AudioState.sessionTranscript = final;
         
-        const display = AudioState.finalTranscript + AudioState.sessionTranscript + interim;
+        const display = (AudioState.finalTranscript + AudioState.sessionTranscript + interim).trim();
         setInputText(display, !!interim);
     };
 
@@ -244,22 +248,22 @@ function startListening() {
             // ARRÊT MANUEL : L'utilisateur a cliqué pour envoyer.
             finalizeAndSend();
         } else {
-            // COUPURE SYSTÈME (Silence sur Mobile) : On sauvegarde la phrase et on relance le micro silencieusement.
+            // COUPURE SYSTÈME ANDROID : On sauvegarde l'historique...
             if (AudioState.sessionTranscript) {
                 AudioState.finalTranscript += AudioState.sessionTranscript;
                 AudioState.sessionTranscript = '';
             }
+            // ... ET ON CREE UN NOUVEAU MICRO POUR VIDER LE CACHE
             try {
-                recognition.start();
+                startNativeRecognition();
             } catch (e) {
-                // Failsafe : si le redémarrage échoue, on envoie le texte quand même
                 finalizeAndSend();
             }
         }
     };
 
     recognition.onerror = (event) => {
-        if (event.error === 'no-speech') return; // Ignorer les faux positifs
+        if (event.error === 'no-speech') return; 
         
         AudioState.isListening = false;
         AudioState.isIntentional = false;
@@ -274,7 +278,7 @@ function startListening() {
     recognition.start();
 }
 
-// Fonction centrale pour valider et envoyer
+// Fonction pour envoyer à l'IA
 function finalizeAndSend() {
     AudioState.isListening = false;
     AudioState.isIntentional = false;
@@ -296,9 +300,9 @@ function finalizeAndSend() {
 }
 
 function stopListening() {
-    AudioState.isIntentional = false; // Désactive la relance automatique
+    AudioState.isIntentional = false; // Désactive la relance auto
     try {
-        AudioState.recognition?.stop(); // Provoque l'envoi via onend
+        AudioState.recognition?.stop(); // Déclenche onend
     } catch(e) {
         finalizeAndSend();
     }
