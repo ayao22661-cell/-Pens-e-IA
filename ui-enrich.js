@@ -415,8 +415,224 @@
                 opacity: 1;
                 transform: translateX(-50%) translateY(0);
             }
+
+            /* Bloc think collapsible */
+            .think-block {
+                margin: 4px 0;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                overflow: hidden;
+                background: var(--bg2);
+            }
+            .think-toggle {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                width: 100%;
+                background: none;
+                border: none;
+                padding: 8px 12px;
+                cursor: pointer;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 9px;
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
+                color: var(--text3);
+                text-align: left;
+                transition: color 0.2s;
+            }
+            .think-toggle:hover { color: var(--text2); }
+            .think-toggle .think-chevron {
+                margin-left: auto;
+                transition: transform 0.2s;
+                stroke: var(--text3);
+            }
+            .think-open .think-chevron { transform: rotate(180deg); }
+            .think-content {
+                display: none;
+                padding: 10px 14px 12px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 11px;
+                color: var(--text2);
+                line-height: 1.7;
+                border-top: 1px solid var(--border);
+                white-space: pre-wrap;
+            }
+            .think-open .think-content { display: block; }
+
+            /* Welcome sub */
+            #welcomeSub { opacity: 0.6; }
         `;
         document.head.appendChild(style);
+    }
+
+    // ── ÉCRAN D'ACCUEIL DYNAMIQUE ──────────────────────────────
+
+    const WELCOME_SUGGESTIONS = [
+        // Code
+        "Crée une API REST en Node.js", "Explique les closures en JS", "Optimise ce code Python",
+        "Génère des tests unitaires", "Débogue mon composant React",
+        // Stratégie
+        "Analyse les forces et faiblesses de mon projet", "Plan d'action sur 30 jours",
+        "Quels sont les risques à anticiper ?", "Aide-moi à pitcher mon idée",
+        // Créatif
+        "Écris une intro percutante", "Développe ce personnage", "Réécris ce texte avec plus d'impact",
+        // Recherche
+        "Quelles sont les dernières tendances en IA ?", "Explique-moi le fonctionnement de X",
+        "Compare ces deux approches", "Synthèse des points clés sur ce sujet",
+        // Général
+        "Aide-moi à structurer mes idées", "Résume ce concept en 5 points",
+        "Qu'est-ce que tu sais faire ?", "Génère un PDF de ce rapport"
+    ];
+
+    function getGreeting(user) {
+        const h = new Date().getHours();
+        const pseudo = (user?.email || '').split('@')[0] || '';
+        const name = pseudo.charAt(0).toUpperCase() + pseudo.slice(1);
+        let moment;
+        if (h >= 5  && h < 12) moment = 'matin';
+        else if (h >= 12 && h < 18) moment = 'après-midi';
+        else if (h >= 18 && h < 22) moment = 'soir';
+        else moment = 'nuit';
+        const greetings = [
+            `Bonjour, <em>${name}</em>.`,
+            `Bonsoir, <em>${name}</em>.`,
+            `Rebonjour, <em>${name}</em>.`,
+            `Que travaille-t-on ce ${moment}, <em>${name}</em> ?`,
+            `Prêt à réfléchir, <em>${name}</em>.`,
+        ];
+        return greetings[Math.floor(Math.random() * greetings.length)];
+    }
+
+    function getRandomSuggestions(n = 4) {
+        const shuffled = [...WELCOME_SUGGESTIONS].sort(() => Math.random() - 0.5);
+        return shuffled.slice(0, n);
+    }
+
+    function initWelcomeScreen(user) {
+        const greetingEl = document.getElementById('welcomeGreeting');
+        const subEl      = document.getElementById('welcomeSub');
+        const sugDiv     = document.getElementById('suggestions');
+
+        if (greetingEl) greetingEl.innerHTML = getGreeting(user);
+
+        if (subEl) {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+            subEl.textContent = dateStr;
+        }
+
+        if (sugDiv) {
+            sugDiv.innerHTML = '';
+            getRandomSuggestions(4).forEach(text => {
+                const span = document.createElement('span');
+                span.className = 'suggestion';
+                span.textContent = text;
+                span.addEventListener('click', () => {
+                    const input = document.getElementById('userInput');
+                    if (input) { input.value = text; input.focus(); input.dispatchEvent(new Event('input')); }
+                });
+                sugDiv.appendChild(span);
+            });
+        }
+    }
+
+    // ── BLOC <think> COLLAPSIBLE ───────────────────────────────
+
+    function wrapThinkBlocks(root) {
+        // Cherche les spans "Analyse brute extraite" injectés par formatResponse
+        root.querySelectorAll('span').forEach(span => {
+            if (span.dataset.thinkWrapped) return;
+            if (!span.textContent.includes('[Analyse brute extraite]')) return;
+            span.dataset.thinkWrapped = '1';
+
+            const parent = span.parentElement;
+            const content = parent.innerHTML
+                .replace(/<span[^>]*>\[Analyse brute extraite\]<\/span><br><br>/, '')
+                .trim();
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'think-block';
+            wrapper.innerHTML = `
+                <button class="think-toggle" aria-expanded="false">
+                    <svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2a6 6 0 0 1 6 6c0 2.5-1.5 4.7-3.7 5.6L12 16H8l-.3-2.4C5.5 12.7 4 10.5 4 8a6 6 0 0 1 6-6z"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
+                    Analyse interne
+                    <svg class="think-chevron" viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,8 10,13 15,8"/></svg>
+                </button>
+                <div class="think-content">${content}</div>
+            `;
+
+            wrapper.querySelector('.think-toggle').addEventListener('click', function() {
+                const expanded = this.getAttribute('aria-expanded') === 'true';
+                this.setAttribute('aria-expanded', String(!expanded));
+                wrapper.classList.toggle('think-open', !expanded);
+            });
+
+            parent.innerHTML = '';
+            parent.appendChild(wrapper);
+        });
+    }
+
+    function observeThinkBlocks() {
+        const messages = document.getElementById('messages');
+        if (!messages) return;
+        const obs = new MutationObserver(() => {
+            messages.querySelectorAll('.bubble').forEach(b => wrapThinkBlocks(b));
+        });
+        obs.observe(messages, { childList: true, subtree: true });
+    }
+
+    // ── RECHERCHE SIDEBAR ──────────────────────────────────────
+
+    function injectSearchBar() {
+        const newConvBtn = document.getElementById('newConvSideBtn');
+        if (!newConvBtn || document.getElementById('sidebarSearch')) return;
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'padding: 0 8px 6px; position: relative;';
+
+        const input = document.createElement('input');
+        input.id = 'sidebarSearch';
+        input.type = 'text';
+        input.placeholder = 'Rechercher…';
+        input.style.cssText = `
+            width: 100%;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text2);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            padding: 6px 10px 6px 28px;
+            outline: none;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+        `;
+        input.addEventListener('focus', () => input.style.borderColor = 'var(--accent)');
+        input.addEventListener('blur',  () => input.style.borderColor = 'var(--border)');
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim().toLowerCase();
+            const allTabs = window._pensee_tabs || [];
+            if (!q) {
+                if (window._pensee_restoreAllTabs) window._pensee_restoreAllTabs();
+                return;
+            }
+            const filtered = allTabs.filter(t => t.title.toLowerCase().includes(q));
+            if (window._pensee_filterTabs) window._pensee_filterTabs(filtered);
+        });
+
+        // Icône loupe
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('viewBox', '0 0 20 20');
+        icon.setAttribute('width', '11');
+        icon.setAttribute('height', '11');
+        icon.style.cssText = 'position:absolute;left:18px;top:50%;transform:translateY(-50%);stroke:var(--text3);fill:none;stroke-width:1.6;stroke-linecap:round;pointer-events:none;';
+        icon.innerHTML = '<circle cx="9" cy="9" r="5"/><line x1="13" y1="13" x2="17" y2="17"/>';
+
+        wrapper.appendChild(icon);
+        wrapper.appendChild(input);
+        newConvBtn.parentNode.insertBefore(wrapper, newConvBtn.nextSibling);
     }
 
     // ── INIT ──────────────────────────────────────────────────
@@ -425,7 +641,6 @@
         injectStyles();
 
         try {
-            // Attend que ia.js ait tout initialisé
             const [user, sb] = await Promise.all([
                 waitFor(() => window.currentUser),
                 waitFor(() => window.supabase)
@@ -436,13 +651,17 @@
 
             renderUser(user);
             injectSidebarSections();
+            injectSearchBar();
 
             await renderFolders();
 
-            // Expose tabs pour le drag & drop
-            // ia.js utilise `tabs` en variable locale — on observe window._pensee_tabs
-            // À ajouter dans ia.js : window._pensee_tabs = tabs; dans renderTabs()
             observeConvList();
+
+            // ── Écran d'accueil dynamique
+            initWelcomeScreen(user);
+
+            // ── Bloc think collapsible
+            observeThinkBlocks();
 
         } catch (e) {
             console.warn('[ui-enrich] Init échouée :', e);
