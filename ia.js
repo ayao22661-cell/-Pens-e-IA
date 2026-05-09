@@ -583,7 +583,6 @@ loginScreen.style.display = "none";
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         currentUser = session.user;
-        window.currentUser = currentUser; // ← expose pour ui-enrich.js
         loginScreen.style.display = "none";
     }
 }
@@ -1011,7 +1010,9 @@ async function initTabs() {
 
 function showWelcome() {
     messagesEl.innerHTML = "";
-    addMessage("bot", "Bonjour. Je suis <strong>Pens\u00e9e</strong> \u2014 ton IA personnelle.<br><br>Programmation, culture, science, storytelling, strat\u00e9gie... pose-moi n'importe quelle question. Tu peux aussi m'envoyer des fichiers pour une analyse approfondie.", true);
+    // L'écran de bienvenue HTML (#welcomeScreen) et les suggestions
+    // sont gérés par ui-enrich.js (initWelcomeScreen).
+    // On s'assure juste que le conteneur messages est vide.
     const sug = document.getElementById("suggestions");
     if (sug) sug.style.display = "flex";
 }
