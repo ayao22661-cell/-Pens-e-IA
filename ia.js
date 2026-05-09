@@ -906,6 +906,55 @@ function renderTabs() {
     if (titleEl && activeTab) titleEl.textContent = activeTab.title;
 }
 
+// ── FILTRE DOSSIERS (appelé par ui-enrich.js) ──────────────────
+// Affiche uniquement les conversations d'un dossier dans convList
+window._pensee_filterTabs = function(filteredConvs) {
+    const list = document.getElementById('convList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!filteredConvs.length) {
+        const empty = document.createElement('div');
+        empty.className = 'conv-section-label';
+        empty.style.fontStyle = 'italic';
+        empty.textContent = 'Aucune conversation dans ce dossier';
+        list.appendChild(empty);
+        return;
+    }
+
+    filteredConvs.forEach(tab => {
+        const el = document.createElement('div');
+        el.className = 'conv-item' + (tab.id === activeTabId ? ' active' : '');
+        el.dataset.id = tab.id;
+        el.dataset.dragReady = ''; // sera rebranché par observeConvList
+
+        const title = document.createElement('span');
+        title.className = 'conv-item-title';
+        title.textContent = tab.title;
+        title.addEventListener('click', () => {
+            if (tab.id !== activeTabId) switchTab(tab.id);
+        });
+
+        const del = document.createElement('button');
+        del.className = 'conv-item-del';
+        del.title = 'Supprimer';
+        del.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+        del.addEventListener('click', e => {
+            e.stopPropagation();
+            if (tabs.length === 1 || confirm('Supprimer cette conversation ?')) deleteTab(tab.id);
+        });
+
+        el.appendChild(title);
+        el.appendChild(del);
+        list.appendChild(el);
+    });
+};
+
+// Restaure l'affichage complet (désélection dossier)
+window._pensee_restoreAllTabs = function() {
+    renderTabs();
+};
+
 // Mobile sidebar toggle
 function closeSidebarMobile() {
     const sb = document.getElementById('sidebar');
