@@ -154,42 +154,47 @@ export default async function handler(req) {
 
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
-    // ============================================================
-    //  3. MODEL ROUTING INTELLIGENT (Avec Fallbacks + Tous les Gemma)
+   // ============================================================
+    //  3. MODEL ROUTING INTELLIGENT (Basé sur tes quotas réels)
     // ============================================================
     let modelsToTry = [];
     
     if (agentId === 'code' || agentId === 'audit') {
         modelsToTry = [
-            "gemini-2.5-flash",        // Priorité 1
-            "gemini-2.0-flash",        // Secours 1 (API publique vérifiée)
-            "gemini-1.5-flash"         // Secours 2
+            "gemini-2.5-flash",        // Ton quota le plus élevé
+            "gemini-2.0-flash",        // Stable
+            "gemini-1.5-pro"           // Intelligence supérieure
         ];
-    } else if (agentId === 'creatif' || (prompt.length < 150 && (!files || files.length === 0))) {
+    } else if (agentId === 'creatif') {
         modelsToTry = [
-            "gemini-2.5-flash-lite",
-            "gemini-2.0-flash-lite-preview-02-05", 
+            "gemini-2.5-flash-lite",   // Optimisé pour la vitesse
+            "gemini-2.0-flash-lite-preview-02-05",
             "gemini-1.5-flash"
         ];
     } else {
         modelsToTry = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-2.5-flash",        // Priorité 1 (RPM/TPM max)
+            "gemini-2.5-flash-lite",   // Priorité 2
+            "gemini-1.5-flash"         // Priorité 3
         ];
     }
 
-    // Secours ultime : on injecte TOUS les modèles Gemma disponibles en cascade
-    // Du plus puissant au plus léger. (Le suffixe -it est obligatoire pour le chat)
+    // Secours ultime : Injection des modèles Gemma présents dans ton tableau
+    // Note : On utilise l'ID technique attendu par l'API
     modelsToTry.push(
-        "gemma-4-31b-it",  // Modèle le plus intelligent (1.5K RPD)
-        "gemma-4-26b-it",  
-        "gemma-3-27b-it",  // Excellent modèle (14.4K RPD)
+        "gemma-4-31b-it", 
+        "gemma-4-26b-it",
+        "gemma-3-27b-it", 
         "gemma-3-12b-it",
         "gemma-3-4b-it",
         "gemma-3-2b-it",
-        "gemma-3-1b-it"    // Modèle ultra-rapide et léger en tout dernier recours
+        "gemma-3-1b-it"
     );
+
+    // On s'assure que le modèle choisi par l'utilisateur est testé en premier
+    if (model && !modelsToTry.includes(model)) {
+        modelsToTry.unshift(model);
+    }
 
     // ============================================================
     //  4. EXÉCUTION EN CASCADE
