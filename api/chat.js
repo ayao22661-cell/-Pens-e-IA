@@ -62,6 +62,22 @@ const AGENTS = {
     }
 };
 
+// ============================================================
+//  UTILITAIRE : Stripper les blocs de thinking Gemma
+//  Gemma 4 encapsule son raisonnement entre <|channel>thought\n...<channel|>
+//  Gemma 3 peut émettre des <think>...</think> ou [INTENT]...[OUTPUT] en texte brut
+//  Ces deux formats doivent être supprimés avant d'envoyer au client.
+// ============================================================
+function stripGemmaThinking(text) {
+    // Format Gemma 4 : <|channel>thought\n....<channel|>
+    text = text.replace(/<\|channel>thought[\s\S]*?<channel\|>/g, "");
+    // Format <think>...</think> (certains modèles Gemma 3)
+    text = text.replace(/<think>[\s\S]*?<\/think>/g, "");
+    // Nettoyage des éventuels sauts de ligne orphelins en début de réponse
+    text = text.replace(/^\n+/, "");
+    return text;
+}
+
 export default async function handler(req) {
     if (req.method !== "POST") {
         return new Response(JSON.stringify({ error: "Méthode non autorisée" }), { status: 405 });
@@ -138,7 +154,7 @@ export default async function handler(req) {
 
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
-// ============================================================
+    // ============================================================
     //  3. MODEL ROUTING INTELLIGENT (Avec Fallbacks + Tous les Gemma)
     // ============================================================
     let modelsToTry = [];
@@ -180,6 +196,7 @@ export default async function handler(req) {
     // ============================================================
     for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
+        const isGemma4 = model.startsWith("gemma-4");
         const parts = [{ text: prompt }];
 
         if (files && files.length > 0) {
@@ -197,9 +214,10 @@ export default async function handler(req) {
             });
         }
 
-        // Gemma ne supporte PAS systemInstruction nativement
+        // Gemma 4 supporte nativement le system role.
+        // Gemma 3 et inférieurs : on injecte le system dans le user message.
         let finalParts = parts;
-        if (isGemma && systemInstruction) {
+        if (isGemma && !isGemma4 && systemInstruction) {
             finalParts = [
                 { text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text },
                 ...parts.slice(1)
@@ -218,7 +236,9 @@ export default async function handler(req) {
         }
 
         const body = {
-            ...((!isGemma && finalSystemInstruction) && {
+            // Gemma 4 supporte systemInstruction nativement (comme Gemini).
+            // Gemma 3 et inférieurs : le system est déjà injecté dans finalParts ci-dessus.
+            ...((finalSystemInstruction && (!isGemma || isGemma4)) && {
                 systemInstruction: { parts: [{ text: finalSystemInstruction }] }
             }),
             contents: [{ role: "user", parts: finalParts }],
@@ -231,7 +251,7 @@ export default async function handler(req) {
         };
 
         let activeTools = [];
-        if (canUseSearch) activeTools.push({ googleSearch: {} }); // Changement ici (S majuscule et pas d'underscore)
+        if (canUseSearch) activeTools.push({ googleSearch: {} });
         if (canUseCodeExecution) activeTools.push({ codeExecution: {} });
         if (activeTools.length > 0) body.tools = activeTools;
 
@@ -249,7 +269,9 @@ export default async function handler(req) {
                     async start(controller) {
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
-                        let buffer = "";
+                        let sseBuffer = "";   // Buffer SSE ligne par ligne
+                        let fullText = "";    // Accumulation totale pour détecter les marqueurs fichiers
+                        let sentUpTo = 0;     // Curseur : nb de chars déjà envoyés au client
 
                         if (isGemma && agentConfig.useSearch) {
                             controller.enqueue(new TextEncoder().encode("⚠️ *Action dégradée : Modèle local activé. La recherche web demandée est indisponible.*\n\n"));
@@ -260,30 +282,63 @@ export default async function handler(req) {
                                 const { done, value } = await reader.read();
                                 if (done) break;
 
-                                buffer += decoder.decode(value, { stream: true });
-                                const lines = buffer.split('\n');
-                                buffer = lines.pop() || "";
+                                sseBuffer += decoder.decode(value, { stream: true });
+                                const lines = sseBuffer.split('\n');
+                                sseBuffer = lines.pop() || "";
 
                                 for (const line of lines) {
-                                    if (line.startsWith('data: ')) {
-                                        const dataStr = line.slice(6).trim();
-                                        if (dataStr === '[DONE]') continue;
-                                        try {
-                                            const dataObj = JSON.parse(dataStr);
-                                            const parts = dataObj.candidates?.[0]?.content?.parts || [];
-                                            const textChunk = parts
-                                                .filter(p => typeof p.text === "string")
-                                                .map(p => p.text)
-                                                .join("");
-                                            if (textChunk) {
-                                                controller.enqueue(new TextEncoder().encode(textChunk));
-                                            }
-                                        } catch (e) {
-                                            // Ignore parsing errors for partial JSON
+                                    if (!line.startsWith('data: ')) continue;
+                                    const dataStr = line.slice(6).trim();
+                                    if (dataStr === '[DONE]') continue;
+                                    try {
+                                        const dataObj = JSON.parse(dataStr);
+                                        const responseParts = dataObj.candidates?.[0]?.content?.parts || [];
+                                        let textChunk = responseParts
+                                            .filter(p => typeof p.text === "string" && !p.thought)
+                                            .map(p => p.text)
+                                            .join("");
+
+                                        if (!textChunk) continue;
+
+                                        // Pour Gemma : stripper les blocs de thinking en texte brut
+                                        // (<|channel>thought...<channel|> ou <think>...</think>)
+                                        if (isGemma) {
+                                            textChunk = stripGemmaThinking(textChunk);
                                         }
+
+                                        if (!textChunk) continue;
+
+                                        fullText += textChunk;
+
+                                        // Stratégie de streaming sécurisée pour les marqueurs fichiers :
+                                        // Un marqueur [GENERATE_FILE:...] ou [GENERATE_PDF:...] peut arriver
+                                        // fragmenté sur plusieurs chunks SSE. On ne streame en temps réel
+                                        // que le texte "safe" (avant tout marqueur potentiellement ouvert),
+                                        // puis on envoie le marqueur complet uniquement une fois le stream fini.
+                                        const markerOpenIdx = fullText.indexOf('\n[GENERATE_');
+                                        const safeEnd = markerOpenIdx > -1 ? markerOpenIdx : fullText.length;
+
+                                        if (safeEnd > sentUpTo) {
+                                            const toSend = fullText.slice(sentUpTo, safeEnd);
+                                            if (toSend) {
+                                                controller.enqueue(new TextEncoder().encode(toSend));
+                                            }
+                                            sentUpTo = safeEnd;
+                                        }
+
+                                    } catch (e) {
+                                        // Ignore les erreurs de parsing JSON partiel (chunks SSE incomplets)
                                     }
                                 }
                             }
+
+                            // Fin du stream : envoyer le(s) marqueur(s) fichier complets s'ils existent
+                            // On cherche TOUS les marqueurs présents dans la réponse finale
+                            const remainingText = fullText.slice(sentUpTo);
+                            if (remainingText) {
+                                controller.enqueue(new TextEncoder().encode(remainingText));
+                            }
+
                         } catch (err) {
                             controller.enqueue(new TextEncoder().encode("\n[Interruption réseau locale]"));
                         } finally {
@@ -302,17 +357,17 @@ export default async function handler(req) {
             }
 
             // Si c'est une erreur 400, on arrête tout et on affiche la vraie erreur
-if (response.status === 400) {
-    const errorData = await response.json().catch(() => ({}));
-    return new Response(JSON.stringify({ 
-        error: `Requête invalide (400) : ${errorData.error?.message || 'Vérifiez la syntaxe des outils'}` 
-    }), { status: 400 });
-}
+            if (response.status === 400) {
+                const errorData = await response.json().catch(() => ({}));
+                return new Response(JSON.stringify({ 
+                    error: `Requête invalide (400) : ${errorData.error?.message || 'Vérifiez la syntaxe des outils'}` 
+                }), { status: 400 });
+            }
 
-// On ne fait le "failover" (test du modèle suivant) que pour les erreurs de serveur ou de quota
-if (response.status === 404 || response.status === 429 || response.status >= 500) {
-    continue; 
-}
+            // On ne fait le "failover" (test du modèle suivant) que pour les erreurs de serveur ou de quota
+            if (response.status === 404 || response.status === 429 || response.status >= 500) {
+                continue; 
+            }
 
             const errorData = await response.json().catch(() => ({}));
             return new Response(JSON.stringify({ error: errorData.error?.message || `Erreur API (${response.status})` }), { status: response.status });
