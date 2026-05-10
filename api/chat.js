@@ -139,32 +139,34 @@ export default async function handler(req) {
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
 // ============================================================
-    //  3. MODEL ROUTING INTELLIGENT (Corrigé selon tes quotas)
+    //  3. MODEL ROUTING INTELLIGENT (Avec Fallback Anti-503)
     // ============================================================
     let modelsToTry = [];
     
     if (agentId === 'code' || agentId === 'audit') {
-        // Plus de version Pro car quota à 0. On utilise le Flash.
         modelsToTry = [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite"
+            "gemini-2.5-flash",        // Priorité 1
+            "gemini-3-flash",          // Fallback 1 (0/20)
+            "gemini-3.1-flash-lite"    // Fallback 2 (0/500)
         ];
     } else if (agentId === 'creatif' || (prompt.length < 150 && (!files || files.length === 0))) {
         // Tâches simples ou purement créatives
         modelsToTry = [
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-flash"
+            "gemini-2.5-flash-lite",   // Priorité 1
+            "gemini-3.1-flash-lite",   // Fallback 1 (0/500)
+            "gemma-3-27b"              // Fallback 2 (Beaucoup de requêtes dispos)
         ];
     } else {
         // Mix standard pour recherche, stratégie, visionnaire
         modelsToTry = [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite"
+            "gemini-2.5-flash",        // Priorité 1
+            "gemini-3-flash",          // Fallback 1
+            "gemini-3.1-flash-lite"    // Fallback 2
         ];
     }
 
-    // Fallback de sécurité global avec les modèles où tu as du quota (30/jour)
-    modelsToTry.push("gemma-3-27b-it", "gemma-3-12b-it");
+    // Fallback global de sécurité ultime
+    modelsToTry.push("gemma-3-27b");
 
     // ============================================================
     //  4. EXÉCUTION EN CASCADE
