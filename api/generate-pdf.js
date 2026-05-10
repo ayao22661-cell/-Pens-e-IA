@@ -30,6 +30,10 @@ function toWinAnsi(str) {
 function htmlToStructuredLines(html) {
     const lines = [];
 
+    // Supprime les blocs <style> et <script> — jamais de contenu utile
+    html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+    html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+
     html = html.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_, t) => {
         lines.push({ type: "h1", text: stripTags(t) }); return "";
     });
@@ -48,6 +52,8 @@ function htmlToStructuredLines(html) {
     html = html.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, t) => {
         lines.push({ type: "li", text: "• " + stripTags(t) }); return "";
     });
+    // Supprime les wrappers <ul>/<ol> vides après extraction des <li>
+    html = html.replace(/<\/?(?:ul|ol)[^>]*>/gi, "");
     html = html.replace(/<hr[^>]*\/?>/gi, () => {
         lines.push({ type: "hr" }); return "";
     });
