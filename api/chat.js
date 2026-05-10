@@ -155,33 +155,35 @@ export default async function handler(req) {
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
    // ============================================================
-    //  3. MODEL ROUTING INTELLIGENT (Basé sur tes quotas réels)
+    //  3. MODEL ROUTING INTELLIGENT (Optimisé selon Quotas)
     // ============================================================
+    const { model } = bodyReq; // Extraction sécurisée pour éviter l'erreur ReferenceError
     let modelsToTry = [];
     
     if (agentId === 'code' || agentId === 'audit') {
         modelsToTry = [
-            "gemini-2.5-flash",        // Ton quota le plus élevé
-            "gemini-2.0-flash",        // Stable
-            "gemini-1.5-pro"           // Intelligence supérieure
+            "gemini-2.5-flash",        // Priorité technique
+            "gemini-2.0-flash",
+            "gemma-4-31b-it",          // Secours haute performance (Gemma 4)
+            "gemini-1.5-pro"
         ];
     } else if (agentId === 'creatif') {
         modelsToTry = [
-            "gemini-2.5-flash-lite",   // Optimisé pour la vitesse
-            "gemini-2.0-flash-lite-preview-02-05",
+            "gemini-2.5-flash-lite",   
+            "gemma-3-27b-it",          // Priorité augmentée (Quotas larges : 14.4K RPD)
             "gemini-1.5-flash"
         ];
     } else {
         modelsToTry = [
-            "gemini-2.5-flash",        // Priorité 1 (RPM/TPM max)
-            "gemini-2.5-flash-lite",   // Priorité 2
-            "gemini-1.5-flash"         // Priorité 3
+            "gemini-2.5-flash",        
+            "gemini-2.5-flash-lite",   
+            "gemma-3-27b-it",          // Backup immédiat car stable sur tes quotas
+            "gemini-1.5-flash"         
         ];
     }
 
-    // Secours ultime : Injection des modèles Gemma présents dans ton tableau
-    // Note : On utilise l'ID technique attendu par l'API
-    modelsToTry.push(
+    // Secours ultime : Tous les modèles Gemma disponibles
+    const gemmaBackups = [
         "gemma-4-31b-it", 
         "gemma-4-26b-it",
         "gemma-3-27b-it", 
@@ -189,9 +191,13 @@ export default async function handler(req) {
         "gemma-3-4b-it",
         "gemma-3-2b-it",
         "gemma-3-1b-it"
-    );
+    ];
 
-    // On s'assure que le modèle choisi par l'utilisateur est testé en premier
+    gemmaBackups.forEach(m => {
+        if (!modelsToTry.includes(m)) modelsToTry.push(m);
+    });
+
+    // Forçage du modèle utilisateur en tête de liste si spécifié
     if (model && !modelsToTry.includes(model)) {
         modelsToTry.unshift(model);
     }
