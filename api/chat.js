@@ -196,7 +196,6 @@ export default async function handler(req) {
     // ============================================================
     for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
-        const isGemma4 = model.startsWith("gemma-4");
         const parts = [{ text: prompt }];
 
         if (files && files.length > 0) {
@@ -214,10 +213,9 @@ export default async function handler(req) {
             });
         }
 
-        // Gemma 4 supporte nativement le system role.
-        // Gemma 3 et inférieurs : on injecte le system dans le user message.
+        // Gemma ne supporte PAS systemInstruction nativement — injection dans le user message
         let finalParts = parts;
-        if (isGemma && !isGemma4 && systemInstruction) {
+        if (isGemma && systemInstruction) {
             finalParts = [
                 { text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text },
                 ...parts.slice(1)
@@ -236,9 +234,7 @@ export default async function handler(req) {
         }
 
         const body = {
-            // Gemma 4 supporte systemInstruction nativement (comme Gemini).
-            // Gemma 3 et inférieurs : le system est déjà injecté dans finalParts ci-dessus.
-            ...((finalSystemInstruction && (!isGemma || isGemma4)) && {
+            ...((!isGemma && finalSystemInstruction) && {
                 systemInstruction: { parts: [{ text: finalSystemInstruction }] }
             }),
             contents: [{ role: "user", parts: finalParts }],
@@ -246,8 +242,7 @@ export default async function handler(req) {
                 maxOutputTokens: agentConfig.maxOutputTokens || 8192,
                 temperature: agentConfig.temperature,
                 topP: agentConfig.topP,
-                // topK non supporté par tous les modèles Gemma — on l'omet pour éviter les 400
-                ...((!isGemma) && { topK: agentConfig.topK })
+                topK: agentConfig.topK
             }
         };
 
