@@ -155,45 +155,50 @@ export default async function handler(req) {
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
    // ============================================================
-    //  3. MODEL ROUTING INTELLIGENT (Optimisé selon Quotas)
+    //  3. MODEL ROUTING INTELLIGENT (Priorité Disponibilité/Quotas)
     // ============================================================
-    const { model } = bodyReq; // Extraction sécurisée pour éviter l'erreur ReferenceError
+    const { model } = bodyReq; 
     let modelsToTry = [];
     
+    // Stratégie d'urgence : On utilise les modèles avec le plus de crédits en premier
+    const highAvailabilityModels = [
+        "gemma-3-27b-it", // Ton quota le plus large (14.4K RPD)
+        "gemma-4-31b-it", // Très performant et disponible
+        "gemma-4-26b-it"
+    ];
+
     if (agentId === 'code' || agentId === 'audit') {
         modelsToTry = [
-            "gemini-2.5-flash",        // Priorité technique
+            "gemma-4-31b-it",          // Priorité au plus gros Gemma pour le code
+            "gemini-2.5-flash",        // Tentative Gemini si disponible
             "gemini-2.0-flash",
-            "gemma-4-31b-it",          // Secours haute performance (Gemma 4)
             "gemini-1.5-pro"
         ];
     } else if (agentId === 'creatif') {
         modelsToTry = [
+            "gemma-3-27b-it",          // Priorité absolue (Quotas 14.4K)
             "gemini-2.5-flash-lite",   
-            "gemma-3-27b-it",          // Priorité augmentée (Quotas larges : 14.4K RPD)
             "gemini-1.5-flash"
         ];
     } else {
+        // Pour les autres agents (stratégie, visionnaire, etc.)
         modelsToTry = [
-            "gemini-2.5-flash",        
-            "gemini-2.5-flash-lite",   
-            "gemma-3-27b-it",          // Backup immédiat car stable sur tes quotas
-            "gemini-1.5-flash"         
+            "gemma-3-27b-it",
+            "gemma-4-31b-it",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite"
         ];
     }
 
-    // Secours ultime : Tous les modèles Gemma disponibles
-    const gemmaBackups = [
-        "gemma-4-31b-it", 
-        "gemma-4-26b-it",
-        "gemma-3-27b-it", 
+    // Ajout du reste des modèles Gemma en fin de file (secours ultime)
+    const allGemma = [
         "gemma-3-12b-it",
         "gemma-3-4b-it",
         "gemma-3-2b-it",
         "gemma-3-1b-it"
     ];
 
-    gemmaBackups.forEach(m => {
+    allGemma.forEach(m => {
         if (!modelsToTry.includes(m)) modelsToTry.push(m);
     });
 
