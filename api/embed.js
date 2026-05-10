@@ -33,7 +33,8 @@ export default async function handler(req) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "models/gemini-embedding-001",
-                content: { parts: [{ text: safeText }] }
+                content: { parts: [{ text: safeText }] },
+                outputDimensionality: 768
             })
         });
 
