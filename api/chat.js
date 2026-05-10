@@ -246,7 +246,8 @@ export default async function handler(req) {
                 maxOutputTokens: agentConfig.maxOutputTokens || 8192,
                 temperature: agentConfig.temperature,
                 topP: agentConfig.topP,
-                topK: agentConfig.topK
+                // topK non supporté par tous les modèles Gemma — on l'omet pour éviter les 400
+                ...((!isGemma) && { topK: agentConfig.topK })
             }
         };
 
@@ -356,17 +357,10 @@ export default async function handler(req) {
                 });
             }
 
-            // Si c'est une erreur 400, on arrête tout et on affiche la vraie erreur
-            if (response.status === 400) {
-                const errorData = await response.json().catch(() => ({}));
-                return new Response(JSON.stringify({ 
-                    error: `Requête invalide (400) : ${errorData.error?.message || 'Vérifiez la syntaxe des outils'}` 
-                }), { status: 400 });
-            }
-
-            // On ne fait le "failover" (test du modèle suivant) que pour les erreurs de serveur ou de quota
-            if (response.status === 404 || response.status === 429 || response.status >= 500) {
-                continue; 
+            // Tous les modèles Gemma peuvent retourner 400 pour des paramètres non supportés
+            // (topK, systemInstruction mal formé, etc.) — on continue la cascade dans tous les cas
+            if (response.status === 400 || response.status === 404 || response.status === 429 || response.status >= 500) {
+                continue;
             }
 
             const errorData = await response.json().catch(() => ({}));
