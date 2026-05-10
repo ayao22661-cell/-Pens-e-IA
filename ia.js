@@ -1569,8 +1569,14 @@ async function getEmbedding(text) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text })
     });
-    if (!response.ok) throw new Error("Erreur API de vectorisation");
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(`Embed API ${response.status} : ${errData.error || "Inconnue"}`);
+    }
     const data = await response.json();
+    if (!data.embedding || !Array.isArray(data.embedding)) {
+        throw new Error("Embed API : vecteur absent ou invalide dans la reponse");
+    }
     return data.embedding; // Tableau de 768 nombres
 }
 
@@ -1604,7 +1610,7 @@ async function searchMemory(query) {
         _memoryCache.set(cacheKey, { data: result, ts: Date.now() });
         return result;
     } catch (e) {
-        console.warn("RAG indisponible ou vide :", e.message);
+        console.warn("[RAG] searchMemory échoué :", e.message);
         return [];
     }
 }
