@@ -2095,7 +2095,29 @@ if (!response.ok) {
 
         if (pdfMatch) {
             const pdfTitle   = pdfMatch[1].trim();
-            const pdfContent = pdfMatch[2].trim();
+const rawContent = pdfMatch[2].trim();
+
+// Wrapper CSS qui force la pagination correcte
+const pdfContent = `
+<style>
+  body { font-family: 'Georgia', serif; font-size: 13px; line-height: 1.8; color: #1a1a1a; max-width: 720px; margin: 0 auto; padding: 40px; }
+  h1 { font-size: 22px; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 24px; }
+  h2 { font-size: 17px; margin-top: 32px; margin-bottom: 10px; color: #111; }
+  h3 { font-size: 14px; margin-top: 20px; color: #333; }
+  p  { margin: 0 0 14px; }
+  ul, ol { margin: 0 0 14px 20px; }
+  li { margin-bottom: 6px; }
+  pre { background: #f4f4f4; border-left: 3px solid #555; padding: 12px 16px; font-size: 11px; overflow-x: auto; page-break-inside: avoid; white-space: pre-wrap; word-break: break-word; }
+  code { font-family: 'JetBrains Mono', monospace; }
+  blockquote { border-left: 3px solid #aaa; margin: 16px 0; padding: 8px 16px; color: #555; font-style: italic; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+  th { background: #f0f0f0; font-weight: 600; }
+  /* Pagination — évite les coupures au milieu des sections */
+  h2, h3 { page-break-after: avoid; }
+  p, li  { orphans: 3; widows: 3; }
+</style>
+${rawContent}`;
 
             // Nettoyage du marqueur dans la bulle
             fullReply = fullReply.replace(pdfMatch[0], "").trim();
