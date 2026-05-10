@@ -2098,7 +2098,6 @@ if (!response.ok) {
 const rawContent = pdfMatch[2].trim();
 // Le moteur PDF génère son propre rendu natif — pas besoin de CSS
 const pdfContent = rawContent;
-${rawContent}`;
 
             // Nettoyage du marqueur dans la bulle
             fullReply = fullReply.replace(pdfMatch[0], "").trim();
