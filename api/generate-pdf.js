@@ -1,5 +1,5 @@
 // ============================================================
-//  PENSÉE IA — api/generate-pdf.js (v4 — accents + wrapping corrigés)
+//  PENSÉE IA — api/generate-pdf.js (v5 — pagination ligne par ligne + tableaux)
 //  Génération PDF via construction manuelle du format PDF
 //  Compatible Vercel Hobby, Edge et Pro — aucun Chromium requis
 // ============================================================
@@ -10,23 +10,19 @@ export const config = {
 };
 
 // ── Encodage Latin-1 avec support des accents français ───────
-// Helvetica/WinAnsiEncoding couvre les 256 premiers codepoints Windows-1252.
-// On convertit les caractères Unicode courants vers leurs équivalents WinAnsi.
 function toWinAnsi(str) {
     if (!str) return "";
     return String(str)
-        // Caractères spéciaux fréquents hors latin-1 de base
-        .replace(/\u2019/g, "\x92") // apostrophe droite '
-        .replace(/\u2018/g, "\x91") // apostrophe gauche '
-        .replace(/\u201C/g, "\x93") // guillemet ouvrant "
-        .replace(/\u201D/g, "\x94") // guillemet fermant "
-        .replace(/\u2013/g, "\x96") // tiret demi-cadratin –
-        .replace(/\u2014/g, "\x97") // tiret cadratin —
-        .replace(/\u2026/g, "\x85") // ellipse …
-        .replace(/\u20AC/g, "\x80") // euro €
-        .replace(/\u00AB/g, "\xAB") // « guillemet français
-        .replace(/\u00BB/g, "\xBB") // » guillemet français
-        // Supprimer les caractères vraiment hors portée (>0xFF, non mappés)
+        .replace(/\u2019/g, "\x92")
+        .replace(/\u2018/g, "\x91")
+        .replace(/\u201C/g, "\x93")
+        .replace(/\u201D/g, "\x94")
+        .replace(/\u2013/g, "\x96")
+        .replace(/\u2014/g, "\x97")
+        .replace(/\u2026/g, "\x85")
+        .replace(/\u20AC/g, "\x80")
+        .replace(/\u00AB/g, "\xAB")
+        .replace(/\u00BB/g, "\xBB")
         .replace(/[^\x00-\xFF]/g, "?");
 }
 
@@ -55,11 +51,40 @@ function htmlToStructuredLines(html) {
     html = html.replace(/<hr[^>]*\/?>/gi, () => {
         lines.push({ type: "hr" }); return "";
     });
+
+    // Tableaux — extraction avant stripTags global
+    html = html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_, tableContent) => {
+        const table = { type: "table", headers: [], rows: [] };
+
+        const headerMatch = tableContent.match(/<thead[^>]*>([\s\S]*?)<\/thead>/i);
+        if (headerMatch) {
+            const ths = [...headerMatch[1].matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)];
+            table.headers = ths.map(m => stripTags(m[1]).trim());
+        }
+
+        const bodyContent = tableContent.replace(/<thead[^>]*>[\s\S]*?<\/thead>/gi, "");
+        const trs = [...bodyContent.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+        for (const tr of trs) {
+            const tds = [...tr[1].matchAll(/<(?:td|th)[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)];
+            if (tds.length === 0) continue;
+            const row = tds.map(m => stripTags(m[1]).trim());
+            if (table.headers.length === 0 && tr[1].includes("<th")) {
+                table.headers = row;
+            } else {
+                table.rows.push(row);
+            }
+        }
+
+        if (table.headers.length > 0 || table.rows.length > 0) lines.push(table);
+        return "";
+    });
+
     html = html.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, (_, t) => {
         const clean = stripTags(t).trim();
         if (clean) lines.push({ type: "p", text: clean });
         return "";
     });
+
     const residual = stripTags(html).trim();
     if (residual) lines.push({ type: "p", text: residual });
 
@@ -82,11 +107,9 @@ function stripTags(html) {
         .trim();
 }
 
-// ── Mesure approchée de la largeur d'un texte en points PDF ──
-// Largeurs de glyphes Helvetica standard (en unités/1000 pour 1pt)
-// Source : Adobe Helvetica AFM. Valeurs moyennes pour les caractères manquants.
-const HELVETICA_WIDTHS = {
-    ' ':278,' ':278,'!':278,'"':355,'#':556,'$':556,'%':889,'&':667,"'":222,
+// ── Mesure de largeur Helvetica (AFM standard) ────────────────
+const HW = {
+    ' ':278,'!':278,'"':355,'#':556,'$':556,'%':889,'&':667,"'":222,
     '(':333,')':333,'*':389,'+':584,',':278,'-':333,'.':278,'/':278,
     '0':556,'1':556,'2':556,'3':556,'4':556,'5':556,'6':556,'7':556,'8':556,'9':556,
     ':':278,';':278,'<':584,'=':584,'>':584,'?':556,'@':1015,
@@ -98,29 +121,25 @@ const HELVETICA_WIDTHS = {
     'j':222,'k':500,'l':222,'m':833,'n':556,'o':556,'p':556,'q':556,'r':333,
     's':500,'t':278,'u':556,'v':500,'w':722,'x':500,'y':500,'z':500,
     '{':334,'|':260,'}':334,'~':584,
-    // Accents français courants
     'à':556,'â':556,'ä':556,'æ':1000,'ç':500,'è':556,'é':556,'ê':556,'ë':556,
     'î':222,'ï':222,'ô':556,'ö':556,'ù':556,'û':556,'ü':556,'ÿ':500,
     'À':667,'Â':667,'Ä':667,'Æ':1000,'Ç':722,'È':667,'É':667,'Ê':667,'Ë':667,
     'Î':278,'Ï':278,'Ô':778,'Ö':778,'Ù':722,'Û':722,'Ü':722,
     '«':556,'»':556,'€':556,'•':350,'…':1000,'–':556,'—':1000,
+    '\u2019':222,'\u2018':222,'\u201C':333,'\u201D':333,
 };
 
 function measureText(text, fontSize) {
-    let width = 0;
-    for (const ch of text) {
-        width += (HELVETICA_WIDTHS[ch] || 556) * fontSize / 1000;
-    }
-    return width;
+    let w = 0;
+    for (const ch of text) w += (HW[ch] || 556) * fontSize / 1000;
+    return w;
 }
 
-// ── Retour à la ligne basé sur la largeur réelle en points ───
 function wrapTextPx(text, maxWidth, fontSize) {
     if (!text) return [""];
     const words = text.split(" ");
     const result = [];
     let cur = "";
-
     for (const w of words) {
         const candidate = cur ? cur + " " + w : w;
         if (measureText(candidate, fontSize) > maxWidth && cur) {
@@ -139,45 +158,51 @@ function generatePDF(title, lines) {
     const PAGE_W  = 595.28;
     const PAGE_H  = 841.89;
     const MARGIN  = 56;
-    const MAX_W   = PAGE_W - MARGIN * 2;  // 483.28 pts utiles
+    const MAX_W   = PAGE_W - MARGIN * 2;
+    const Y_MIN   = MARGIN + 40;
+    const Y_START = PAGE_H - MARGIN - 30;
 
-    const ACCENT  = "0.000 0.639 0.447";
-    const DARK    = "0.102 0.118 0.165";
-    const GRAY    = "0.290 0.318 0.408";
-    const LGRAY   = "0.565 0.596 0.690";
+    const ACCENT = "0.000 0.639 0.447";
+    const DARK   = "0.102 0.118 0.165";
+    const GRAY   = "0.290 0.318 0.408";
+    const LGRAY  = "0.565 0.596 0.690";
 
-    // ── Encodage PDF sécurisé ─────────────────────────────────
-    // 1. Convertit Unicode → WinAnsi (préserve les accents)
-    // 2. Échappe les chars spéciaux PDF
-    // 3. Ne filtre PAS les bytes > 0x7f (ils sont valides en WinAnsiEncoding)
     const pdfStr = (s) => {
         if (!s) return "()";
-        const winAnsi = toWinAnsi(String(s));
-        const safe = winAnsi
+        const w = toWinAnsi(String(s));
+        const safe = w
             .replace(/\\/g, "\\\\")
             .replace(/\(/g, "\\(")
             .replace(/\)/g, "\\)")
-            .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " "); // ctrl chars seulement
+            .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
         return `(${safe})`;
     };
 
-    // ── Construction des pages ────────────────────────────────
+    // ── Moteur de pagination ──────────────────────────────────
     const pageStreams = [];
-    let currentPage = [];
-    let y = PAGE_H - MARGIN - 60;
+    let currentPage  = [];
+    let y            = PAGE_H - MARGIN - 30;
 
     const newPage = () => {
         pageStreams.push([...currentPage]);
         currentPage = [];
-        y = PAGE_H - MARGIN - 20;
+        y = Y_START;
     };
 
+    // Garantit l'espace minimal, sinon tourne la page
     const ensureSpace = (needed) => {
-        if (y - needed < MARGIN + 40) newPage();
+        if (y - needed < Y_MIN) newPage();
     };
 
-    // En-tête première page
-    const header = [
+    // Écrit une commande PDF en vérifiant y AVANT chaque ligne
+    const writeLine = (cmd, lineH) => {
+        if (y - lineH < Y_MIN) newPage();
+        currentPage.push(cmd);
+        y -= lineH;
+    };
+
+    // ── En-tête première page ─────────────────────────────────
+    currentPage.push(
         `${DARK} rg`,
         `0 ${PAGE_H - 80} ${PAGE_W} 80 re f`,
         `${ACCENT} rg`,
@@ -186,30 +211,21 @@ function generatePDF(title, lines) {
         `BT /F2 11 Tf 1 1 1 rg ${MARGIN + 46} ${PAGE_H - 42} Td ${pdfStr("PENSEE IA")} Tj ET`,
         `BT /F3 9 Tf 0.6 0.6 0.6 rg ${MARGIN + 46} ${PAGE_H - 56} Td ${pdfStr("par Yao Baba Ange Emmanuel")} Tj ET`,
         `BT /F1 9 Tf 0.5 0.5 0.5 rg ${PAGE_W - 180} ${PAGE_H - 42} Td ${pdfStr(new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }))} Tj ET`,
-    ];
-    currentPage.push(...header);
-
-    currentPage.push(
         `${ACCENT} rg`,
         `${MARGIN} ${PAGE_H - 110} 110 16 re f`,
         `BT /F2 8 Tf 1 1 1 rg ${MARGIN + 6} ${PAGE_H - 103} Td ${pdfStr("DOCUMENT GENERE")} Tj ET`
     );
 
     const titleLines = wrapTextPx(title, MAX_W, 22);
-    currentPage.push(`${DARK} rg`);
     let ty = PAGE_H - 135;
     for (const tl of titleLines) {
         currentPage.push(`BT /F2 22 Tf ${DARK} rg ${MARGIN} ${ty} Td ${pdfStr(tl)} Tj ET`);
         ty -= 28;
     }
-
-    currentPage.push(
-        `${LGRAY} rg`,
-        `${MARGIN} ${ty - 6} ${MAX_W} 1 re f`
-    );
+    currentPage.push(`${LGRAY} rg`, `${MARGIN} ${ty - 6} ${MAX_W} 1 re f`);
     y = ty - 24;
 
-    // Corps du document
+    // ── Corps du document ─────────────────────────────────────
     for (const line of lines) {
         if (!line) continue;
 
@@ -223,7 +239,6 @@ function generatePDF(title, lines) {
         if (line.type === "h1") {
             ensureSpace(36);
             currentPage.push(
-                `${DARK} rg`,
                 `BT /F2 16 Tf ${DARK} rg ${MARGIN} ${y} Td ${pdfStr(line.text)} Tj ET`,
                 `0.85 0.85 0.88 rg ${MARGIN} ${y - 4} ${MAX_W} 0.8 re f`
             );
@@ -233,82 +248,131 @@ function generatePDF(title, lines) {
 
         if (line.type === "h2") {
             ensureSpace(30);
-            currentPage.push(
-                `BT /F2 13 Tf ${ACCENT} rg ${MARGIN} ${y} Td ${pdfStr(line.text)} Tj ET`
-            );
+            currentPage.push(`BT /F2 13 Tf ${ACCENT} rg ${MARGIN} ${y} Td ${pdfStr(line.text)} Tj ET`);
             y -= 22;
             continue;
         }
 
         if (line.type === "h3") {
             ensureSpace(24);
-            currentPage.push(
-                `BT /F2 11 Tf ${DARK} rg ${MARGIN} ${y} Td ${pdfStr(line.text)} Tj ET`
-            );
+            currentPage.push(`BT /F2 11 Tf ${DARK} rg ${MARGIN} ${y} Td ${pdfStr(line.text)} Tj ET`);
             y -= 18;
             continue;
         }
 
         if (line.type === "quote") {
             const qLines = wrapTextPx(line.text, MAX_W - 20, 10);
-            ensureSpace(qLines.length * 14 + 16);
+            const blockH = qLines.length * 14 + 12;
+            ensureSpace(blockH + 8);
             currentPage.push(
                 `0.000 0.639 0.447 rg`,
-                `${MARGIN} ${y - qLines.length * 14 - 6} 3 ${qLines.length * 14 + 12} re f`,
+                `${MARGIN} ${y - blockH} 3 ${blockH} re f`,
                 `0.957 0.988 0.980 rg`,
-                `${MARGIN + 3} ${y - qLines.length * 14 - 6} ${MAX_W - 3} ${qLines.length * 14 + 12} re f`
+                `${MARGIN + 3} ${y - blockH} ${MAX_W - 3} ${blockH} re f`
             );
-            let qy = y;
             for (const ql of qLines) {
-                currentPage.push(`BT /F1 10 Tf ${GRAY} rg ${MARGIN + 12} ${qy} Td ${pdfStr(ql)} Tj ET`);
-                qy -= 14;
+                writeLine(`BT /F1 10 Tf ${GRAY} rg ${MARGIN + 12} ${y} Td ${pdfStr(ql)} Tj ET`, 14);
             }
-            y = qy - 8;
+            y -= 8;
             continue;
         }
 
         if (line.type === "code") {
-            const cLines = line.text.split("\n").slice(0, 30);
-            ensureSpace(cLines.length * 12 + 16);
+            const cLines = line.text.split("\n").slice(0, 80);
+            const blockH = cLines.length * 12 + 16;
+            ensureSpace(Math.min(blockH, PAGE_H - Y_MIN - MARGIN - 60));
+            const drawH = Math.min(blockH, y - Y_MIN);
             currentPage.push(
                 `0.051 0.067 0.090 rg`,
-                `${MARGIN} ${y - cLines.length * 12 - 8} ${MAX_W} ${cLines.length * 12 + 16} re f`
+                `${MARGIN} ${y - drawH} ${MAX_W} ${drawH} re f`
             );
-            let cy = y;
             for (const cl of cLines) {
-                // Courier est monospace : 600 unités/1000 par char à 9pt → max ~89 chars dans MAX_W
-                const clSafe = cl.length > 88 ? cl.slice(0, 88) + "…" : cl;
-                currentPage.push(`BT /F3 9 Tf 0.886 0.910 0.941 rg ${MARGIN + 10} ${cy} Td ${pdfStr(clSafe)} Tj ET`);
-                cy -= 12;
+                const safe = cl.length > 88 ? cl.slice(0, 88) + "..." : cl;
+                writeLine(`BT /F3 9 Tf 0.886 0.910 0.941 rg ${MARGIN + 10} ${y} Td ${pdfStr(safe)} Tj ET`, 12);
             }
-            y = cy - 10;
+            y -= 10;
             continue;
         }
 
         if (line.type === "li") {
             const liLines = wrapTextPx(line.text, MAX_W - 12, 10);
-            ensureSpace(liLines.length * 14 + 4);
-            let ly = y;
             for (const ll of liLines) {
-                currentPage.push(`BT /F1 10 Tf ${GRAY} rg ${MARGIN + 8} ${ly} Td ${pdfStr(ll)} Tj ET`);
-                ly -= 14;
+                writeLine(`BT /F1 10 Tf ${GRAY} rg ${MARGIN + 8} ${y} Td ${pdfStr(ll)} Tj ET`, 14);
             }
-            y = ly - 2;
+            y -= 2;
             continue;
         }
 
-        // Paragraphe
-        const pLines = wrapTextPx(line.text, MAX_W, 10);
-        ensureSpace(pLines.length * 14 + 8);
-        let py = y;
-        for (const pl of pLines) {
-            currentPage.push(`BT /F1 10 Tf ${GRAY} rg ${MARGIN} ${py} Td ${pdfStr(pl)} Tj ET`);
-            py -= 14;
+        // Tableau
+        if (line.type === "table") {
+            const allRows = [];
+            if (line.headers && line.headers.length > 0) allRows.push({ cells: line.headers, isHeader: true });
+            for (const r of (line.rows || [])) allRows.push({ cells: r, isHeader: false });
+            if (allRows.length === 0) continue;
+
+            const colCount = Math.max(...allRows.map(r => r.cells.length));
+            if (colCount === 0) continue;
+
+            const colW     = MAX_W / colCount;
+            const rowH     = 18;
+            const padX     = 6;
+            const fontSize = 9;
+
+            // S'assurer qu'au moins l'en-tête + 1 ligne rentrent sur la page
+            ensureSpace(rowH * 2 + 4);
+
+            for (let ri = 0; ri < allRows.length; ri++) {
+                const row = allRows[ri];
+                // Chaque ligne vérifie elle-même l'espace
+                if (y - rowH < Y_MIN) newPage();
+
+                if (row.isHeader) {
+                    currentPage.push(`${DARK} rg`, `${MARGIN} ${y - rowH} ${MAX_W} ${rowH} re f`);
+                } else if (ri % 2 === 0) {
+                    currentPage.push(`0.95 0.95 0.97 rg`, `${MARGIN} ${y - rowH} ${MAX_W} ${rowH} re f`);
+                }
+
+                // Bordure inférieure
+                currentPage.push(`0.80 0.80 0.85 rg`, `${MARGIN} ${y - rowH} ${MAX_W} 0.5 re f`);
+
+                // Séparateurs verticaux entre colonnes
+                for (let ci = 1; ci < colCount; ci++) {
+                    currentPage.push(`0.80 0.80 0.85 rg`, `${MARGIN + ci * colW} ${y - rowH} 0.5 ${rowH} re f`);
+                }
+
+                // Texte de chaque cellule
+                for (let ci = 0; ci < colCount; ci++) {
+                    const raw  = (row.cells[ci] || "");
+                    let cellText = raw;
+                    while (cellText.length > 1 && measureText(cellText, fontSize) > colW - padX * 2) {
+                        cellText = cellText.slice(0, -1);
+                    }
+                    if (cellText.length < raw.length) cellText = cellText.slice(0, -1) + "…";
+
+                    const cx    = MARGIN + ci * colW + padX;
+                    const cy    = y - rowH + 5;
+                    const color = row.isHeader ? "1 1 1" : DARK;
+                    const font  = row.isHeader ? "F2" : "F1";
+                    currentPage.push(`BT /${font} ${fontSize} Tf ${color} rg ${cx} ${cy} Td ${pdfStr(cellText)} Tj ET`);
+                }
+
+                y -= rowH;
+            }
+
+            // Bordure du bas du tableau
+            currentPage.push(`0.70 0.70 0.75 rg`, `${MARGIN} ${y} ${MAX_W} 0.8 re f`);
+            y -= 8;
+            continue;
         }
-        y = py - 6;
+
+        // Paragraphe — ligne par ligne avec vérification de page à chaque ligne
+        const pLines = wrapTextPx(line.text, MAX_W, 10);
+        for (const pl of pLines) {
+            writeLine(`BT /F1 10 Tf ${GRAY} rg ${MARGIN} ${y} Td ${pdfStr(pl)} Tj ET`, 14);
+        }
+        y -= 6;
     }
 
-    // Finaliser la dernière page
     pageStreams.push([...currentPage]);
 
     // Pieds de page
@@ -325,11 +389,11 @@ function generatePDF(title, lines) {
     return buildPDFBytes(title, pageStreams);
 }
 
-// ── Construction finale du PDF — offsets calculés en bytes réels ──
+// ── Construction finale du PDF ────────────────────────────────
 function buildPDFBytes(title, pageStreams) {
-    const chunks = [];
+    const chunks   = [];
     let byteOffset = 0;
-    const offsets = {};
+    const offsets  = {};
 
     const write = (str) => {
         const buf = Buffer.from(str, "latin1");
@@ -342,20 +406,18 @@ function buildPDFBytes(title, pageStreams) {
         write(`${id} 0 obj\n${content}\nendobj\n\n`);
     };
 
-    // En-tête PDF
     write("%PDF-1.4\n");
     write("%\xE2\xE3\xCF\xD3\n\n");
 
-    // Obj 1 — Ressources (polices)
     writeObj(1, `<< /Font <<
   /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
   /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
   /F3 << /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
 >> >>`);
 
-    const PAGES_ID  = 2;
-    let nextId      = 3;
-    const pageIds   = [];
+    const PAGES_ID = 2;
+    let nextId     = 3;
+    const pageIds  = [];
 
     for (let i = 0; i < pageStreams.length; i++) {
         const streamStr = pageStreams[i].join("\n");
@@ -381,7 +443,7 @@ function buildPDFBytes(title, pageStreams) {
     const catalogId = nextId++;
     writeObj(catalogId, `<< /Type /Catalog /Pages ${PAGES_ID} 0 R >>`);
 
-    const infoId = nextId++;
+    const infoId    = nextId++;
     const safeTitle = title.replace(/[()\\]/g, " ");
     const dateStr   = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
     writeObj(infoId, `<< /Title (${safeTitle}) /Creator (Pensee IA) /Producer (Pensee IA - Yao Baba Ange Emmanuel) /CreationDate (D:${dateStr}) >>`);
@@ -436,7 +498,6 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: "Erreur generation PDF : " + e.message });
     }
 
-    // ── Upload Supabase Storage ───────────────────────────────
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
