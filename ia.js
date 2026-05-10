@@ -2141,25 +2141,62 @@ if (!response.ok) {
                     const svgDown      = `<svg viewBox="0 0 20 20" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:6px;"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>`;
                     const chipStyle    = `text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:rgba(0,163,114,0.12);border:1px solid rgba(0,163,114,0.35);border-radius:8px;padding:7px 14px;font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;transition:background 0.2s,border-color 0.2s;margin-top:10px;`;
                     // Le PDF est toujours un data-URI base64 — aucun stockage externe
-                    const fileChipHtml = `<a href="${pdfData.data}" download="${label}" class="file-chip pdf-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>`;
+                    let finalPdfUrl = pdfData.data; // fallback base64
+let isPdfSupabase = false;
+let pdfFilePath = "";
 
-                    // Injection dans la bulle — texte dans innerHTML, chip en nœud séparé
-                    bubble.innerHTML = formatResponse(fullReply);
-                    if (typeof hljs !== 'undefined') {
-                        bubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
-                    }
-                    const chipNode = document.createElement("div");
-                    chipNode.className = "pdf-chip-wrapper";
-                    chipNode.innerHTML = fileChipHtml;
-                    bubble.appendChild(chipNode);
+// Upload Supabase pour persistance (30 jours)
+try {
+    const base64Part = pdfData.data.split(',')[1];
+    const byteChars  = atob(base64Part);
+    const byteArr    = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([byteArr], { type: 'application/pdf' });
 
-                } catch (pdfErr) {
-                    pdfBadge.remove();
-                    console.error("[PDF] Erreur :", pdfErr);
-                    addMessage("bot", `· Erreur PDF : ${pdfErr.message}`, false);
-                }
-            })();
-        }
+    const userId = currentUser ? currentUser.id : "anon";
+    pdfFilePath = `generated_pdfs/${userId}/${Date.now()}_${pdfTitle.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40)}.pdf`;
+
+    const { error: upErr } = await supabase.storage
+        .from("attachments")
+        .upload(pdfFilePath, blob, { contentType: 'application/pdf', upsert: false });
+
+    if (!upErr) {
+        const { data: signed } = await supabase.storage
+            .from("attachments")
+            .createSignedUrl(pdfFilePath, 60 * 60 * 24 * 30);
+        if (signed?.signedUrl) { finalPdfUrl = signed.signedUrl; isPdfSupabase = true; }
+    }
+} catch (storageErr) {
+    console.warn("[PDF] Upload Supabase échoué, fallback base64 :", storageErr);
+}
+
+// Persistance en DB pour le rechargement
+if (isPdfSupabase) {
+    await saveMessageToDB("assistant", `[FILE_URL:${finalPdfUrl}|${label}|${pdfFilePath}]`);
+}
+
+const expiryNote = isPdfSupabase
+    ? `<div style="font-size:10px;color:var(--text2);margin-top:5px;opacity:0.7;">⏳ Disponible pendant 30 jours</div>`
+    : '';
+const fileChipHtml = `<a href="${finalPdfUrl}" ${isPdfSupabase ? 'target="_blank"' : `download="${label}"`} class="file-chip pdf-chip" style="${chipStyle}">${svgFile} ${label} ${svgDown}</a>${expiryNote}`;
+
+// Injection dans la bulle — texte dans innerHTML, chip en nœud séparé
+bubble.innerHTML = formatResponse(fullReply);
+if (typeof hljs !== 'undefined') {
+    bubble.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+}
+const chipNode = document.createElement("div");
+chipNode.className = "pdf-chip-wrapper";
+chipNode.innerHTML = fileChipHtml;
+bubble.appendChild(chipNode);
+
+} catch (pdfErr) {
+    pdfBadge.remove();
+    console.error("[PDF] Erreur :", pdfErr);
+    addMessage("bot", `· Erreur PDF : ${pdfErr.message}`, false);
+}
+})();
+}
         // ==========================================
         // FIN DE L'AJOUT : INTERCEPTEUR PDF
         // ==========================================
