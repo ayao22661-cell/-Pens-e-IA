@@ -24,15 +24,18 @@ export default async function handler(req) {
     // text-embedding-004 accepte max ~2048 tokens (soit environ 7500 caractères).
     const safeText = text.slice(0, 7500);
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_API_KEY}`;
+    // gemini-embedding-exp-03-07 = "Gemini Embedding 2" dans Google AI Studio
+    // outputDimensionality: 768 — compatible avec la table Supabase memories vector(768)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-exp-03-07:embedContent?key=${GEMINI_API_KEY}`;
 
     try {
         const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: "models/text-embedding-004",
-                content: { parts: [{ text: safeText }] }
+                model: "models/gemini-embedding-exp-03-07",
+                content: { parts: [{ text: safeText }] },
+                outputDimensionality: 768
             })
         });
 
