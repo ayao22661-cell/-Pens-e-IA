@@ -1,5 +1,5 @@
 // ============================================================
-//  PENSÉE IA — api/generate-pdf.js (v3 — offsets XRef corrigés)
+//  PENSÉE IA — api/generate-pdf.js (v4 — accents + wrapping corrigés)
 //  Génération PDF via construction manuelle du format PDF
 //  Compatible Vercel Hobby, Edge et Pro — aucun Chromium requis
 // ============================================================
@@ -8,6 +8,27 @@ export const config = {
     runtime: "nodejs",
     maxDuration: 30,
 };
+
+// ── Encodage Latin-1 avec support des accents français ───────
+// Helvetica/WinAnsiEncoding couvre les 256 premiers codepoints Windows-1252.
+// On convertit les caractères Unicode courants vers leurs équivalents WinAnsi.
+function toWinAnsi(str) {
+    if (!str) return "";
+    return String(str)
+        // Caractères spéciaux fréquents hors latin-1 de base
+        .replace(/\u2019/g, "\x92") // apostrophe droite '
+        .replace(/\u2018/g, "\x91") // apostrophe gauche '
+        .replace(/\u201C/g, "\x93") // guillemet ouvrant "
+        .replace(/\u201D/g, "\x94") // guillemet fermant "
+        .replace(/\u2013/g, "\x96") // tiret demi-cadratin –
+        .replace(/\u2014/g, "\x97") // tiret cadratin —
+        .replace(/\u2026/g, "\x85") // ellipse …
+        .replace(/\u20AC/g, "\x80") // euro €
+        .replace(/\u00AB/g, "\xAB") // « guillemet français
+        .replace(/\u00BB/g, "\xBB") // » guillemet français
+        // Supprimer les caractères vraiment hors portée (>0xFF, non mappés)
+        .replace(/[^\x00-\xFF]/g, "?");
+}
 
 // ── Conversion HTML → texte structuré ────────────────────────
 function htmlToStructuredLines(html) {
@@ -61,43 +82,83 @@ function stripTags(html) {
         .trim();
 }
 
+// ── Mesure approchée de la largeur d'un texte en points PDF ──
+// Largeurs de glyphes Helvetica standard (en unités/1000 pour 1pt)
+// Source : Adobe Helvetica AFM. Valeurs moyennes pour les caractères manquants.
+const HELVETICA_WIDTHS = {
+    ' ':278,' ':278,'!':278,'"':355,'#':556,'$':556,'%':889,'&':667,"'":222,
+    '(':333,')':333,'*':389,'+':584,',':278,'-':333,'.':278,'/':278,
+    '0':556,'1':556,'2':556,'3':556,'4':556,'5':556,'6':556,'7':556,'8':556,'9':556,
+    ':':278,';':278,'<':584,'=':584,'>':584,'?':556,'@':1015,
+    'A':667,'B':667,'C':722,'D':722,'E':667,'F':611,'G':778,'H':722,'I':278,
+    'J':500,'K':667,'L':556,'M':833,'N':722,'O':778,'P':667,'Q':778,'R':722,
+    'S':667,'T':611,'U':722,'V':667,'W':944,'X':667,'Y':667,'Z':611,
+    '[':278,'\\':278,']':278,'^':469,'_':556,'`':222,
+    'a':556,'b':556,'c':500,'d':556,'e':556,'f':278,'g':556,'h':556,'i':222,
+    'j':222,'k':500,'l':222,'m':833,'n':556,'o':556,'p':556,'q':556,'r':333,
+    's':500,'t':278,'u':556,'v':500,'w':722,'x':500,'y':500,'z':500,
+    '{':334,'|':260,'}':334,'~':584,
+    // Accents français courants
+    'à':556,'â':556,'ä':556,'æ':1000,'ç':500,'è':556,'é':556,'ê':556,'ë':556,
+    'î':222,'ï':222,'ô':556,'ö':556,'ù':556,'û':556,'ü':556,'ÿ':500,
+    'À':667,'Â':667,'Ä':667,'Æ':1000,'Ç':722,'È':667,'É':667,'Ê':667,'Ë':667,
+    'Î':278,'Ï':278,'Ô':778,'Ö':778,'Ù':722,'Û':722,'Ü':722,
+    '«':556,'»':556,'€':556,'•':350,'…':1000,'–':556,'—':1000,
+};
+
+function measureText(text, fontSize) {
+    let width = 0;
+    for (const ch of text) {
+        width += (HELVETICA_WIDTHS[ch] || 556) * fontSize / 1000;
+    }
+    return width;
+}
+
+// ── Retour à la ligne basé sur la largeur réelle en points ───
+function wrapTextPx(text, maxWidth, fontSize) {
+    if (!text) return [""];
+    const words = text.split(" ");
+    const result = [];
+    let cur = "";
+
+    for (const w of words) {
+        const candidate = cur ? cur + " " + w : w;
+        if (measureText(candidate, fontSize) > maxWidth && cur) {
+            result.push(cur);
+            cur = w;
+        } else {
+            cur = candidate;
+        }
+    }
+    if (cur) result.push(cur);
+    return result.length ? result : [""];
+}
+
 // ── Générateur PDF ────────────────────────────────────────────
 function generatePDF(title, lines) {
     const PAGE_W  = 595.28;
     const PAGE_H  = 841.89;
     const MARGIN  = 56;
-    const MAX_W   = PAGE_W - MARGIN * 2;
+    const MAX_W   = PAGE_W - MARGIN * 2;  // 483.28 pts utiles
 
     const ACCENT  = "0.000 0.639 0.447";
     const DARK    = "0.102 0.118 0.165";
     const GRAY    = "0.290 0.318 0.408";
     const LGRAY   = "0.565 0.596 0.690";
 
+    // ── Encodage PDF sécurisé ─────────────────────────────────
+    // 1. Convertit Unicode → WinAnsi (préserve les accents)
+    // 2. Échappe les chars spéciaux PDF
+    // 3. Ne filtre PAS les bytes > 0x7f (ils sont valides en WinAnsiEncoding)
     const pdfStr = (s) => {
         if (!s) return "()";
-        const safe = String(s)
+        const winAnsi = toWinAnsi(String(s));
+        const safe = winAnsi
             .replace(/\\/g, "\\\\")
             .replace(/\(/g, "\\(")
             .replace(/\)/g, "\\)")
-            .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\xff]/g, " ");
+            .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " "); // ctrl chars seulement
         return `(${safe})`;
-    };
-
-    const wrapText = (text, charsPerLine) => {
-        if (!text) return [""];
-        const words = text.split(" ");
-        const result = [];
-        let cur = "";
-        for (const w of words) {
-            if ((cur + " " + w).trim().length > charsPerLine) {
-                if (cur) result.push(cur.trim());
-                cur = w;
-            } else {
-                cur = cur ? cur + " " + w : w;
-            }
-        }
-        if (cur.trim()) result.push(cur.trim());
-        return result.length ? result : [""];
     };
 
     // ── Construction des pages ────────────────────────────────
@@ -134,7 +195,7 @@ function generatePDF(title, lines) {
         `BT /F2 8 Tf 1 1 1 rg ${MARGIN + 6} ${PAGE_H - 103} Td ${pdfStr("DOCUMENT GENERE")} Tj ET`
     );
 
-    const titleLines = wrapText(title, 55);
+    const titleLines = wrapTextPx(title, MAX_W, 22);
     currentPage.push(`${DARK} rg`);
     let ty = PAGE_H - 135;
     for (const tl of titleLines) {
@@ -189,7 +250,7 @@ function generatePDF(title, lines) {
         }
 
         if (line.type === "quote") {
-            const qLines = wrapText(line.text, 68);
+            const qLines = wrapTextPx(line.text, MAX_W - 20, 10);
             ensureSpace(qLines.length * 14 + 16);
             currentPage.push(
                 `0.000 0.639 0.447 rg`,
@@ -215,7 +276,9 @@ function generatePDF(title, lines) {
             );
             let cy = y;
             for (const cl of cLines) {
-                currentPage.push(`BT /F3 9 Tf 0.886 0.910 0.941 rg ${MARGIN + 10} ${cy} Td ${pdfStr(cl.slice(0, 90))} Tj ET`);
+                // Courier est monospace : 600 unités/1000 par char à 9pt → max ~89 chars dans MAX_W
+                const clSafe = cl.length > 88 ? cl.slice(0, 88) + "…" : cl;
+                currentPage.push(`BT /F3 9 Tf 0.886 0.910 0.941 rg ${MARGIN + 10} ${cy} Td ${pdfStr(clSafe)} Tj ET`);
                 cy -= 12;
             }
             y = cy - 10;
@@ -223,7 +286,7 @@ function generatePDF(title, lines) {
         }
 
         if (line.type === "li") {
-            const liLines = wrapText(line.text, 80);
+            const liLines = wrapTextPx(line.text, MAX_W - 12, 10);
             ensureSpace(liLines.length * 14 + 4);
             let ly = y;
             for (const ll of liLines) {
@@ -235,7 +298,7 @@ function generatePDF(title, lines) {
         }
 
         // Paragraphe
-        const pLines = wrapText(line.text, 85);
+        const pLines = wrapTextPx(line.text, MAX_W, 10);
         ensureSpace(pLines.length * 14 + 8);
         let py = y;
         for (const pl of pLines) {
@@ -264,7 +327,6 @@ function generatePDF(title, lines) {
 
 // ── Construction finale du PDF — offsets calculés en bytes réels ──
 function buildPDFBytes(title, pageStreams) {
-    // On accumule les chunks en Buffer pour calculer les offsets exacts
     const chunks = [];
     let byteOffset = 0;
     const offsets = {};
@@ -291,23 +353,18 @@ function buildPDFBytes(title, pageStreams) {
   /F3 << /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
 >> >>`);
 
-    // Obj 2 réservé pour Pages — on l'écrira après avoir les IDs
     const PAGES_ID  = 2;
     let nextId      = 3;
     const pageIds   = [];
 
-    // Streams de contenu + pages
     for (let i = 0; i < pageStreams.length; i++) {
         const streamStr = pageStreams[i].join("\n");
-        // Encode en latin1 pour que les bytes correspondent exactement
         const streamBuf = Buffer.from(streamStr, "latin1");
         const streamLen = streamBuf.length;
 
         const contentId = nextId++;
-        // On écrit l'en-tête de l'objet
         offsets[contentId] = byteOffset;
         write(`${contentId} 0 obj\n<< /Length ${streamLen} >>\nstream\n`);
-        // Écriture du stream en tant que buffer latin1 brut
         chunks.push(streamBuf);
         byteOffset += streamBuf.length;
         write(`\nendstream\nendobj\n\n`);
@@ -317,24 +374,20 @@ function buildPDFBytes(title, pageStreams) {
         writeObj(pageId, `<< /Type /Page /Parent ${PAGES_ID} 0 R /MediaBox [0 0 595.28 841.89] /Contents ${contentId} 0 R /Resources 1 0 R >>`);
     }
 
-    // Obj 2 — Pages (maintenant qu'on connaît les IDs enfants)
     const kidsStr = pageIds.map(id => `${id} 0 R`).join(" ");
     offsets[PAGES_ID] = byteOffset;
     write(`2 0 obj\n<< /Type /Pages /Kids [${kidsStr}] /Count ${pageIds.length} >>\nendobj\n\n`);
 
-    // Catalog
     const catalogId = nextId++;
     writeObj(catalogId, `<< /Type /Catalog /Pages ${PAGES_ID} 0 R >>`);
 
-    // Info
     const infoId = nextId++;
     const safeTitle = title.replace(/[()\\]/g, " ");
     const dateStr   = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
     writeObj(infoId, `<< /Title (${safeTitle}) /Creator (Pensee IA) /Producer (Pensee IA - Yao Baba Ange Emmanuel) /CreationDate (D:${dateStr}) >>`);
 
-    // XRef — on utilise byteOffset qui est maintenant exact
     const xrefPos   = byteOffset;
-    const totalObjs = nextId; // IDs vont de 1 à nextId-1, donc size = nextId
+    const totalObjs = nextId;
 
     write(`xref\n`);
     write(`0 ${totalObjs}\n`);
