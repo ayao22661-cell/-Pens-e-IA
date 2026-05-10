@@ -839,7 +839,17 @@
             observeThinkBlocks();
 
         } catch (e) {
-            console.warn('[ui-enrich] Init échouée :', e);
+            if (e === 'timeout') {
+                // Supabase ou ia.js pas encore prêt — on réessaie dans 3s (max 5 tentatives)
+                console.warn('[ui-enrich] Timeout — nouvelle tentative dans 3s...');
+                if ((init._retries = (init._retries || 0) + 1) <= 5) {
+                    setTimeout(init, 3000);
+                } else {
+                    console.warn('[ui-enrich] Abandon après 5 tentatives. Vérifie la connexion Supabase.');
+                }
+            } else {
+                console.warn('[ui-enrich] Init échouée :', e);
+            }
         }
     }
 
