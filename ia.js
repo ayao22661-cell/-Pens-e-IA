@@ -2033,6 +2033,7 @@ if (!response.ok) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let fullReply = "";
+        let _streamDone = false;
 
         // Timeout visuel : avertissement si aucun token après 12 secondes
         let streamTimeout = setTimeout(() => {
@@ -2041,15 +2042,31 @@ if (!response.ok) {
             }
         }, 12000);
 
+        // Page Visibility API — sauvegarde automatique si l'onglet est quitté pendant le stream
+        const _handleVisibilityChange = () => {
+            if (document.hidden && !_streamDone && fullReply.trim().length > 0) {
+                // On sauvegarde immédiatement ce qui a été généré
+                bubble.innerHTML = formatResponse(fullReply + "\n\n*[Génération en cours — reviens pour voir la suite]*");
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+                console.log("[Stream] Onglet masqué — buffer sauvegardé :", fullReply.length, "chars");
+            }
+        };
+        document.addEventListener("visibilitychange", _handleVisibilityChange);
+
         try {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 fullReply += decoder.decode(value, { stream: true });
-                bubble.innerHTML = formatResponse(fullReply);
-                messagesEl.scrollTop = messagesEl.scrollHeight;
+                // Mise à jour de la bulle seulement si l'onglet est visible (perf)
+                if (!document.hidden) {
+                    bubble.innerHTML = formatResponse(fullReply);
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                }
             }
+            _streamDone = true;
         } catch (streamErr) {
+            document.removeEventListener("visibilitychange", _handleVisibilityChange);
             if (streamErr.name === 'AbortError') return; // Annulation volontaire, pas d'erreur
             console.warn("Stream interrompu (mise en veille du navigateur) :", streamErr);
             
@@ -2057,9 +2074,13 @@ if (!response.ok) {
             if (fullReply.trim().length === 0) {
                 fullReply = "· *La génération a été coupée par la mise en veille de l'écran ou le changement d'onglet.* Veuillez relancer la question.";
             } else {
-                fullReply += "\n\n*[Génération interrompue par la mise en veille]*";
+                fullReply += "\n\n*[Génération interrompue — texte partiel sauvegardé]*";
             }
         }
+        document.removeEventListener("visibilitychange", _handleVisibilityChange);
+        // Mise à jour finale de la bulle (rattrape si l'onglet était masqué)
+        bubble.innerHTML = formatResponse(fullReply);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
 
         // Nettoyage final
         clearTimeout(streamTimeout);
@@ -2108,11 +2129,55 @@ const pdfContent = rawContent;
             // Nettoyage du marqueur dans la bulle
             fullReply = fullReply.replace(pdfMatch[0], "").trim();
 
-            // Badge de génération
-            const pdfBadge = document.createElement("div");
-            pdfBadge.style.cssText = "font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:4px 0 8px;opacity:0.8;";
-            pdfBadge.innerHTML = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:5px;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg> Génération du PDF...`;
-            messagesEl.appendChild(pdfBadge);
+            // ── Badge de construction animé DANS la bulle (style Claude) ──
+            bubble.innerHTML = formatResponse(fullReply);
+
+            const pdfBuildBlock = document.createElement("div");
+            pdfBuildBlock.className = "pdf-build-block";
+            pdfBuildBlock.style.cssText = "margin-top:12px;padding:12px 14px;background:var(--bg3,rgba(255,255,255,0.04));border:1px solid var(--border,rgba(255,255,255,0.08));border-radius:10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text2);line-height:1.8;";
+            
+            const svgDoc = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:6px;flex-shrink:0;"><path d="M4 2h8l4 4v12H4V2z"/><polyline points="12,2 12,6 16,6"/></svg>`;
+            const svgSpinner = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:6px;flex-shrink:0;animation:spin 1s linear infinite;"><circle cx="10" cy="10" r="7" stroke-dasharray="22 10" stroke-dashoffset="0"/></svg>`;
+            const svgCheck = `<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="var(--accent,#00e5a0)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:6px;flex-shrink:0;"><polyline points="3,10 8,15 17,5"/></svg>`;
+
+            // Injecte le keyframe spin si pas déjà présent
+            if (!document.getElementById('pdf-spin-style')) {
+                const s = document.createElement('style');
+                s.id = 'pdf-spin-style';
+                s.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+                document.head.appendChild(s);
+            }
+
+            const steps = [
+                { label: "Analyse du contenu…",     delay: 0   },
+                { label: "Mise en page des sections…", delay: 700 },
+                { label: "Rendu des tableaux et blocs…", delay: 1400 },
+                { label: "Calcul de la pagination…",  delay: 2100 },
+                { label: "Construction du fichier PDF…", delay: 2800 },
+            ];
+
+            const stepEls = steps.map((step, i) => {
+                const line = document.createElement("div");
+                line.style.cssText = "display:flex;align-items:center;opacity:0.35;transition:opacity 0.3s;";
+                line.innerHTML = `${svgDoc}<span>${step.label}</span>`;
+                pdfBuildBlock.appendChild(line);
+
+                setTimeout(() => {
+                    // Marque l'étape précédente comme complète
+                    if (i > 0) {
+                        const prev = pdfBuildBlock.children[i - 1];
+                        prev.style.opacity = "0.6";
+                        prev.innerHTML = `${svgCheck}<span style="text-decoration:line-through;opacity:0.5;">${steps[i-1].label}</span>`;
+                    }
+                    // Active l'étape courante
+                    line.style.opacity = "1";
+                    line.innerHTML = `${svgSpinner}<span style="color:var(--text)">${step.label}</span>`;
+                }, step.delay);
+
+                return line;
+            }, []);
+
+            bubble.appendChild(pdfBuildBlock);
             messagesEl.scrollTop = messagesEl.scrollHeight;
 
             // Appel async — n'interrompt pas le rendu de la bulle
@@ -2133,7 +2198,7 @@ const pdfContent = rawContent;
                         }),
                     });
 
-                    pdfBadge.remove();
+                    pdfBuildBlock.remove();
 
                     if (!pdfRes.ok) {
                         const errData = await pdfRes.json().catch(() => ({}));
@@ -2199,7 +2264,7 @@ chipNode.innerHTML = fileChipHtml;
 bubble.appendChild(chipNode);
 
 } catch (pdfErr) {
-    pdfBadge.remove();
+    if (pdfBuildBlock && pdfBuildBlock.parentNode) pdfBuildBlock.remove();
     console.error("[PDF] Erreur :", pdfErr);
     addMessage("bot", `· Erreur PDF : ${pdfErr.message}`, false);
 }
