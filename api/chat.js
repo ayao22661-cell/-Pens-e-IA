@@ -7,6 +7,8 @@ export const config = {
     runtime: 'edge'
 };
 
+import { performWebSearch } from './search.js';
+
 // ============================================================
 //  CONFIGURATION DES AGENTS
 // ============================================================
@@ -154,39 +156,68 @@ export default async function handler(req) {
 
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
+    // ============================================================
+    //  2bis. RECHERCHE WEB MANUELLE (une seule fois, hors cascade)
+    //  Remplace le tool googleSearch natif (Gemini uniquement) par
+    //  une injection de contexte en texte brut, qui fonctionne donc
+    //  identiquement sur Gemini ET sur Gemma (fallback inclus).
+    // ============================================================
+    let searchContextBlock = "";
+    if (agentConfig.useSearch) {
+        try {
+            const searchResult = await performWebSearch(prompt, 5);
+            if (searchResult?.results?.length) {
+                const lines = searchResult.results.map((r, i) =>
+                    `[${i + 1}] ${r.title}\n${r.snippet}\nSource: ${r.url}`
+                ).join('\n\n');
+
+                searchContextBlock =
+                    `[CONTEXTE WEB ACTUALISÉ — résultats de recherche en temps réel]\n` +
+                    (searchResult.directAnswer ? `Réponse directe : ${searchResult.directAnswer}\n\n` : '') +
+                    `${lines}\n\n` +
+                    `Utilise ces informations pour répondre de façon précise et à jour. ` +
+                    `Cite tes sources quand c'est pertinent.\n\n`;
+            }
+        } catch (e) {
+            console.warn('[Chat] Recherche web indisponible :', e.message);
+            // Pas de contexte injecté → le modèle répondra sur ses connaissances seules
+        }
+    }
+
    // ============================================================
     //  3. MODEL ROUTING INTELLIGENT (Priorité Disponibilité/Quotas)
     // ============================================================
     const { model } = bodyReq; 
     let modelsToTry = [];
     
-    // Stratégie qualité : Gemini en premier (meilleure réponse perçue),
-    // Gemma réservé au fallback quand Gemini est saturé/en erreur (429/5xx).
+    // Stratégie réaliste basée sur les quotas RPD réels :
+    // - gemini-2.5-flash / 2.0-flash / 1.5-pro : RPD ~20 chacun → bonus ponctuel
+    // - gemini-3.1-flash-lite : RPD 500 → meilleur compromis qualité/volume
+    // - gemma : RPD 1.5K par variante, TPM illimité → socle de volume
     if (agentId === 'code' || agentId === 'audit') {
         modelsToTry = [
-            "gemini-2.5-flash",        // Priorité qualité pour le code
-            "gemini-2.0-flash",
-            "gemini-1.5-pro",
-            "gemma-4-31b-it"           // Fallback : plus gros Gemma dispo
+            "gemini-3.1-flash-lite",   // Bon compromis qualité/quota pour le code
+            "gemini-2.5-flash",        // Bonus qualité (quota très limité, 20 RPD)
+            "gemma-4-31b-it"           // Socle de volume
         ];
     } else if (agentId === 'creatif') {
         modelsToTry = [
-            "gemini-2.5-flash-lite",
-            "gemini-1.5-flash",
-            "gemma-3-27b-it"           // Fallback : gros quota dispo
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-flash-lite",   // Bonus (quota limité, 20 RPD)
+            "gemma-3-27b-it"           // Socle de volume
         ];
     } else {
         // Pour les autres agents (stratégie, visionnaire, etc.)
         modelsToTry = [
+            "gemini-3.1-flash-lite",
             "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
             "gemma-4-31b-it",
             "gemma-3-27b-it"
         ];
     }
 
     // Ajout du reste des modèles Gemma en fin de file (secours ultime,
-    // en cas de saturation totale de Gemini ET des gros Gemma ci-dessus)
+    // en cas de saturation totale des modèles ci-dessus)
     const allGemma = [
         "gemma-4-26b-it",
         "gemma-3-12b-it",
@@ -209,7 +240,9 @@ export default async function handler(req) {
     // ============================================================
     for (const model of modelsToTry) {
         const isGemma = model.startsWith("gemma");
-        const parts = [{ text: prompt }];
+        // Contexte web injecté en texte brut → fonctionne pour Gemini ET Gemma
+        const promptWithContext = searchContextBlock + prompt;
+        const parts = [{ text: promptWithContext }];
 
         if (files && files.length > 0) {
             files.forEach(file => {
@@ -235,7 +268,9 @@ export default async function handler(req) {
             ];
         }
 
-        const canUseSearch = !isGemma && agentConfig.useSearch;
+        // Le tool googleSearch natif n'est plus utilisé : la recherche est
+        // désormais injectée manuellement en amont (searchContextBlock),
+        // de façon identique pour tous les modèles, Gemma inclus.
         const canUseCodeExecution = !isGemma && ["code", "audit", "strategie", "default"].includes(agentId);
 
         let finalSystemInstruction = systemInstruction;
@@ -260,7 +295,6 @@ export default async function handler(req) {
         };
 
         let activeTools = [];
-        if (canUseSearch) activeTools.push({ googleSearch: {} });
         if (canUseCodeExecution) activeTools.push({ codeExecution: {} });
         if (activeTools.length > 0) body.tools = activeTools;
 
@@ -281,10 +315,6 @@ export default async function handler(req) {
                         let sseBuffer = "";   // Buffer SSE ligne par ligne
                         let fullText = "";    // Accumulation totale pour détecter les marqueurs fichiers
                         let sentUpTo = 0;     // Curseur : nb de chars déjà envoyés au client
-
-                        if (isGemma && agentConfig.useSearch) {
-                            controller.enqueue(new TextEncoder().encode("⚠️ *Action dégradée : Modèle local activé. La recherche web demandée est indisponible.*\n\n"));
-                        }
 
                         try {
                             while (true) {
