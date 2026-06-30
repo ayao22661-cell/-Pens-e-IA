@@ -160,38 +160,35 @@ export default async function handler(req) {
     const { model } = bodyReq; 
     let modelsToTry = [];
     
-    // Stratégie d'urgence : On utilise les modèles avec le plus de crédits en premier
-    const highAvailabilityModels = [
-        "gemma-3-27b-it", // Ton quota le plus large (14.4K RPD)
-        "gemma-4-31b-it", // Très performant et disponible
-        "gemma-4-26b-it"
-    ];
-
+    // Stratégie qualité : Gemini en premier (meilleure réponse perçue),
+    // Gemma réservé au fallback quand Gemini est saturé/en erreur (429/5xx).
     if (agentId === 'code' || agentId === 'audit') {
         modelsToTry = [
-            "gemma-4-31b-it",          // Priorité au plus gros Gemma pour le code
-            "gemini-2.5-flash",        // Tentative Gemini si disponible
+            "gemini-2.5-flash",        // Priorité qualité pour le code
             "gemini-2.0-flash",
-            "gemini-1.5-pro"
+            "gemini-1.5-pro",
+            "gemma-4-31b-it"           // Fallback : plus gros Gemma dispo
         ];
     } else if (agentId === 'creatif') {
         modelsToTry = [
-            "gemma-3-27b-it",          // Priorité absolue (Quotas 14.4K)
-            "gemini-2.5-flash-lite",   
-            "gemini-1.5-flash"
+            "gemini-2.5-flash-lite",
+            "gemini-1.5-flash",
+            "gemma-3-27b-it"           // Fallback : gros quota dispo
         ];
     } else {
         // Pour les autres agents (stratégie, visionnaire, etc.)
         modelsToTry = [
-            "gemma-3-27b-it",
-            "gemma-4-31b-it",
             "gemini-2.5-flash",
-            "gemini-2.5-flash-lite"
+            "gemini-2.5-flash-lite",
+            "gemma-4-31b-it",
+            "gemma-3-27b-it"
         ];
     }
 
-    // Ajout du reste des modèles Gemma en fin de file (secours ultime)
+    // Ajout du reste des modèles Gemma en fin de file (secours ultime,
+    // en cas de saturation totale de Gemini ET des gros Gemma ci-dessus)
     const allGemma = [
+        "gemma-4-26b-it",
         "gemma-3-12b-it",
         "gemma-3-4b-it",
         "gemma-3-2b-it",
