@@ -44,16 +44,20 @@ async function fetchFromInstance(instance, params) {
     };
 }
 
-export default async function handler(req) {
-    if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Méthode non autorisée' }), { status: 405 });
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const { query, count = 5 } = body;
-
+// ============================================================
+//  FONCTION RÉUTILISABLE — performWebSearch(query, count)
+//  Logique de recherche pure, sans dépendance à Request/Response.
+//  Utilisée par le endpoint HTTP ci-dessous ET importée directement
+//  par chat.js pour injecter du contexte web dans les prompts,
+//  y compris pour les modèles Gemma qui ne supportent pas le tool
+//  googleSearch natif.
+//
+//  Retourne : { results: [...], directAnswer: string|null, source: string }
+//  Lève une erreur si toutes les stratégies échouent.
+// ============================================================
+export async function performWebSearch(query, count = 5) {
     if (!query?.trim()) {
-        return new Response(JSON.stringify({ error: 'Requête vide.' }), { status: 400 });
+        throw new Error('Requête vide.');
     }
 
     const params = new URLSearchParams({
@@ -64,32 +68,21 @@ export default async function handler(req) {
     });
 
     // ── STRATÉGIE 1 : Course entre les 3 meilleures instances ──
-    // On lance 3 requêtes en parallèle → la plus rapide gagne
-    // Résultat : temps de réponse divisé par 3 en moyenne
     const top3 = INSTANCES.slice(0, 3)
         .sort(() => Math.random() - 0.5); // Mélange pour répartir la charge
 
     try {
-        const result = await Promise.any(
+        return await Promise.any(
             top3.map(instance => fetchFromInstance(instance, params))
         );
-        return new Response(JSON.stringify(result), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-        });
     } catch (_) {
-        // Les 3 premières ont toutes échoué → on tente les 2 restantes
         console.warn('[Search] Top 3 échouées, tentative sur instances de secours...');
     }
 
     // ── STRATÉGIE 2 : Instances de secours (séquentiel) ────────
     for (const instance of INSTANCES.slice(3)) {
         try {
-            const result = await fetchFromInstance(instance, params);
-            return new Response(JSON.stringify(result), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return await fetchFromInstance(instance, params);
         } catch (e) {
             console.warn(`[Search] Instance échouée (${instance}):`, e.message);
         }
@@ -122,14 +115,11 @@ export default async function handler(req) {
                 }));
 
                 if (results.length > 0) {
-                    return new Response(JSON.stringify({
+                    return {
                         results,
                         directAnswer: data.answer || null,
                         source: 'tavily'
-                    }), {
-                        status: 200,
-                        headers: { 'Content-Type': 'application/json' }
-                    });
+                    };
                 }
             }
         } catch (e) {
@@ -138,7 +128,33 @@ export default async function handler(req) {
     }
 
     // ── TOUT A ÉCHOUÉ ──────────────────────────────────────────
-    return new Response(JSON.stringify({
-        error: 'Recherche temporairement indisponible. Réessaie dans quelques secondes.'
-    }), { status: 502 });
+    throw new Error('Recherche temporairement indisponible.');
+}
+
+// ============================================================
+//  ENDPOINT HTTP — conservé pour compatibilité avec le frontend
+//  (appels directs depuis le client, ex: recherche manuelle dans l'UI)
+// ============================================================
+export default async function handler(req) {
+    if (req.method !== 'POST') {
+        return new Response(JSON.stringify({ error: 'Méthode non autorisée' }), { status: 405 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { query, count = 5 } = body;
+
+    try {
+        const result = await performWebSearch(query, count);
+        return new Response(JSON.stringify(result), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    } catch (e) {
+        const status = e.message === 'Requête vide.' ? 400 : 502;
+        return new Response(JSON.stringify({
+            error: status === 400
+                ? 'Requête vide.'
+                : 'Recherche temporairement indisponible. Réessaie dans quelques secondes.'
+        }), { status });
+    }
 }
