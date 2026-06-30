@@ -143,7 +143,24 @@ export default async function handler(req) {
     //  2. TRAITEMENT DE LA REQUÊTE
     // ============================================================
     const bodyReq = await req.json().catch(() => ({}));
-    const { prompt, files, systemInstruction, agentId } = bodyReq;
+    const { prompt, files, systemInstruction: rawSystemInstruction, agentId } = bodyReq;
+
+    // ============================================================
+    //  Garde anti-auto-présentation : empêche le modèle de rappeler
+    //  son identité ("Je suis Pensée IA...") à chaque réponse.
+    //  Particulièrement nécessaire pour Gemma, qui suit moins bien
+    //  les instructions implicites et a tendance à se réintroduire
+    //  systématiquement quand l'identité figure dans le system prompt.
+    // ============================================================
+    const ANTI_INTRO_GUARD =
+        "\n\n[RÈGLE DE COMPORTEMENT]\nNe te présente jamais (nom, identité, capacités, " +
+        "qui t'a créé) sauf si l'utilisateur te le demande explicitement dans son message " +
+        "actuel (ex: \"qui es-tu ?\", \"tu es quoi ?\"). Réponds directement et uniquement " +
+        "à la question posée, sans préambule d'identité ni rappel de ton nom.";
+
+    const systemInstruction = rawSystemInstruction
+        ? rawSystemInstruction + ANTI_INTRO_GUARD
+        : ANTI_INTRO_GUARD;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
