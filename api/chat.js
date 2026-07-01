@@ -174,13 +174,49 @@ export default async function handler(req) {
     const agentConfig = AGENTS[agentId] || AGENTS.default;
 
     // ============================================================
-    //  2bis. RECHERCHE WEB MANUELLE (une seule fois, hors cascade)
-    //  Remplace le tool googleSearch natif (Gemini uniquement) par
-    //  une injection de contexte en texte brut, qui fonctionne donc
-    //  identiquement sur Gemini ET sur Gemma (fallback inclus).
+    //  2bis. RECHERCHE WEB MANUELLE — déclenchée uniquement si
+    //  l'agent l'autorise ET que la question nécessite réellement
+    //  des informations récentes/externes (détection d'intention).
     // ============================================================
+
+    // Détection : la question a-t-elle besoin d'une recherche web ?
+    function needsWebSearch(text) {
+        const t = text.toLowerCase();
+
+        // Signaux négatifs explicites → pas de recherche
+        const noSearchPatterns = [
+            /^(bonjour|salut|bonsoir|hello|coucou|ça va|ca va|merci|svp|stp)\b/,
+            /^(explique|c'est quoi|qu'est[-\s]ce que|définis|définition|comment fonctionne)/,
+            /^(aide|aidez|help|aide[-\s]moi|peux[-\s]tu|pouvez[-\s]vous)\b/,
+            /\b(écris|rédige|génère|crée|résume|traduis|corrige|améliore|reformule)\b/,
+            /\b(mon code|ce code|ce texte|ce fichier|cette image|ci[-\s]dessus|ci[-\s]joint)\b/,
+            /\b(exemple|exemples|liste|énumère|compare|différence entre)\b/,
+            /\b(qu'est[-\s]ce que tu|tu es|tu peux|tu sais|tes capacités)\b/,
+        ];
+        if (noSearchPatterns.some(p => p.test(t))) return false;
+
+        // Signaux positifs → recherche utile
+        const yesSearchPatterns = [
+            /\b(actu(alité)?s?|news|récent|dernier|dernière|aujourd'hui|maintenant|en ce moment)\b/,
+            /\b(prix|tarif|cours|bourse|météo|résultat|score|classement|sondage|élection)\b/,
+            /\b(qui est|c'est qui|c'est quoi comme|c'est quoi le)\b.{0,30}\b(président|ceo|directeur|champion)\b/,
+            /\b(version|release|changelog|mise à jour|update)\b.{0,30}\b(20(2[3-9]|[3-9]\d))\b/,
+            /\b(20(2[4-9]|[3-9]\d))\b/, // Mention d'une année récente
+            /\b(sortie|lancé|annoncé|publié)\b.{0,30}(récemment|cette année|ce mois)/,
+            /\b(site|lien|url|page web|article|source)\b/,
+            /\b(recherche|cherche|trouve|infos? sur|renseigne[-\s]moi sur)\b/,
+        ];
+        if (yesSearchPatterns.some(p => p.test(t))) return true;
+
+        // Par défaut : pas de recherche pour une question courte (<80 chars sans signal clair)
+        return t.length > 120;
+    }
+
     let searchContextBlock = "";
-    if (agentConfig.useSearch) {
+    const shouldSearch = agentConfig.useSearch && (
+        agentId === 'recherche' || needsWebSearch(prompt)
+    );
+    if (shouldSearch) {
         try {
             const searchResult = await performWebSearch(prompt, 5);
             if (searchResult?.results?.length) {
@@ -197,7 +233,6 @@ export default async function handler(req) {
             }
         } catch (e) {
             console.warn('[Chat] Recherche web indisponible :', e.message);
-            // Pas de contexte injecté → le modèle répondra sur ses connaissances seules
         }
     }
 
