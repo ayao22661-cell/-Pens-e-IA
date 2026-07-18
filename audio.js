@@ -31,7 +31,8 @@ function getAudioContext() {
 const AudioState = {
     isOpen: false,
     isListening: false,     
-    isIntentional: false,   
+    isIntentional: false,
+    isRestarting: false,    // true pendant une relance automatique sur mobile
     isSpeaking: false,
     recognition: null,
     synth: window.speechSynthesis,
@@ -767,9 +768,15 @@ function startNativeRecognition() {
     };
 
     recognition.onend = () => {
+        // Si une relance automatique est en cours, on ignore cet onend
+        if (AudioState.isRestarting) {
+            AudioState.isRestarting = false;
+            return;
+        }
+
         const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
 
-        // Arrêt manuel (bouton appuyé) → on envoie
+        // Arret manuel (bouton appuye) → on envoie
         if (!AudioState.isIntentional) {
             finalizeAndSend();
             return;
@@ -781,28 +788,17 @@ function startNativeRecognition() {
             AudioState.sessionTranscript = '';
         }
 
-        if (isMobile) {
-            // Sur mobile : SpeechRecognition s'arrête tout seul après silence.
-            // On relance automatiquement pour rester en ecoute continue
-            // jusqu'a ce que l'utilisateur appuie sur le bouton.
-            setStatus('Ecoute en cours (appuie pour envoyer)...', 'listening');
-            setTimeout(() => {
-                if (AudioState.isListening && AudioState.isIntentional) {
-                    startNativeRecognition();
-                }
-            }, 300);
-        } else {
-            // Sur PC, relance immediate
-            try {
-                setTimeout(() => {
-                    if (AudioState.isListening && AudioState.isIntentional) {
-                        startNativeRecognition();
-                    }
-                }, 150);
-            } catch (e) {
-                finalizeAndSend();
+        // Relance automatique sur mobile et PC tant que l utilisateur
+        // n a pas appuye sur le bouton (isIntentional reste true)
+        AudioState.isRestarting = true;
+        setStatus('Ecoute en cours (appuie pour envoyer)...', 'listening');
+        setTimeout(() => {
+            if (AudioState.isListening && AudioState.isIntentional) {
+                startNativeRecognition();
+            } else {
+                AudioState.isRestarting = false;
             }
-        }
+        }, isMobile ? 300 : 150);
     };
 
     recognition.onerror = (event) => {
@@ -833,6 +829,7 @@ function startNativeRecognition() {
 function finalizeAndSend() {
     AudioState.isListening = false;
     AudioState.isIntentional = false;
+    AudioState.isRestarting = false;
     disconnectMicAnalyser();
 
     if (AudioState.sessionTranscript) {
