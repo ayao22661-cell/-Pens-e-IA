@@ -69,8 +69,47 @@ const Hologram = (function () {
     let headDriftTarget = 0, headDriftCurrent = 0;               // inclinaison tête
     let breathPhase = 0, breathSpeed = 1;                        // respiration variable
     let speakingStartTs = 0;                                      // durée prise de parole
-    let silenceLevel = 0, silenceSince = 0;                       // détection silences
+    let silenceLevel = 0, silenceSince = 0;                      // détection silences
     let tremorSeedX = Math.random() * 100, tremorSeedY = Math.random() * 100; // micro-tremblements
+
+    // — Anticipation —
+    let anticipating = false, anticipateStart = 0;
+    const ANTICIPATE_MS = 420;
+
+    // — Émotions —
+    const EMOTION_PALETTE = {
+        confiance:      { r: 80,  g: 220, b: 255 },
+        hesitation:     { r: 180, g: 160, b: 255 },
+        surprise:       { r: 255, g: 220, b: 80  },
+        concentration:  { r: 60,  g: 255, b: 180 },
+        empathie:       { r: 255, g: 140, b: 180 },
+        enthousiasme:   { r: 255, g: 200, b: 60  },
+        incertitude:    { r: 160, g: 160, b: 200 }
+    };
+    let currentEmotion = null, emotionIntensity = 0, emotionTarget = null, emotionIntensityTarget = 0;
+    // Signatures cinétiques par émotion
+    const EMOTION_KINEMATICS = {
+        confiance:     { breathMul: 1.1, saccadeRate: 3000, driftAmp: 0.08 },
+        hesitation:    { breathMul: 0.7, saccadeRate: 1200, driftAmp: 0.22 },
+        surprise:      { breathMul: 1.6, saccadeRate: 600,  driftAmp: 0.35 },
+        concentration: { breathMul: 1.3, saccadeRate: 4000, driftAmp: 0.05 },
+        empathie:      { breathMul: 0.9, saccadeRate: 2500, driftAmp: 0.12 },
+        enthousiasme:  { breathMul: 1.5, saccadeRate: 800,  driftAmp: 0.28 },
+        incertitude:   { breathMul: 0.6, saccadeRate: 1500, driftAmp: 0.18 }
+    };
+
+    // — Mémoire gestuelle —
+    const MEMORY_KEY = 'pensee_hologram_memory';
+    let gestureMemory = _loadMemory();
+
+    function _loadMemory() {
+        try {
+            return JSON.parse(localStorage.getItem(MEMORY_KEY) || '{}');
+        } catch { return {}; }
+    }
+    function _saveMemory() {
+        try { localStorage.setItem(MEMORY_KEY, JSON.stringify(gestureMemory)); } catch {}
+    }
 
     const MATERIALIZE_MS = 950;
 
@@ -166,9 +205,50 @@ const Hologram = (function () {
             speakingStartTs = performance.now();
             breathSpeed = 1;
             headDriftTarget = (Math.random() - 0.5) * 0.15;
+            anticipating = false;
+            // Mémoire : incrémenter le compteur de sessions
+            gestureMemory.sessions = (gestureMemory.sessions || 0) + 1;
+            gestureMemory.lastTs = Date.now();
+            _saveMemory();
         }
         if (s !== 'speaking') { silenceSince = 0; silenceLevel = 0; }
         state = s;
+    }
+
+    // Appelé par le client quand le LLM commence à générer (avant speaking)
+    function anticipate() {
+        anticipating = true;
+        anticipateStart = performance.now();
+    }
+
+    // Appelé par le client quand le signal émotion arrive du stream
+    function setEmotion(emotion, intensity) {
+        if (!EMOTION_PALETTE[emotion]) return;
+        emotionTarget = emotion;
+        emotionIntensityTarget = Math.max(0, Math.min(1, intensity));
+        // Adapter la cinématique immédiatement
+        const k = EMOTION_KINEMATICS[emotion];
+        if (k) saccadeNextAt = performance.now() + k.saccadeRate * (0.7 + Math.random() * 0.6);
+    }
+
+    // Transition douce vers l'émotion cible
+    function _tickEmotion() {
+        if (emotionTarget && emotionTarget !== currentEmotion) {
+            currentEmotion = emotionTarget;
+        }
+        emotionIntensity = lerp(emotionIntensity, emotionIntensityTarget, 0.04);
+    }
+
+    // Animation de reconnaissance (retour après absence)
+    function _doRecognition(ts) {
+        const last = gestureMemory.lastTs || 0;
+        const gap = Date.now() - last;
+        // Si l'utilisateur revient après >1h, animation de reconnaissance
+        if (gap > 3600000 && gestureMemory.sessions > 1) {
+            // Pulse de reconnaissance : expansion rapide puis retour
+            return Math.max(0, 1 - (ts - materializeStart - 600) / 800) * 0.12;
+        }
+        return 0;
     }
     function pulse(intensity) { targetLevel = Math.min(1, targetLevel + (intensity || 0.5)); }
     function connectAnalyser(node) { analyser = node; analyserData = new Uint8Array(analyser.frequencyBinCount); }
@@ -202,13 +282,30 @@ const Hologram = (function () {
         const scatterAmp = (1 - matEase) * baseRadius * 1.3;
 
         angleY += SPEED[state] * (1 + level * 0.6);
+        _tickEmotion();
+
+        // ── Anticipation (prise d'inspiration avant de parler) ─
+        let anticipateBoost = 0;
+        if (anticipating) {
+            const elapsed = ts - anticipateStart;
+            if (elapsed < ANTICIPATE_MS) {
+                // Contraction d'abord (0→210ms), puis expansion (210→420ms)
+                const t = elapsed / ANTICIPATE_MS;
+                anticipateBoost = t < 0.5
+                    ? lerp(0, -0.06, t * 2)
+                    : lerp(-0.06, 0.05, (t - 0.5) * 2);
+            } else {
+                anticipating = false;
+            }
+        }
 
         // ── Saccades oculaires ─────────────────────────────────
+        const kinematic = (currentEmotion && EMOTION_KINEMATICS[currentEmotion]) || EMOTION_KINEMATICS.confiance;
         if (state === 'speaking') {
             if (ts > saccadeNextAt) {
                 saccadeVelY = (Math.random() - 0.5) * 0.018;
                 saccadeDecay = 0.88 + Math.random() * 0.06;
-                saccadeNextAt = ts + 1800 + Math.random() * 2500;
+                saccadeNextAt = ts + kinematic.saccadeRate * (0.7 + Math.random() * 0.6);
             }
             angleY += saccadeVelY;
             saccadeVelY *= saccadeDecay;
@@ -216,7 +313,8 @@ const Hologram = (function () {
 
         // ── Dérive de la tête (axe vertical) ──────────────────
         if (state === 'speaking') {
-            if (Math.random() < 0.003) headDriftTarget = (Math.random() - 0.5) * 0.18;
+            const driftAmp = kinematic.driftAmp * (1 + emotionIntensity * 0.5);
+            if (Math.random() < 0.003) headDriftTarget = (Math.random() - 0.5) * driftAmp;
             headDriftCurrent = lerp(headDriftCurrent, headDriftTarget, 0.008);
         } else {
             headDriftCurrent = lerp(headDriftCurrent, 0, 0.02);
@@ -244,37 +342,43 @@ const Hologram = (function () {
         }
 
         // ── Respiration organique variable ─────────────────────
-        let radiusRatio = 1 + level * 0.22;
+        const recognitionBoost = _doRecognition(ts);
+        let radiusRatio = 1 + level * 0.22 + anticipateBoost + recognitionBoost;
         if (state === 'speaking') {
             const speakDur = (ts - speakingStartTs) / 1000;
-            breathSpeed = lerp(breathSpeed, 0.7 + Math.min(speakDur * 0.06, 0.6), 0.005);
+            breathSpeed = lerp(breathSpeed, kinematic.breathMul * (0.7 + Math.min(speakDur * 0.06, 0.6)), 0.005);
             breathPhase += 0.016 * breathSpeed;
             const breath = Math.sin(breathPhase * 0.9) * 0.35 +
                            Math.sin(breathPhase * 1.37 + 1.1) * 0.25 +
                            Math.sin(breathPhase * 0.53 + 2.7) * 0.25 +
                            Math.sin(breathPhase * 2.11 + 0.4) * 0.15;
             radiusRatio += breath * 0.05 * (1 - breathHold * 0.7);
-            // Contraction sur les silences
             radiusRatio -= breathHold * 0.04;
         }
 
         // ── Micro-tremblements ─────────────────────────────────
-        // Bruit de Perlin léger simulé avec deux sinusoïdes à fréquences irrationnelles
         const tremorAmp = state === 'speaking' ? 0.0018 + level * 0.002 : 0.0006;
         const tremorX = (Math.sin(ts * 0.031 + tremorSeedX) + Math.sin(ts * 0.073 + tremorSeedX * 2.1)) * tremorAmp;
         const tremorY = (Math.sin(ts * 0.027 + tremorSeedY) + Math.sin(ts * 0.061 + tremorSeedY * 1.7)) * tremorAmp;
         angleY += tremorX;
         angleX += tremorY;
 
-        // ── Couleur : chaleur humaine sur les pics ─────────────
-        let c = PALETTE[state];
+        // ── Couleur : émotion + chaleur humaine sur les pics ───
+        let c = { ...PALETTE[state] };
         if (state === 'speaking') {
+            // Mélange entre couleur de base et couleur de l'émotion
+            if (currentEmotion && EMOTION_PALETTE[currentEmotion] && emotionIntensity > 0.01) {
+                const ec = EMOTION_PALETTE[currentEmotion];
+                const blend = emotionIntensity * 0.65;
+                c.r = lerp(c.r, ec.r, blend);
+                c.g = lerp(c.g, ec.g, blend);
+                c.b = lerp(c.b, ec.b, blend);
+            }
+            // Chaleur sur les pics vocaux
             const warmth = Math.min(1, level * 1.3) * (1 - breathHold * 0.5);
-            c = {
-                r: lerp(c.r, 255, warmth),
-                g: lerp(c.g, 235, warmth),
-                b: lerp(c.b, 210, warmth * 0.7)
-            };
+            c.r = lerp(c.r, 255, warmth);
+            c.g = lerp(c.g, 235, warmth);
+            c.b = lerp(c.b, 210, warmth * 0.7);
         }
         ctx.clearRect(0, 0, w, h);
 
@@ -395,7 +499,7 @@ const Hologram = (function () {
     }
     function stop() { if (rafId) cancelAnimationFrame(rafId); rafId = null; }
 
-    return { init, start, stop, resize, setState, pulse, connectAnalyser, disconnectAnalyser };
+    return { init, start, stop, resize, setState, pulse, connectAnalyser, disconnectAnalyser, anticipate, setEmotion };
 })();
 
 // ============================================================
@@ -718,6 +822,9 @@ async function sendToAI(text) {
     setStatus('Pensee reflechit...', 'thinking');
     setOrbState('thinking');
 
+    // Anticipation : le hologramme prend une "inspiration" avant de parler
+    Hologram.anticipate();
+
     const base = typeof window.CONFIG?.systemPrompt === 'string' ? window.CONFIG.systemPrompt : '';
     const today = new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
     const systemInstruction = `[DATE : ${today}]\n\n${base}\n\n--- MODE VOCAL ---\nReponds en 3 a 5 phrases maximum. Zero markdown, zero asterisques, zero listes. Tu parles, tu n'ecris pas. Si la reponse necessite du code, resume en 2 phrases.`;
@@ -736,10 +843,32 @@ async function sendToAI(text) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullReply = '';
+        let emotionParsed = false;
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            fullReply += decoder.decode(value, { stream: true });
+            const chunk = decoder.decode(value, { stream: true });
+
+            // Détecter et extraire le signal émotion \x02EM:{...}\x03
+            if (!emotionParsed && chunk.includes('\x02EM:')) {
+                const emStart = chunk.indexOf('\x02EM:');
+                const emEnd = chunk.indexOf('\x03', emStart);
+                if (emEnd !== -1) {
+                    try {
+                        const emJson = chunk.slice(emStart + 4, emEnd);
+                        const em = JSON.parse(emJson);
+                        if (em.e && typeof em.i === 'number') {
+                            Hologram.setEmotion(em.e, em.i);
+                        }
+                    } catch {}
+                    emotionParsed = true;
+                    // Ne pas ajouter le signal émotion au texte
+                    fullReply += chunk.slice(0, emStart) + chunk.slice(emEnd + 1);
+                    continue;
+                }
+            }
+            fullReply += chunk;
         }
 
         const clean = cleanForSpeech(fullReply);
@@ -755,6 +884,8 @@ async function sendToAI(text) {
 
 function cleanForSpeech(text) {
     return text
+        .replace(/<EM>[\s\S]*?<\/EM>/gi, '')     // signal émotion résiduel
+        .replace(/\x02EM:[^\x03]*\x03/g, '')       // signal binaire résiduel
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/#{1,6}\s/g, '')
         .replace(/\*\*(.*?)\*\*/g, '$1')
