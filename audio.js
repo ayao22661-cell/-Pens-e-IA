@@ -769,18 +769,31 @@ function startNativeRecognition() {
     recognition.onend = () => {
         const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
 
-        // Si c'est un arrêt manuel OU si on est sur mobile, on arrête les bips en boucle.
-        // Le comportement devient intelligent : tu parles, et dès que tu t'arrêtes, ça envoie tout seul.
-        if (!AudioState.isIntentional || isMobile) {
+        // Arrêt manuel (bouton appuyé) → on envoie
+        if (!AudioState.isIntentional) {
             finalizeAndSend();
+            return;
+        }
+
+        // Accumule le transcript de la session en cours
+        if (AudioState.sessionTranscript) {
+            AudioState.finalTranscript += AudioState.sessionTranscript;
+            AudioState.sessionTranscript = '';
+        }
+
+        if (isMobile) {
+            // Sur mobile : SpeechRecognition s'arrête tout seul après silence.
+            // On relance automatiquement pour rester en ecoute continue
+            // jusqu'a ce que l'utilisateur appuie sur le bouton.
+            setStatus('Ecoute en cours (appuie pour envoyer)...', 'listening');
+            setTimeout(() => {
+                if (AudioState.isListening && AudioState.isIntentional) {
+                    startNativeRecognition();
+                }
+            }, 300);
         } else {
-            // Sur PC, la relance en continu fonctionne sans bruit parasite
-            if (AudioState.sessionTranscript) {
-                AudioState.finalTranscript += AudioState.sessionTranscript;
-                AudioState.sessionTranscript = '';
-            }
+            // Sur PC, relance immediate
             try {
-                // Délai de sécurité : évite les crashes si le navigateur ne peut pas relancer immédiatement
                 setTimeout(() => {
                     if (AudioState.isListening && AudioState.isIntentional) {
                         startNativeRecognition();
