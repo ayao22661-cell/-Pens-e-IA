@@ -738,9 +738,11 @@ function startNativeRecognition() {
     // === AJOUT ICI ===
     recognition.onstart = () => {
         if (AudioState.currentInstanceId === instanceId && AudioState.isListening) {
-            // Petit délai sur mobile : évite le conflit getUserMedia vs SpeechRecognition
+            // Sur mobile : on n'accède PAS au micro via getUserMedia
+            // pour éviter le conflit avec SpeechRecognition.
+            // L'hologramme utilise sa simulation biométrique intégrée.
             const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-            setTimeout(() => connectMicAnalyser(), isMobile ? 300 : 0);
+            if (!isMobile) connectMicAnalyser();
         }
     };
     // =================
@@ -805,7 +807,13 @@ function startNativeRecognition() {
         setStatus(msgs[event.error] || 'Erreur : ' + event.error, 'error');
     };
 
-    recognition.start();
+    // Sur mobile, un petit délai évite le blocage au démarrage
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (isMobile) {
+        setTimeout(() => { try { recognition.start(); } catch(e) { finalizeAndSend(); } }, 200);
+    } else {
+        recognition.start();
+    }
 }
 
 // Fonction pour envoyer à l'IA
