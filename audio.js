@@ -64,6 +64,14 @@ const Hologram = (function () {
     let rings = [];
     let materializeStart = 0;
 
+    // — Comportements humains —
+    let saccadeNextAt = 0, saccadeVelY = 0, saccadeDecay = 0;   // saccades oculaires
+    let headDriftTarget = 0, headDriftCurrent = 0;               // inclinaison tête
+    let breathPhase = 0, breathSpeed = 1;                        // respiration variable
+    let speakingStartTs = 0;                                      // durée prise de parole
+    let silenceLevel = 0, silenceSince = 0;                       // détection silences
+    let tremorSeedX = Math.random() * 100, tremorSeedY = Math.random() * 100; // micro-tremblements
+
     const MATERIALIZE_MS = 950;
 
     const PALETTE = {
@@ -152,7 +160,16 @@ const Hologram = (function () {
         scheduleGlitch();
     }
 
-    function setState(s) { if (PALETTE[s]) state = s; }
+    function setState(s) {
+        if (!PALETTE[s]) return;
+        if (s === 'speaking' && state !== 'speaking') {
+            speakingStartTs = performance.now();
+            breathSpeed = 1;
+            headDriftTarget = (Math.random() - 0.5) * 0.15;
+        }
+        if (s !== 'speaking') { silenceSince = 0; silenceLevel = 0; }
+        state = s;
+    }
     function pulse(intensity) { targetLevel = Math.min(1, targetLevel + (intensity || 0.5)); }
     function connectAnalyser(node) { analyser = node; analyserData = new Uint8Array(analyser.frequencyBinCount); }
     function disconnectAnalyser() { analyser = null; analyserData = null; }
@@ -185,16 +202,74 @@ const Hologram = (function () {
         const scatterAmp = (1 - matEase) * baseRadius * 1.3;
 
         angleY += SPEED[state] * (1 + level * 0.6);
-        angleX = Math.sin(ts / 3000) * 0.18;
+
+        // ── Saccades oculaires ─────────────────────────────────
         if (state === 'speaking') {
-            // Dérive lente de l'axe, comme une tête qui cherche ses mots
+            if (ts > saccadeNextAt) {
+                saccadeVelY = (Math.random() - 0.5) * 0.018;
+                saccadeDecay = 0.88 + Math.random() * 0.06;
+                saccadeNextAt = ts + 1800 + Math.random() * 2500;
+            }
+            angleY += saccadeVelY;
+            saccadeVelY *= saccadeDecay;
+        }
+
+        // ── Dérive de la tête (axe vertical) ──────────────────
+        if (state === 'speaking') {
+            if (Math.random() < 0.003) headDriftTarget = (Math.random() - 0.5) * 0.18;
+            headDriftCurrent = lerp(headDriftCurrent, headDriftTarget, 0.008);
+        } else {
+            headDriftCurrent = lerp(headDriftCurrent, 0, 0.02);
+        }
+
+        angleX = Math.sin(ts / 3000) * 0.18 + headDriftCurrent;
+        if (state === 'speaking') {
             angleX += Math.sin(ts / 5200 + 1.7) * 0.09 + Math.sin(ts / 1900 + 0.3) * 0.04;
         }
 
+        // ── Détection micro-pauses (retenir le souffle) ────────
+        let breathHold = 0;
+        if (state === 'speaking') {
+            const isSilent = level < 0.04;
+            if (isSilent) {
+                if (silenceSince === 0) silenceSince = ts;
+                const silenceDur = ts - silenceSince;
+                if (silenceDur > 80 && silenceDur < 600) {
+                    breathHold = Math.min(1, (silenceDur - 80) / 200);
+                }
+            } else {
+                silenceSince = 0;
+                breathHold = 0;
+            }
+        }
+
+        // ── Respiration organique variable ─────────────────────
+        let radiusRatio = 1 + level * 0.22;
+        if (state === 'speaking') {
+            const speakDur = (ts - speakingStartTs) / 1000;
+            breathSpeed = lerp(breathSpeed, 0.7 + Math.min(speakDur * 0.06, 0.6), 0.005);
+            breathPhase += 0.016 * breathSpeed;
+            const breath = Math.sin(breathPhase * 0.9) * 0.35 +
+                           Math.sin(breathPhase * 1.37 + 1.1) * 0.25 +
+                           Math.sin(breathPhase * 0.53 + 2.7) * 0.25 +
+                           Math.sin(breathPhase * 2.11 + 0.4) * 0.15;
+            radiusRatio += breath * 0.05 * (1 - breathHold * 0.7);
+            // Contraction sur les silences
+            radiusRatio -= breathHold * 0.04;
+        }
+
+        // ── Micro-tremblements ─────────────────────────────────
+        // Bruit de Perlin léger simulé avec deux sinusoïdes à fréquences irrationnelles
+        const tremorAmp = state === 'speaking' ? 0.0018 + level * 0.002 : 0.0006;
+        const tremorX = (Math.sin(ts * 0.031 + tremorSeedX) + Math.sin(ts * 0.073 + tremorSeedX * 2.1)) * tremorAmp;
+        const tremorY = (Math.sin(ts * 0.027 + tremorSeedY) + Math.sin(ts * 0.061 + tremorSeedY * 1.7)) * tremorAmp;
+        angleY += tremorX;
+        angleX += tremorY;
+
+        // ── Couleur : chaleur humaine sur les pics ─────────────
         let c = PALETTE[state];
         if (state === 'speaking') {
-            // Chaleur humaine : le cyan vire vers un blanc chaud sur les pics vocaux
-            const warmth = Math.min(1, level * 1.3);
+            const warmth = Math.min(1, level * 1.3) * (1 - breathHold * 0.5);
             c = {
                 r: lerp(c.r, 255, warmth),
                 g: lerp(c.g, 235, warmth),
@@ -216,15 +291,6 @@ const Hologram = (function () {
         glow.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, w, h);
-
-        let radiusRatio = 1 + level * 0.22;
-        if (state === 'speaking') {
-            // Respiration organique : plusieurs fréquences superposées, jamais identique
-            const t = ts / 1000;
-            const breath = Math.sin(t * 0.9) * 0.35 + Math.sin(t * 1.37 + 1.1) * 0.25 +
-                            Math.sin(t * 0.53 + 2.7) * 0.25 + Math.sin(t * 2.11 + 0.4) * 0.15;
-            radiusRatio += breath * 0.05;
-        }
 
         // ── Anneaux orbitaux (type Saturne) ───────────────────
         rings.forEach(ring => {
