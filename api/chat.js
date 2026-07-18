@@ -158,9 +158,24 @@ export default async function handler(req) {
         "actuel (ex: \"qui es-tu ?\", \"tu es quoi ?\"). Réponds directement et uniquement " +
         "à la question posée, sans préambule d'identité ni rappel de ton nom.";
 
+    // Instruction émotion : le modèle préfixe chaque réponse avec un token JSON compact
+    // sur UNE seule ligne, avant tout autre texte. Format : {"e":"EMOTION","i":INTENSITE}
+    // Émotions possibles : confiance, hesitation, surprise, concentration, empathie, enthousiasme, incertitude
+    // Intensité : float 0.0–1.0
+    const EMOTION_INSTRUCTION =
+        "\n\n[SIGNAL ÉMOTIONNEL — OBLIGATOIRE]\n" +
+        "Commence CHAQUE réponse par une ligne JSON compacte sur une seule ligne, sans espaces, " +
+        "entre les balises <EM> et </EM>, représentant ton état émotionnel face à cette question. " +
+        "Format EXACT : <EM>{\"e\":\"EMOTION\",\"i\":INTENSITE}</EM>\n" +
+        "Émotions disponibles : confiance, hesitation, surprise, concentration, empathie, enthousiasme, incertitude\n" +
+        "Intensité : nombre entre 0.0 et 1.0\n" +
+        "Exemple : <EM>{\"e\":\"concentration\",\"i\":0.85}</EM>\n" +
+        "Cette balise doit être la toute première chose dans ta réponse, avant tout autre texte. " +
+        "Ne la mentionne jamais à l'utilisateur. C'est un signal interne invisible.";
+
     const systemInstruction = rawSystemInstruction
-        ? rawSystemInstruction + ANTI_INTRO_GUARD
-        : ANTI_INTRO_GUARD;
+        ? rawSystemInstruction + ANTI_INTRO_GUARD + EMOTION_INSTRUCTION
+        : ANTI_INTRO_GUARD + EMOTION_INSTRUCTION;
 
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
@@ -369,6 +384,9 @@ export default async function handler(req) {
                         let sentUpTo = 0;     // Curseur : nb de chars déjà envoyés au client
 
                         try {
+                            let emotionSent = false;
+                            let emotionBuffer = ""; // accumule jusqu'à </EM>
+
                             while (true) {
                                 const { done, value } = await reader.read();
                                 if (done) break;
@@ -391,13 +409,37 @@ export default async function handler(req) {
 
                                         if (!textChunk) continue;
 
-                                        // Pour Gemma : stripper les blocs de thinking en texte brut
-                                        // (<|channel>thought...<channel|> ou <think>...</think>)
                                         if (isGemma) {
                                             textChunk = stripGemmaThinking(textChunk);
                                         }
 
                                         if (!textChunk) continue;
+
+                                        // ── Extraction du token émotion ───────────────────
+                                        // Le modèle émet <EM>{...}</EM> en tout début de réponse.
+                                        // On accumule jusqu'à trouver </EM>, on extrait, on envoie
+                                        // un signal spécial \x02EM:{...}\x03 au client, puis on
+                                        // continue le stream sans cette balise.
+                                        if (!emotionSent) {
+                                            emotionBuffer += textChunk;
+                                            const closeIdx = emotionBuffer.indexOf('</EM>');
+                                            if (closeIdx !== -1) {
+                                                emotionSent = true;
+                                                const openIdx = emotionBuffer.indexOf('<EM>');
+                                                if (openIdx !== -1) {
+                                                    const emJson = emotionBuffer.slice(openIdx + 4, closeIdx);
+                                                    // Signal émotion : \x02EM:{json}\x03 (non-printable delimiters)
+                                                    controller.enqueue(new TextEncoder().encode(`\x02EM:${emJson}\x03`));
+                                                }
+                                                // Texte après </EM>
+                                                textChunk = emotionBuffer.slice(closeIdx + 5).replace(/^\n/, '');
+                                                emotionBuffer = "";
+                                                if (!textChunk) continue;
+                                            } else {
+                                                // Pas encore </EM> — on accumule, rien à streamer
+                                                continue;
+                                            }
+                                        }
 
                                         fullText += textChunk;
 
