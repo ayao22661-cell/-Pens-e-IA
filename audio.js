@@ -944,6 +944,15 @@ function startListening() {
     if (AudioState.isListening) return;
     stopSpeaking();
 
+    // Reset complet : tue toute ancienne instance de reconnaissance
+    // pour éviter les onend parasites des sessions précédentes
+    if (AudioState.recognition) {
+        try { AudioState.recognition.abort(); } catch(e) {}
+        AudioState.recognition = null;
+    }
+    AudioState.isRestarting = false;
+    AudioState.sessionTranscript = '';
+
     AudioState.isListening = true;
     AudioState.isIntentional = true; 
     AudioState.finalTranscript = '';
@@ -951,7 +960,6 @@ function startListening() {
     setOrbState('listening');
     setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
     clearInput();
-    
 
     // On délègue à une fonction qui crée le micro proprement
     startNativeRecognition();
@@ -1102,6 +1110,11 @@ function startNativeRecognition() {
 
 // Fonction pour envoyer à l'IA
 function finalizeAndSend() {
+    // Annule le timer de sécurité si on arrive ici par la voie normale (onend)
+    if (AudioState._safetyTimer) {
+        clearTimeout(AudioState._safetyTimer);
+        AudioState._safetyTimer = null;
+    }
     AudioState.isListening = false;
     AudioState.isIntentional = false;
     AudioState.isRestarting = false;
@@ -1125,9 +1138,24 @@ function finalizeAndSend() {
 
 function stopListening() {
     AudioState.isIntentional = false; // Désactive la relance auto
+
+    // Timeout de sécurité : si onend ne se déclenche jamais
+    // (recognition déjà morte, état instable, bug Android),
+    // on force l'envoi après 600ms
+    if (AudioState._safetyTimer) clearTimeout(AudioState._safetyTimer);
+    AudioState._safetyTimer = setTimeout(() => {
+        AudioState._safetyTimer = null;
+        if (AudioState.isListening) {
+            console.warn('[Audio] onend non reçu — envoi forcé');
+            finalizeAndSend();
+        }
+    }, 600);
+
     try {
-        AudioState.recognition?.stop(); // Déclenche onend
+        AudioState.recognition?.stop(); // Déclenche onend normalement
     } catch(e) {
+        clearTimeout(AudioState._safetyTimer);
+        AudioState._safetyTimer = null;
         finalizeAndSend();
     }
 }
