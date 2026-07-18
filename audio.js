@@ -666,7 +666,7 @@ function startListening() {
     setOrbState('listening');
     setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
     clearInput();
-    connectMicAnalyser();
+    
 
     // On délègue à une fonction qui crée le micro proprement
     startNativeRecognition();
@@ -721,6 +721,14 @@ function startNativeRecognition() {
     // Identifiant unique pour ignorer les events d'instances mortes
     const instanceId = Date.now();
     AudioState.currentInstanceId = instanceId;
+
+    // === AJOUT ICI ===
+    recognition.onstart = () => {
+        if (AudioState.currentInstanceId === instanceId && AudioState.isListening) {
+            connectMicAnalyser();
+        }
+    };
+    // =================
 
     recognition.onresult = (event) => {
         // Ignorer si une nouvelle instance a déjà pris le relais
