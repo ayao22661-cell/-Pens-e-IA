@@ -10,7 +10,7 @@ const AUDIO_CONFIG = {
     voiceRate: 1.05,
     voicePitch: 1.0,
     voiceVolume: 1.0,
-    version: '3.0.2' // <-- Version anti-doublons Android
+    version: '4.0.0-hologram' // <-- Version anti-doublons Android + rendu holographique
 };
 
 // ============================================================
@@ -39,11 +39,192 @@ const AudioState = {
     voices: [],
     selectedVoice: null,
     finalTranscript: '',    
-    sessionTranscript: ''   
+    sessionTranscript: '',
+    micStream: null
 };
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const supported = !!SpeechRecognition && !!window.speechSynthesis;
+
+// ============================================================
+//  HOLOGRAMME — sphère filaire réactive, inspirée de Genisys
+//  (Terminator Genisys) : lignes cyan/bleu, balayage, glitch
+// ============================================================
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+const Hologram = (function () {
+    let canvas, ctx, w = 0, h = 0, cx = 0, cy = 0, baseRadius = 0;
+    let rafId = null;
+    let angleY = 0, angleX = 0;
+    let level = 0, targetLevel = 0;
+    let analyser = null, analyserData = null;
+    let state = 'idle';
+    let glitchUntil = 0, nextGlitchAt = 0;
+    let parallels = [], meridians = [];
+
+    const PALETTE = {
+        idle:      { r: 0,   g: 220, b: 255 },
+        listening: { r: 0,   g: 235, b: 255 },
+        thinking:  { r: 255, g: 190, b: 60  },
+        speaking:  { r: 120, g: 190, b: 255 }
+    };
+    const SPEED = { idle: 0.0035, listening: 0.006, thinking: 0.013, speaking: 0.008 };
+
+    function sphericalToCartesian(lat, lon) {
+        return { x: Math.cos(lat) * Math.cos(lon), y: Math.sin(lat), z: Math.cos(lat) * Math.sin(lon) };
+    }
+
+    function buildGeometry() {
+        parallels = []; meridians = [];
+        const latBands = 7, lonBands = 10, segs = 40;
+        for (let i = 1; i < latBands; i++) {
+            const lat = (Math.PI * i / latBands) - Math.PI / 2;
+            const ring = [];
+            for (let j = 0; j <= segs; j++) ring.push(sphericalToCartesian(lat, (Math.PI * 2 * j) / segs));
+            parallels.push(ring);
+        }
+        for (let i = 0; i < lonBands; i++) {
+            const lon = (Math.PI * 2 * i) / lonBands;
+            const meridian = [];
+            for (let j = 0; j <= segs; j++) meridian.push(sphericalToCartesian((Math.PI * j / segs) - Math.PI / 2, lon));
+            meridians.push(meridian);
+        }
+    }
+
+    function rotate(p, ay, ax) {
+        const x = p.x * Math.cos(ay) - p.z * Math.sin(ay);
+        const z1 = p.x * Math.sin(ay) + p.z * Math.cos(ay);
+        const y = p.y * Math.cos(ax) - z1 * Math.sin(ax);
+        const z = p.y * Math.sin(ax) + z1 * Math.cos(ax);
+        return { x, y, z };
+    }
+
+    function project(p) {
+        const persp = 1 / (2 - p.z);
+        return { x: cx + p.x * baseRadius * persp, y: cy + p.y * baseRadius * persp, persp, z: p.z };
+    }
+
+    function resize() {
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        w = rect.width; h = rect.height;
+        cx = w / 2; cy = h / 2;
+        baseRadius = Math.min(w, h) * 0.34;
+    }
+
+    function init(canvasEl) {
+        canvas = canvasEl;
+        ctx = canvas.getContext('2d');
+        if (!parallels.length) buildGeometry();
+        resize();
+        scheduleGlitch();
+    }
+
+    function setState(s) { if (PALETTE[s]) state = s; }
+    function pulse(intensity) { targetLevel = Math.min(1, targetLevel + (intensity || 0.5)); }
+    function connectAnalyser(node) { analyser = node; analyserData = new Uint8Array(analyser.frequencyBinCount); }
+    function disconnectAnalyser() { analyser = null; analyserData = null; }
+    function scheduleGlitch() { nextGlitchAt = performance.now() + 1800 + Math.random() * 2600; }
+
+    function readLevel() {
+        if (analyser && analyserData) {
+            analyser.getByteTimeDomainData(analyserData);
+            let sum = 0;
+            for (let i = 0; i < analyserData.length; i++) { const v = (analyserData[i] - 128) / 128; sum += v * v; }
+            targetLevel = Math.min(1, Math.sqrt(sum / analyserData.length) * 3.2);
+        } else if (state === 'idle') {
+            targetLevel = 0.12 + Math.sin(performance.now() / 900) * 0.05;
+        } else {
+            targetLevel *= 0.94;
+        }
+        level = lerp(level, targetLevel, 0.15);
+    }
+
+    function draw(ts) {
+        rafId = requestAnimationFrame(draw);
+        if (!ctx || !w || !h) return;
+        readLevel();
+        angleY += SPEED[state] * (1 + level * 0.6);
+        angleX = Math.sin(ts / 3000) * 0.18;
+
+        const c = PALETTE[state];
+        ctx.clearRect(0, 0, w, h);
+
+        const glitching = ts < glitchUntil;
+        if (!glitching && ts > nextGlitchAt) { glitchUntil = ts + 90 + Math.random() * 120; scheduleGlitch(); }
+
+        ctx.save();
+        if (glitching) ctx.translate((Math.random() - 0.5) * 10, 0);
+
+        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius * 1.9);
+        glow.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${0.16 + level * 0.12})`);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, w, h);
+
+        const radiusRatio = 1 + level * 0.22;
+
+        ctx.lineWidth = 1;
+        [...parallels, ...meridians].forEach(line => {
+            let avgZ = 0;
+            const pts = line.map(p => {
+                const r = rotate(p, angleY, angleX);
+                avgZ += r.z;
+                return project({ x: r.x * radiusRatio, y: r.y * radiusRatio, z: r.z });
+            });
+            avgZ /= line.length;
+            ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${0.12 + ((avgZ + 1) / 2) * 0.35})`;
+            ctx.beginPath();
+            pts.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+            ctx.stroke();
+        });
+
+        ctx.globalCompositeOperation = 'lighter';
+        const particleSource = parallels[Math.floor(parallels.length / 2)] || [];
+        particleSource.forEach((p, i) => {
+            if (i % 3 !== 0) return;
+            const r = rotate(p, angleY * 1.4, angleX);
+            const pt = project({ x: r.x * radiusRatio, y: r.y * radiusRatio, z: r.z });
+            const jitter = level * 3;
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(${c.r},${Math.min(255, c.g + 20)},${c.b},${0.4 + pt.persp * 0.5})`;
+            ctx.arc(pt.x + (Math.random() - 0.5) * jitter, pt.y + (Math.random() - 0.5) * jitter, 1 + pt.persp * 1.8 + level * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.globalCompositeOperation = 'source-over';
+
+        const scanY = (Math.sin(ts / 1400) * 0.5 + 0.5) * h;
+        const scanGrad = ctx.createLinearGradient(0, scanY - 10, 0, scanY + 10);
+        scanGrad.addColorStop(0, 'rgba(255,255,255,0)');
+        scanGrad.addColorStop(0.5, `rgba(${c.r},${c.g},${c.b},${0.18 + level * 0.15})`);
+        scanGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = scanGrad;
+        ctx.fillRect(0, scanY - 10, w, 20);
+
+        ctx.globalAlpha = 0.05;
+        ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},1)`;
+        for (let y = 0; y < h; y += 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+        ctx.globalAlpha = 1;
+
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${0.5 + level * 0.3})`;
+        ctx.lineWidth = 1.2;
+        ctx.arc(cx, cy, baseRadius * radiusRatio * 1.08, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function start() { if (!rafId) rafId = requestAnimationFrame(draw); }
+    function stop() { if (rafId) cancelAnimationFrame(rafId); rafId = null; }
+
+    return { init, start, stop, resize, setState, pulse, connectAnalyser, disconnectAnalyser };
+})();
 
 // ============================================================
 //  CSS
@@ -73,26 +254,25 @@ function injectStyles() {
         .audio-title em { color:var(--accent); font-style:italic; }
         .audio-subtitle { font-size:11px; color:var(--text3); font-family:'JetBrains Mono',monospace; letter-spacing:0.1em; margin-bottom:24px; text-transform:uppercase; }
 
-        .audio-orb-wrapper { position:relative; width:120px; height:120px; margin:0 auto 16px; }
-        .audio-ring { position:absolute; inset:0; border-radius:50%; border:1.5px solid rgba(0,229,160,0); transition:border-color 0.4s; pointer-events:none; }
-        .audio-orb-wrapper.active .audio-ring { border-color:rgba(0,229,160,0.3); animation:ring-expand 2s ease-out infinite; }
-        .audio-orb-wrapper.active .audio-ring:nth-child(2) { animation-delay:0.65s; }
-        .audio-orb-wrapper.active .audio-ring:nth-child(3) { animation-delay:1.3s; }
-        .audio-orb-wrapper.speaking .audio-ring { border-color:rgba(126,184,247,0.3); animation:ring-expand 2s ease-out infinite; }
+        .audio-orb-wrapper { position:relative; width:230px; height:230px; margin:0 auto 16px; transition:filter 0.4s; }
+        .audio-orb-wrapper.active { filter:drop-shadow(0 0 26px rgba(0,235,255,0.28)); }
+        .audio-orb-wrapper.speaking { filter:drop-shadow(0 0 26px rgba(120,190,255,0.3)); }
 
-        .audio-orb { position:absolute; inset:10px; border-radius:50%; background:radial-gradient(circle at 32% 30%,#00e5a0,#006644); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform 0.18s,box-shadow 0.3s; z-index:2; border:none; }
-        .audio-orb:hover { transform:scale(1.05); }
-        .audio-orb:active { transform:scale(0.95); }
-        .audio-orb svg { width:32px; height:32px; fill:#060810; transition:opacity 0.2s; position:absolute; }
+        #hologramCanvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+
+        .audio-orb { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:66px; height:66px; border-radius:50%; background:rgba(0,225,255,0.07); backdrop-filter:blur(6px); border:1px solid rgba(0,225,255,0.35); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform 0.18s,box-shadow 0.3s,border-color 0.3s,background 0.3s; z-index:2; box-shadow:0 0 22px rgba(0,225,255,0.22); }
+        .audio-orb:hover { transform:translate(-50%,-50%) scale(1.06); }
+        .audio-orb:active { transform:translate(-50%,-50%) scale(0.94); }
+        .audio-orb svg { width:26px; height:26px; fill:#e8fbff; transition:opacity 0.2s; position:absolute; }
         .audio-orb .icon-mic { opacity:1; }
         .audio-orb .icon-stop { opacity:0; }
         .audio-orb.listening .icon-mic { opacity:0; }
         .audio-orb.listening .icon-stop { opacity:1; }
-        .audio-orb.listening { animation:orb-pulse 1.8s ease-in-out infinite; }
-        .audio-orb.speaking { background:radial-gradient(circle at 32% 30%,#7eb8f7,#1a4a8a); animation:orb-pulse-blue 1.8s ease-in-out infinite; }
+        .audio-orb.listening { border-color:rgba(0,235,255,0.65); box-shadow:0 0 30px rgba(0,235,255,0.4); }
+        .audio-orb.speaking { background:rgba(120,190,255,0.09); border-color:rgba(120,190,255,0.65); box-shadow:0 0 30px rgba(120,190,255,0.4); }
         .audio-orb.speaking .icon-mic { opacity:0; }
         .audio-orb.speaking .icon-stop { opacity:1; }
-        .audio-orb.thinking { opacity:0.6; cursor:default; }
+        .audio-orb.thinking { border-color:rgba(255,190,60,0.55); opacity:0.9; cursor:default; }
 
         .audio-status { font-family:'JetBrains Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--text3); min-height:16px; margin-bottom:16px; transition:color 0.3s; }
         .audio-status.listening { color:var(--accent); }
@@ -116,10 +296,7 @@ function injectStyles() {
 
         .audio-unsupported { color:var(--red); font-size:12px; font-family:'JetBrains Mono',monospace; padding:16px; line-height:1.6; }
 
-        @keyframes ring-expand { 0% { transform:scale(1); opacity:0.6; } 100% { transform:scale(1.9); opacity:0; } }
         @keyframes audio-blink { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
-        @keyframes orb-pulse { 0%,100% { box-shadow:0 0 16px 4px rgba(0,229,160,0.2); } 50% { box-shadow:0 0 36px 12px rgba(0,229,160,0.42); } }
-        @keyframes orb-pulse-blue { 0%,100% { box-shadow:0 0 16px 4px rgba(126,184,247,0.2); } 50% { box-shadow:0 0 36px 12px rgba(126,184,247,0.42); } }
     `;
     document.head.appendChild(style);
 }
@@ -161,9 +338,7 @@ function buildOverlay() {
             <div class="audio-subtitle">Parle · Pensee repond a voix haute</div>
 
             <div class="audio-orb-wrapper" id="audioOrbWrapper">
-                <div class="audio-ring"></div>
-                <div class="audio-ring"></div>
-                <div class="audio-ring"></div>
+                <canvas id="hologramCanvas"></canvas>
                 <button class="audio-orb" id="audioOrb">
                     <svg class="icon-mic" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
                     <svg class="icon-stop" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
@@ -196,6 +371,9 @@ function buildOverlay() {
     document.getElementById('audioStopBtn')?.addEventListener('click', stopSpeaking);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlay(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && AudioState.isOpen) closeOverlay(); });
+
+    const hologramCanvas = document.getElementById('hologramCanvas');
+    if (hologramCanvas) Hologram.init(hologramCanvas);
 }
 
 // ============================================================
@@ -212,9 +390,46 @@ function startListening() {
     setOrbState('listening');
     setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
     clearInput();
+    connectMicAnalyser();
 
     // On délègue à une fonction qui crée le micro proprement
     startNativeRecognition();
+}
+
+// ============================================================
+//  MICRO → ANALYSEUR (pour la réactivité de l'hologramme)
+// ============================================================
+let micRequestId = 0;
+
+async function connectMicAnalyser() {
+    const requestId = ++micRequestId;
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Si l'écoute a été annulée pendant l'attente d'autorisation,
+        // on referme immédiatement ce flux pour éviter une fuite micro.
+        if (requestId !== micRequestId || !AudioState.isListening) {
+            stream.getTracks().forEach(t => t.stop());
+            return;
+        }
+        AudioState.micStream = stream;
+        const ctx = getAudioContext();
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        Hologram.connectAnalyser(analyser);
+    } catch (e) {
+        console.warn('[Hologram] Micro indisponible pour la visualisation :', e.message);
+    }
+}
+
+function disconnectMicAnalyser() {
+    micRequestId++; // invalide toute requête getUserMedia encore en attente
+    Hologram.disconnectAnalyser();
+    if (AudioState.micStream) {
+        AudioState.micStream.getTracks().forEach(t => t.stop());
+        AudioState.micStream = null;
+    }
 }
 
 function startNativeRecognition() {
@@ -274,6 +489,7 @@ function startNativeRecognition() {
         
         AudioState.isListening = false;
         AudioState.isIntentional = false;
+        disconnectMicAnalyser();
         setOrbState('idle');
         const msgs = {
             'not-allowed': 'Micro refusé - autorise le micro',
@@ -289,6 +505,7 @@ function startNativeRecognition() {
 function finalizeAndSend() {
     AudioState.isListening = false;
     AudioState.isIntentional = false;
+    disconnectMicAnalyser();
 
     if (AudioState.sessionTranscript) {
         AudioState.finalTranscript += AudioState.sessionTranscript;
@@ -411,11 +628,16 @@ async function speak(text) {
             const decoded = await ctx.decodeAudioData(buf);
             const src = ctx.createBufferSource();
             src.buffer = decoded;
-            src.connect(ctx.destination);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            src.connect(analyser);
+            analyser.connect(ctx.destination);
+            Hologram.connectAnalyser(analyser);
             AudioState.currentSource = src;
             src.onended = () => {
                 AudioState.isSpeaking = false;
                 AudioState.currentSource = null;
+                Hologram.disconnectAnalyser();
                 if (AudioState.isOpen) { setOrbState('idle'); setStatus('Appuie pour parler', ''); }
             };
             src.start(0);
@@ -450,6 +672,7 @@ function speakWebSpeech(text) {
         utt.volume = AUDIO_CONFIG.voiceVolume;
         if (AudioState.selectedVoice) utt.voice = AudioState.selectedVoice;
         utt.onstart = () => { AudioState.isSpeaking = true; setOrbState('speaking'); setStatus('Pensee parle...', 'speaking'); };
+        utt.onboundary = () => Hologram.pulse(0.55);
         utt.onend   = () => { index++; next(); };
         utt.onerror = () => { index++; next(); };
         AudioState.currentUtterance = utt;
@@ -466,6 +689,7 @@ function stopSpeaking() {
     AudioState.synth?.cancel();
     AudioState.isSpeaking = false;
     AudioState.currentUtterance = null;
+    Hologram.disconnectAnalyser();
     if (!AudioState.isListening) { setOrbState('idle'); setStatus('Appuie pour parler', ''); }
 }
 
@@ -481,12 +705,16 @@ function openOverlay() {
     setStatus('Appuie pour parler', '');
     loadVoices();
     if (AudioState.voices.length === 0) AudioState.synth.addEventListener('voiceschanged', loadVoices, { once: true });
+    Hologram.resize();
+    Hologram.start();
 }
 
 function closeOverlay() {
     AudioState.isOpen = false;
     stopListening();
     stopSpeaking();
+    disconnectMicAnalyser();
+    Hologram.stop();
     document.getElementById('audioOverlay')?.classList.remove('open');
     document.getElementById('liveAudioBtn')?.classList.remove('active');
 }
@@ -505,6 +733,7 @@ function setOrbState(state) {
     if (!orb || !wrapper) return;
     orb.className = 'audio-orb' + (state !== 'idle' ? ' ' + state : '');
     wrapper.className = 'audio-orb-wrapper' + (state === 'listening' ? ' active' : state === 'speaking' ? ' speaking' : '');
+    Hologram.setState(state);
 }
 
 function setInputText(text, isInterim) {
