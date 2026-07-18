@@ -809,16 +809,7 @@ function stopListening() {
 }
 
 function toggleListening() {
-    // Unlock audio depuis le geste utilisateur — critique sur mobile
-    getAudioContext();
-    // Unlock speechSynthesis : on parle une utterance vide silencieuse
-    // ICI dans le geste, pas dans speak() qui est async et hors geste
-    if (AudioState.synth && !AudioState._synthUnlocked) {
-        const unlock = new SpeechSynthesisUtterance('');
-        unlock.volume = 0;
-        AudioState.synth.speak(unlock);
-        AudioState._synthUnlocked = true;
-    }
+    getAudioContext(); 
     if (AudioState.isSpeaking) { stopSpeaking(); return; }
     if (AudioState.isIntentional) stopListening();
     else startListening();
@@ -930,17 +921,6 @@ async function speak(text) {
     AudioState.isSpeaking = true;
     setOrbState('speaking');
     setStatus('Pensee parle...', 'speaking');
-
-    // FIX MOBILE : resume AudioContext + unlock speechSynthesis
-    // Les mobiles suspendent l'audio hors geste utilisateur direct.
-    try { getAudioContext(); } catch(e) {}
-    if (AudioState.synth && AudioState.synth.paused) AudioState.synth.resume();
-    if (AudioState.synth && !AudioState._synthUnlocked) {
-        const unlock = new SpeechSynthesisUtterance('');
-        unlock.volume = 0;
-        AudioState.synth.speak(unlock);
-        AudioState._synthUnlocked = true;
-    }
 
     try {
         const response = await fetch('/api/tts', {
