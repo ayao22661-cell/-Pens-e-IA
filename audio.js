@@ -100,7 +100,8 @@ const Hologram = (function () {
         concentration:  { r: 60,  g: 255, b: 180 },
         empathie:       { r: 255, g: 140, b: 180 },
         enthousiasme:   { r: 255, g: 200, b: 60  },
-        incertitude:    { r: 160, g: 160, b: 200 }
+        incertitude:    { r: 160, g: 160, b: 200 },
+        curieux:        { r: 120, g: 230, b: 180 }
     };
     let currentEmotion = null, emotionIntensity = 0, emotionTarget = null, emotionIntensityTarget = 0;
     // Signatures cinétiques par émotion
@@ -111,7 +112,8 @@ const Hologram = (function () {
         concentration: { breathMul: 1.3, saccadeRate: 4000, driftAmp: 0.05 },
         empathie:      { breathMul: 0.9, saccadeRate: 2500, driftAmp: 0.12 },
         enthousiasme:  { breathMul: 1.5, saccadeRate: 800,  driftAmp: 0.28 },
-        incertitude:   { breathMul: 0.6, saccadeRate: 1500, driftAmp: 0.18 }
+        incertitude:   { breathMul: 0.6, saccadeRate: 1500, driftAmp: 0.18 },
+        curieux:       { breathMul: 1.2, saccadeRate: 1800, driftAmp: 0.20 }
     };
 
     // — Mémoire gestuelle —
@@ -566,75 +568,115 @@ const Hologram = (function () {
         if (now > nextBlink) {
             blinkPhase = 1;
             blinkT = now;
-            nextBlink = now + 2800 + Math.random() * 3500;
-            blinkDur = 80 + Math.random() * 60;
+            // Double clignement 15% du temps (comportement humain typique)
+            const isDouble = Math.random() < 0.15;
+            // Clignements plus fréquents sous concentration ou incertitude
+            const stressBonus = (state === 'thinking' || currentEmotion === 'incertitude') ? -700 : 0;
+            nextBlink = now + (isDouble ? 200 : 2600 + Math.random() * 3200) + stressBonus;
+            blinkDur = isDouble ? 50 + Math.random() * 25 : 70 + Math.random() * 55;
         }
-        let eyeOpen = 1;
+        // Semi-fermeture (paresse de paupière, légère fatigue en idle)
+        const lidDroop = (state === 'idle') ? 0.04 + Math.sin(ts / 7000) * 0.025 : 0;
+        let eyeOpen = 1 - lidDroop;
         if (blinkPhase === 1) {
-            const t = (now - blinkT) / (blinkDur * 0.45);
+            const t = (now - blinkT) / (blinkDur * 0.42);
             eyeOpen = Math.max(0, 1 - t * t);
             if (t >= 1) { blinkPhase = 2; blinkT = now; }
         } else if (blinkPhase === 2) {
-            const t = (now - blinkT) / (blinkDur * 0.55);
-            eyeOpen = Math.min(1, t * t);
+            const t = (now - blinkT) / (blinkDur * 0.58);
+            eyeOpen = Math.min(1 - lidDroop, t * t); // réouverture légèrement asymétrique
             if (t >= 1) blinkPhase = 0;
         }
 
         // ── Mouvement des pupilles ─────────────────────────────
         if (now > nextPupilMove) {
-            // Regard naturel : zones selon l'état
             if (state === 'thinking') {
-                // Regard vers le haut-gauche (mémoire/réflexion)
-                pupilTargetX = -0.18 - Math.random() * 0.12;
-                pupilTargetY = -0.14 - Math.random() * 0.08;
+                // Réflexion : regard haut-gauche (mémoire) ou haut-droit (création)
+                const side = Math.random() < 0.65 ? -1 : 1; // gauche dominant
+                pupilTargetX = side * (0.14 + Math.random() * 0.14);
+                pupilTargetY = -0.10 - Math.random() * 0.12;
             } else if (state === 'speaking') {
-                // Regard droit avec légères dérives
-                pupilTargetX = (Math.random() - 0.5) * 0.22;
-                pupilTargetY = (Math.random() - 0.5) * 0.12;
+                // Expression : regard droit + dérives expressives latérales
+                if (Math.random() < 0.25) {
+                    // Regard fuyant momentané (cherche ses mots)
+                    pupilTargetX = (Math.random() < 0.5 ? -1 : 1) * (0.18 + Math.random() * 0.1);
+                    pupilTargetY = (Math.random() - 0.5) * 0.15;
+                } else {
+                    // Contact maintenu avec l'interlocuteur
+                    pupilTargetX = (Math.random() - 0.5) * 0.14;
+                    pupilTargetY = (Math.random() - 0.5) * 0.08;
+                }
+            } else if (state === 'listening') {
+                // Écoute active : regard fixé + micro-saccades de traitement
+                pupilTargetX = (Math.random() - 0.5) * 0.12;
+                pupilTargetY = 0.02 + (Math.random() - 0.5) * 0.06;
             } else {
-                // Idle : regard légèrement vers l'utilisateur
-                pupilTargetX = (Math.random() - 0.5) * 0.18;
-                pupilTargetY = 0.04 + (Math.random() - 0.5) * 0.08;
+                // Idle : regard légèrement bas (posture détendue)
+                pupilTargetX = (Math.random() - 0.5) * 0.16;
+                pupilTargetY = 0.05 + (Math.random() - 0.5) * 0.07;
             }
-            nextPupilMove = now + 800 + Math.random() * 2200;
+            // Durée variable selon l'état (fixation plus longue en écoute)
+            const fixationBase = state === 'listening' ? 1200 : state === 'thinking' ? 600 : 900;
+            nextPupilMove = now + fixationBase + Math.random() * 1800;
         }
-        pupilX += (pupilTargetX - pupilX) * 0.06;
-        pupilY += (pupilTargetY - pupilY) * 0.06;
+        // Vitesse d'interp. différente : saccade rapide, dérive douce
+        const dist = Math.hypot(pupilTargetX - pupilX, pupilTargetY - pupilY);
+        const speed = dist > 0.15 ? 0.18 : 0.055; // saccade si grand mouvement
+        pupilX += (pupilTargetX - pupilX) * speed;
+        pupilY += (pupilTargetY - pupilY) * speed;
 
-        // ── Sourcils ──────────────────────────────────────────
+        // ── Sourcils (micro-expressions + asymétrie naturelle) ─────
         if (state === 'thinking') {
-            browTargetL = -0.12; browTargetR = -0.08; // froncés asymétriques
-        } else if (state === 'speaking' && level > 0.3) {
-            browTargetL = 0.08; browTargetR = 0.06; // légèrement levés
+            browTargetL = -0.14; browTargetR = -0.09; // froncement asymétrique
+        } else if (state === 'speaking' && level > 0.25) {
+            const expressionBrow = level * 0.12;
+            browTargetL = 0.06 + expressionBrow;
+            browTargetR = 0.04 + expressionBrow * 0.85;
         } else if (state === 'listening') {
-            browTargetL = 0.05; browTargetR = 0.05;
+            browTargetL = 0.06; browTargetR = 0.04;
         } else {
             browTargetL = 0; browTargetR = 0;
         }
-        // Émotion sur les sourcils
-        if (currentEmotion === 'surprise') { browTargetL = 0.22; browTargetR = 0.20; }
-        if (currentEmotion === 'concentration') { browTargetL = -0.16; browTargetR = -0.14; }
-        if (currentEmotion === 'hesitation') { browTargetL = -0.06; browTargetR = 0.06; } // asymétrie
-        browL += (browTargetL - browL) * 0.05;
-        browR += (browTargetR - browR) * 0.05;
+        if (currentEmotion === 'surprise') { browTargetL = 0.24; browTargetR = 0.21; }
+        if (currentEmotion === 'concentration') { browTargetL = -0.18; browTargetR = -0.13; }
+        if (currentEmotion === 'hesitation') { browTargetL = -0.07; browTargetR = 0.08; }
+        if (currentEmotion === 'empathie') { browTargetL = 0.10; browTargetR = 0.07; }
+        const browMicro = Math.sin(ts / 4300) * 0.012;
+        browL += (browTargetL + browMicro - browL) * 0.055;
+        browR += (browTargetR - browMicro * 0.7 - browR) * 0.055;
 
-        // ── Sourire / bouche ──────────────────────────────────
+        // ── Sourire / bouche (ouverture + vibrato + asymétrie) 
         if (state === 'speaking') {
-            // La bouche s'ouvre au rythme du niveau audio
-            mouthOpen += (level * 0.7 - mouthOpen) * 0.18;
+            // Ouverture audio + vibrato naturel des cordes vocales
+            const vibrato = Math.sin(ts * 0.031) * 0.022 + Math.sin(ts * 0.071) * 0.012;
+            mouthOpen += (level * 0.68 + vibrato - mouthOpen) * 0.20;
+        } else if (state === 'thinking') {
+            // Lèvres pincées en réflexion (comportement typique)
+            mouthOpen += (-0.02 - mouthOpen) * 0.06;
         } else {
-            mouthOpen += (0 - mouthOpen) * 0.08;
+            mouthOpen += (0 - mouthOpen) * 0.07;
         }
-        if (currentEmotion === 'enthousiasme' || currentEmotion === 'confiance') {
-            mouthTargetSmile = 0.55 + level * 0.2;
+        // Asymétrie légère (le sourire humain n'est jamais parfaitement symétrique)
+        const mouthAsym = Math.sin(ts / 9000) * 0.015;
+        const smileJitter = Math.sin(ts / 3200) * 0.018;
+        if (currentEmotion === 'enthousiasme') {
+            mouthTargetSmile = 0.60 + level * 0.22 + smileJitter;
+        } else if (currentEmotion === 'confiance') {
+            mouthTargetSmile = 0.45 + level * 0.15;
         } else if (currentEmotion === 'empathie') {
-            mouthTargetSmile = 0.3;
-        } else if (currentEmotion === 'hesitation' || currentEmotion === 'incertitude') {
-            mouthTargetSmile = -0.15;
+            mouthTargetSmile = 0.28 + smileJitter * 0.5;
+        } else if (currentEmotion === 'surprise') {
+            mouthTargetSmile = 0.05;
+        } else if (currentEmotion === 'hesitation') {
+            mouthTargetSmile = -0.10 + smileJitter;
+        } else if (currentEmotion === 'incertitude') {
+            mouthTargetSmile = -0.08;
+        } else if (currentEmotion === 'concentration') {
+            mouthTargetSmile = -0.05;
         } else {
-            mouthTargetSmile = 0.15;
+            mouthTargetSmile = 0.14 + smileJitter * 0.7;
         }
-        mouthSmile += (mouthTargetSmile - mouthSmile) * 0.04;
+        mouthSmile += (mouthTargetSmile - mouthSmile) * 0.045;
 
         // Rire (enthousiasme fort)
         if (currentEmotion === 'enthousiasme' && emotionIntensity > 0.7 && !laughing && now > laughUntil + 8000) {
@@ -648,19 +690,37 @@ const Hologram = (function () {
         }
 
         // ── Hochement de tête ─────────────────────────────────
-        if (now > nextNod && state === 'listening') {
-            neckNodTarget = 0.06 + Math.random() * 0.04;
-            nextNod = now + 1200 + Math.random() * 2000;
+        // Hochement selon état : acquiescement en écoute, micro-hochements en parole
+        if (now > nextNod) {
+            if (state === 'listening') {
+                // Hochement d'acquiescement
+                neckNodTarget = 0.06 + Math.random() * 0.05;
+                nextNod = now + 1000 + Math.random() * 2500;
+            } else if (state === 'speaking' && level > 0.2) {
+                // Micro-hochement expressif pendant la parole
+                neckNodTarget = 0.03 + Math.random() * 0.03;
+                nextNod = now + 600 + Math.random() * 1400;
+            } else {
+                nextNod = now + 2000 + Math.random() * 3000;
+            }
         }
-        neckNod += (neckNodTarget - neckNod) * 0.06;
-        neckNodTarget *= 0.96; // retour au neutre
-        // Inclinaison curiosité
-        if (currentEmotion === 'hesitation' || state === 'thinking') {
-            neckTiltTarget = 0.08;
+        neckNod += (neckNodTarget - neckNod) * 0.07;
+        neckNodTarget *= 0.93; // retour au neutre
+        // Inclinaison tête selon état + émotion
+        if (currentEmotion === 'hesitation') {
+            neckTiltTarget = 0.10; // inclinaison marquée
+        } else if (state === 'thinking') {
+            neckTiltTarget = 0.06 + Math.sin(ts / 5000) * 0.03; // oscillation douce
+        } else if (currentEmotion === 'empathie') {
+            neckTiltTarget = 0.07; // tête penchée empathique
+        } else if (currentEmotion === 'surprise') {
+            neckTiltTarget = -0.04; // recul
+        } else if (state === 'speaking') {
+            neckTiltTarget = Math.sin(ts / 3800) * 0.025; // balancement naturel
         } else {
-            neckTiltTarget = 0;
+            neckTiltTarget = Math.sin(ts / 8000) * 0.015; // respiration douce
         }
-        neckTilt += (neckTiltTarget - neckTilt) * 0.03;
+        neckTilt += (neckTiltTarget - neckTilt) * 0.035;
 
         ctx.save();
         ctx.globalAlpha = alpha;
@@ -712,29 +772,40 @@ const Hologram = (function () {
             ctx.ellipse(ex, eyeY, eyeRx, Math.max(0.5, openH), 0, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Iris
+            // Iris + dilatation pupillaire selon émotion
             if (eyeOpen > 0.1) {
                 const irisR = eyeRx * 0.55;
                 const px = ex + pupilX * eyeRx * 0.6;
                 const py = eyeY + pupilY * eyeRy * 0.6;
+                // Dilatation : grande en surprise/enthousiasme, petite en concentration
+                const dilate = currentEmotion === 'surprise' ? 0.50
+                             : currentEmotion === 'enthousiasme' ? 0.46
+                             : currentEmotion === 'concentration' ? 0.30
+                             : currentEmotion === 'empathie' ? 0.44
+                             : 0.38 + level * 0.08;
                 // Glow iris
                 const irisGlow = ctx.createRadialGradient(px, py, 0, px, py, irisR);
-                irisGlow.addColorStop(0, br + (0.55 * eyeOpen) + ')');
-                irisGlow.addColorStop(0.4, br + (0.35 * eyeOpen) + ')');
+                irisGlow.addColorStop(0, br + (0.58 * eyeOpen) + ')');
+                irisGlow.addColorStop(0.4, br + (0.36 * eyeOpen) + ')');
                 irisGlow.addColorStop(1, br + '0)');
                 ctx.beginPath();
                 ctx.fillStyle = irisGlow;
                 ctx.arc(px, py, irisR, 0, Math.PI * 2);
                 ctx.fill();
-                // Pupille (point sombre)
+                // Pupille diluée ou contractée
                 ctx.beginPath();
-                ctx.fillStyle = isLight ? 'rgba(20,30,50,0.6)' : 'rgba(0,0,0,0.55)';
-                ctx.arc(px, py, irisR * 0.38, 0, Math.PI * 2);
+                ctx.fillStyle = isLight ? 'rgba(20,30,50,0.6)' : 'rgba(0,0,0,0.60)';
+                ctx.arc(px, py, irisR * dilate, 0, Math.PI * 2);
                 ctx.fill();
-                // Reflet
+                // Double reflet (plus réaliste)
                 ctx.beginPath();
-                ctx.fillStyle = br + (0.8 * eyeOpen) + ')';
-                ctx.arc(px - irisR * 0.22, py - irisR * 0.28, irisR * 0.14, 0, Math.PI * 2);
+                ctx.fillStyle = br + (0.85 * eyeOpen) + ')';
+                ctx.arc(px - irisR * 0.22, py - irisR * 0.28, irisR * 0.13, 0, Math.PI * 2);
+                ctx.fill();
+                // Petit reflet secondaire (lumière ambiante)
+                ctx.beginPath();
+                ctx.fillStyle = br + (0.35 * eyeOpen) + ')';
+                ctx.arc(px + irisR * 0.14, py - irisR * 0.15, irisR * 0.07, 0, Math.PI * 2);
                 ctx.fill();
             }
         });
@@ -742,14 +813,15 @@ const Hologram = (function () {
         // ── NEZ (discret, deux petits points/lignes) ───────────
         const noseY = fs * 0.05;
         ctx.lineWidth = fs * 0.018;
-        ctx.strokeStyle = br + '0.35)';
-        // Narine gauche
+        // Frémissement : narines s'évasent légèrement en parole/surprise
+        const nostrilFlare = state === 'speaking' ? 0.025 + level * 0.008
+                           : currentEmotion === 'surprise' ? 0.032 : 0.025;
+        ctx.strokeStyle = br + (0.28 + level * 0.12) + ')';
         ctx.beginPath();
-        ctx.arc(-fs * 0.065, noseY, fs * 0.025, Math.PI * 0.1, Math.PI * 0.9);
+        ctx.arc(-fs * 0.065, noseY, fs * nostrilFlare, Math.PI * 0.1, Math.PI * 0.9);
         ctx.stroke();
-        // Narine droite
         ctx.beginPath();
-        ctx.arc(fs * 0.065, noseY, fs * 0.025, Math.PI * 0.1, Math.PI * 0.9);
+        ctx.arc(fs * 0.065, noseY, fs * nostrilFlare * 0.94, Math.PI * 0.1, Math.PI * 0.9);
         ctx.stroke();
 
         // ── BOUCHE ────────────────────────────────────────────
@@ -761,17 +833,17 @@ const Hologram = (function () {
         ctx.lineWidth = fs * 0.028;
         ctx.strokeStyle = br + (0.75 + level * 0.2) + ')';
 
-        // Lèvre supérieure
+        // Lèvre supérieure (légère asymmétrie naturelle)
         ctx.beginPath();
-        ctx.moveTo(-mouthW, mouthY - openAmp * 0.3);
-        ctx.quadraticCurveTo(0, mouthY - openAmp * 0.3 - smileAmp, mouthW, mouthY - openAmp * 0.3);
+        ctx.moveTo(-mouthW, mouthY - openAmp * 0.3 + mouthAsym * fs);
+        ctx.quadraticCurveTo(0, mouthY - openAmp * 0.3 - smileAmp, mouthW, mouthY - openAmp * 0.3 - mouthAsym * fs * 0.5);
         ctx.stroke();
 
         // Lèvre inférieure (seulement si bouche ouverte ou sourire)
         if (openAmp > 0.005 || Math.abs(smileAmp) > 0.005) {
             ctx.beginPath();
             ctx.moveTo(-mouthW * 0.85, mouthY + openAmp * 0.7);
-            ctx.quadraticCurveTo(0, mouthY + openAmp * 0.7 + smileAmp * 0.5, mouthW * 0.85, mouthY + openAmp * 0.7);
+            ctx.quadraticCurveTo(0, mouthY + openAmp * 0.7 + smileAmp * 0.5, mouthW * 0.85, mouthY + openAmp * 0.7 - mouthAsym * fs * 0.3);
             ctx.stroke();
         }
 
@@ -944,7 +1016,7 @@ function startListening() {
     if (AudioState.isListening) return;
     stopSpeaking();
 
-    // Reset complet : tue toute ancienne instance de reconnaissance
+    // FIX BOUTON : reset complet - tue toute ancienne instance recognition
     // pour éviter les onend parasites des sessions précédentes
     if (AudioState.recognition) {
         try { AudioState.recognition.abort(); } catch(e) {}
@@ -952,16 +1024,16 @@ function startListening() {
     }
     AudioState.isRestarting = false;
     AudioState.sessionTranscript = '';
+    if (AudioState._safetyTimer) { clearTimeout(AudioState._safetyTimer); AudioState._safetyTimer = null; }
 
     AudioState.isListening = true;
-    AudioState.isIntentional = true; 
+    AudioState.isIntentional = true;
     AudioState.finalTranscript = '';
 
     setOrbState('listening');
     setStatus('Écoute en cours (appuie pour envoyer)...', 'listening');
     clearInput();
 
-    // On délègue à une fonction qui crée le micro proprement
     startNativeRecognition();
 }
 
@@ -1047,13 +1119,11 @@ function startNativeRecognition() {
     };
 
     recognition.onend = () => {
-        // Si une relance automatique est en cours, on ignore cet onend
+        // Si une relance auto est en cours, on ignore cet onend
         // SAUF si l'utilisateur a appuyé pour envoyer pendant ce restart
         if (AudioState.isRestarting) {
             AudioState.isRestarting = false;
-            if (!AudioState.isIntentional) {
-                finalizeAndSend();
-            }
+            if (!AudioState.isIntentional) { finalizeAndSend(); }
             return;
         }
 
@@ -1110,11 +1180,8 @@ function startNativeRecognition() {
 
 // Fonction pour envoyer à l'IA
 function finalizeAndSend() {
-    // Annule le timer de sécurité si on arrive ici par la voie normale (onend)
-    if (AudioState._safetyTimer) {
-        clearTimeout(AudioState._safetyTimer);
-        AudioState._safetyTimer = null;
-    }
+    // Annuler le safety timer si on arrive ici normalement
+    if (AudioState._safetyTimer) { clearTimeout(AudioState._safetyTimer); AudioState._safetyTimer = null; }
     AudioState.isListening = false;
     AudioState.isIntentional = false;
     AudioState.isRestarting = false;
@@ -1139,9 +1206,8 @@ function finalizeAndSend() {
 function stopListening() {
     AudioState.isIntentional = false; // Désactive la relance auto
 
-    // Timeout de sécurité : si onend ne se déclenche jamais
-    // (recognition déjà morte, état instable, bug Android),
-    // on force l'envoi après 600ms
+    // FIX BOUTON : safety timer - si onend ne se déclenche jamais
+    // (recognition morte, Android instable), on force l'envoi après 600ms
     if (AudioState._safetyTimer) clearTimeout(AudioState._safetyTimer);
     AudioState._safetyTimer = setTimeout(() => {
         AudioState._safetyTimer = null;
@@ -1152,7 +1218,7 @@ function stopListening() {
     }, 600);
 
     try {
-        AudioState.recognition?.stop(); // Déclenche onend normalement
+        AudioState.recognition?.stop();
     } catch(e) {
         clearTimeout(AudioState._safetyTimer);
         AudioState._safetyTimer = null;
@@ -1215,9 +1281,11 @@ async function sendToAI(text) {
                         if (em.e && typeof em.i === 'number') {
                             Hologram.setEmotion(em.e, em.i);
                         }
+                        // Stocker la posture vocale pour l'injecter dans speakWebSpeech
+                        if (em.v) AudioState.voiceProfile = em.v;
+                        if (typeof em.r === 'number') AudioState.voiceRhythm = em.r;
                     } catch {}
                     emotionParsed = true;
-                    // Ne pas ajouter le signal émotion au texte
                     fullReply += chunk.slice(0, emStart) + chunk.slice(emEnd + 1);
                     continue;
                 }
@@ -1227,7 +1295,10 @@ async function sendToAI(text) {
 
         const clean = cleanForSpeech(fullReply);
         setOutputText(clean);
-        speak(clean);
+        speak(clean, AudioState.voiceProfile, AudioState.voiceRhythm);
+        // Reset pour le prochain tour
+        AudioState.voiceProfile = null;
+        AudioState.voiceRhythm = null;
 
     } catch (err) {
         console.error('[Audio] Erreur:', err);
@@ -1242,7 +1313,7 @@ function cleanForSpeech(text) {
         .replace(/<EM>[\s\S]*?<\/EM>/gi, '')          // <EM>...</EM> fermé
         .replace(/<EM>[^\n]*/gi, '')                   // <EM> non fermé (Gemma)
         .replace(/\x02EM:[^\x03]*\x03/g, '')           // signal binaire \x02...\x03
-        .replace(/\{"e":"[^"]+","i":[0-9.]+\}/g, '')  // JSON brut échappé par Gemma
+        .replace(/\{"e":"[^"]+","i":[0-9.]+(?:,"v":"[^"]*")?(?:,"r":[0-9.]+)?\}/g, '')  // JSON émotion brut
         // — Balises de raisonnement —
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/<\|channel>thought[\s\S]*?<channel\|>/g, '')
@@ -1268,7 +1339,7 @@ function loadVoices() {
         || null;
 }
 
-async function speak(text) {
+async function speak(text, voiceProfile, rhythmMul) {
     if (!text) return;
     stopSpeaking();
 
@@ -1308,26 +1379,57 @@ async function speak(text) {
         }
 
         const data = await response.json().catch(() => ({ fallback: true, text }));
-        speakWebSpeech(data.text || text);
+        speakWebSpeech(data.text || text, voiceProfile, rhythmMul);
 
     } catch (err) {
         console.warn('[Audio] TTS API indisponible, fallback Web Speech:', err.message);
-        speakWebSpeech(text);
+        speakWebSpeech(text, voiceProfile, rhythmMul);
     }
 }
 
-function speakWebSpeech(text) {
+// Paramètres vocaux selon la posture du signal émotion
+const VOICE_PROFILES = {
+    chaleureux: { pitchMod: +0.06, rateMod: -0.04, volumeMod: +0.03 },
+    pose:       { pitchMod: -0.04, rateMod: -0.10, volumeMod:  0.00 },
+    vif:        { pitchMod: +0.04, rateMod: +0.12, volumeMod: +0.02 },
+    doux:       { pitchMod: -0.02, rateMod: -0.08, volumeMod: -0.05 },
+    grave:      { pitchMod: -0.10, rateMod: -0.06, volumeMod: +0.02 },
+    energique:  { pitchMod: +0.08, rateMod: +0.10, volumeMod: +0.05 },
+    curieux:    { pitchMod: +0.05, rateMod: +0.02, volumeMod:  0.00 }
+};
+
+function speakWebSpeech(text, voiceProfile, rhythmMul) {
     if (!AudioState.synth) return;
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+
+    // Découpage humain : phrases + groupes de mots courts (cola de souffle)
+    // On respecte aussi les virgules et tirets comme micro-pauses naturelles
+    const rawSentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
+    const sentences = rawSentences.map(s => s.trim()).filter(Boolean);
     let index = 0;
 
-    // Simulation de niveau audio pour animer l'hologramme pendant Web Speech
+    // Profil vocal : valeurs de base + modifications émotionnelles
+    const profile = VOICE_PROFILES[voiceProfile] || VOICE_PROFILES.chaleureux;
+    const baseRate = Math.min(1.4, Math.max(0.7,
+        AUDIO_CONFIG.voiceRate * (rhythmMul || 1.0) + profile.rateMod
+    ));
+    const basePitch = Math.min(1.5, Math.max(0.5,
+        AUDIO_CONFIG.voicePitch + profile.pitchMod
+    ));
+    const baseVolume = Math.min(1.0, Math.max(0.5,
+        AUDIO_CONFIG.voiceVolume + profile.volumeMod
+    ));
+
+    // Simulation niveau audio pour animer l'hologramme pendant Web Speech
     let speakSimInterval = null;
     function startSpeakSim() {
         if (speakSimInterval) return;
+        // Variation biométrique : pulse irrégulier calqué sur une vraie voix
         speakSimInterval = setInterval(() => {
-            if (AudioState.isSpeaking) Hologram.pulse(0.18 + Math.random() * 0.22);
-        }, 120);
+            if (!AudioState.isSpeaking) return;
+            const base = 0.15 + Math.random() * 0.20;
+            const burst = Math.random() < 0.12 ? 0.25 : 0; // pic occasionnel (consonne forte)
+            Hologram.pulse(base + burst);
+        }, 80 + Math.random() * 60); // intervalle irrégulier
     }
     function stopSpeakSim() {
         if (speakSimInterval) { clearInterval(speakSimInterval); speakSimInterval = null; }
@@ -1341,16 +1443,35 @@ function speakWebSpeech(text) {
             setStatus('Appuie pour parler', '');
             return;
         }
-        const utt = new SpeechSynthesisUtterance(sentences[index].trim());
-        utt.lang   = AUDIO_CONFIG.lang;
-        utt.rate   = AUDIO_CONFIG.voiceRate;
-        utt.pitch  = AUDIO_CONFIG.voicePitch;
-        utt.volume = AUDIO_CONFIG.voiceVolume;
+
+        const sentence = sentences[index].trim();
+        const utt = new SpeechSynthesisUtterance(sentence);
+        utt.lang = AUDIO_CONFIG.lang;
         if (AudioState.selectedVoice) utt.voice = AudioState.selectedVoice;
-        utt.onstart = () => { AudioState.isSpeaking = true; setOrbState('speaking'); setStatus('Pensee parle...', 'speaking'); startSpeakSim(); };
-        utt.onboundary = () => Hologram.pulse(0.55);
-        utt.onend   = () => { stopSpeakSim(); index++; next(); };
+
+        // Variation légère entre phrases (respiration naturelle)
+        const sentenceVar = 1 + (Math.random() - 0.5) * 0.06;
+        utt.rate   = baseRate * sentenceVar;
+        utt.pitch  = basePitch;
+        utt.volume = baseVolume;
+
+        // Micro-pause avant chaque phrase (simule la prise d'air)
+        const pauseMs = index === 0 ? 0 : 120 + Math.random() * 160;
+
+        utt.onstart = () => {
+            AudioState.isSpeaking = true;
+            setOrbState('speaking');
+            setStatus('Pensée parle...', 'speaking');
+            startSpeakSim();
+        };
+        utt.onboundary = (e) => {
+            // Pulse plus fort sur les mots accentués (fin de groupe de souffle)
+            const intensity = e.name === 'sentence' ? 0.65 : 0.35 + Math.random() * 0.2;
+            Hologram.pulse(intensity);
+        };
+        utt.onend = () => { stopSpeakSim(); index++; setTimeout(next, pauseMs); };
         utt.onerror = () => { stopSpeakSim(); index++; next(); };
+
         AudioState.currentUtterance = utt;
         AudioState.synth.speak(utt);
     }
