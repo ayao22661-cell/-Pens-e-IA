@@ -264,6 +264,19 @@ const Hologram = (function () {
             targetLevel = Math.min(1, Math.sqrt(sum / analyserData.length) * 3.2);
         } else if (state === 'idle') {
             targetLevel = 0.12 + Math.sin(performance.now() / 900) * 0.05;
+        } else if (state === 'listening') {
+            const t = performance.now();
+            const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+                // SIMULATION BIOMÉTRIQUE : On recrée les variations d'une voix humaine
+                // avec des turbulences aléatoires pour faire danser l'hologramme sur mobile.
+                const voiceWaves = Math.sin(t / 50) * 0.09 + Math.sin(t / 120) * 0.05;
+                const voiceNoise = Math.random() * 0.15;
+                targetLevel = 0.13 + Math.max(0, voiceWaves + voiceNoise);
+            } else {
+                targetLevel *= 0.94; // Sur PC, le vrai micro prend le relais
+            }
         } else {
             targetLevel *= 0.94;
         }
@@ -750,16 +763,18 @@ function startNativeRecognition() {
     };
 
     recognition.onend = () => {
-        if (!AudioState.isIntentional) {
-            // ARRÊT MANUEL : L'utilisateur a cliqué pour envoyer.
+        const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+        // Si c'est un arrêt manuel OU si on est sur mobile, on arrête les bips en boucle.
+        // Le comportement devient intelligent : tu parles, et dès que tu t'arrêtes, ça envoie tout seul.
+        if (!AudioState.isIntentional || isMobile) {
             finalizeAndSend();
         } else {
-            // COUPURE SYSTÈME ANDROID : On sauvegarde l'historique...
+            // Sur PC, la relance en continu fonctionne sans bruit parasite
             if (AudioState.sessionTranscript) {
                 AudioState.finalTranscript += AudioState.sessionTranscript;
                 AudioState.sessionTranscript = '';
             }
-            // ... ET ON CREE UN NOUVEAU MICRO POUR VIDER LE CACHE
             try {
                 startNativeRecognition();
             } catch (e) {
