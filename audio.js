@@ -738,7 +738,9 @@ function startNativeRecognition() {
     // === AJOUT ICI ===
     recognition.onstart = () => {
         if (AudioState.currentInstanceId === instanceId && AudioState.isListening) {
-            connectMicAnalyser();
+            // Petit délai sur mobile : évite le conflit getUserMedia vs SpeechRecognition
+            const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+            setTimeout(() => connectMicAnalyser(), isMobile ? 300 : 0);
         }
     };
     // =================
@@ -776,7 +778,12 @@ function startNativeRecognition() {
                 AudioState.sessionTranscript = '';
             }
             try {
-                startNativeRecognition();
+                // Délai de sécurité : évite les crashes si le navigateur ne peut pas relancer immédiatement
+                setTimeout(() => {
+                    if (AudioState.isListening && AudioState.isIntentional) {
+                        startNativeRecognition();
+                    }
+                }, 150);
             } catch (e) {
                 finalizeAndSend();
             }
@@ -784,7 +791,8 @@ function startNativeRecognition() {
     };
 
     recognition.onerror = (event) => {
-        if (event.error === 'no-speech') return; 
+        // 'aborted' arrive sur Android Chrome quand la session est coupée/relancée
+        if (event.error === 'no-speech' || event.error === 'aborted') return;
         
         AudioState.isListening = false;
         AudioState.isIntentional = false;
@@ -832,7 +840,9 @@ function stopListening() {
 }
 
 function toggleListening() {
-    getAudioContext(); 
+    // Déverrouille le contexte audio directement dans le geste utilisateur (obligatoire iOS)
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') ctx.resume();
     if (AudioState.isSpeaking) { stopSpeaking(); return; }
     if (AudioState.isIntentional) stopListening();
     else startListening();
