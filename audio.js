@@ -60,7 +60,11 @@ const Hologram = (function () {
     let analyser = null, analyserData = null;
     let state = 'idle';
     let glitchUntil = 0, nextGlitchAt = 0;
-    let parallels = [], meridians = [];
+    let parallels = [], meridians = [], allLines = [];
+    let rings = [];
+    let materializeStart = 0;
+
+    const MATERIALIZE_MS = 950;
 
     const PALETTE = {
         idle:      { r: 0,   g: 220, b: 255 },
@@ -70,8 +74,10 @@ const Hologram = (function () {
     };
     const SPEED = { idle: 0.0035, listening: 0.006, thinking: 0.013, speaking: 0.008 };
 
+    function rand1() { return (Math.random() - 0.5) * 2; }
+
     function sphericalToCartesian(lat, lon) {
-        return { x: Math.cos(lat) * Math.cos(lon), y: Math.sin(lat), z: Math.cos(lat) * Math.sin(lon) };
+        return { x: Math.cos(lat) * Math.cos(lon), y: Math.sin(lat), z: Math.cos(lat) * Math.sin(lon), sx: rand1(), sy: rand1() };
     }
 
     function buildGeometry() {
@@ -89,6 +95,26 @@ const Hologram = (function () {
             for (let j = 0; j <= segs; j++) meridian.push(sphericalToCartesian((Math.PI * j / segs) - Math.PI / 2, lon));
             meridians.push(meridian);
         }
+        allLines = [...parallels, ...meridians];
+    }
+
+    function buildRings() {
+        // Anneaux orbitaux type Saturne : cercles plats inclinés, chacun avec
+        // sa propre vitesse de rotation + un point satellite qui orbite plus vite
+        const segs = 72;
+        const configs = [
+            { radiusMul: 1.12, tilt: -0.5, speed: 0.011,  satSpeed: 0.9  },
+            { radiusMul: 1.27, tilt: 0.18, speed: -0.007, satSpeed: -1.3 },
+            { radiusMul: 1.42, tilt: 0.55, speed: 0.015,  satSpeed: 0.6  }
+        ];
+        rings = configs.map(cfg => {
+            const points = [];
+            for (let i = 0; i <= segs; i++) {
+                const th = (Math.PI * 2 * i) / segs;
+                points.push({ x: Math.cos(th) * cfg.radiusMul, y: 0, z: Math.sin(th) * cfg.radiusMul });
+            }
+            return { ...cfg, points, angle: Math.random() * Math.PI * 2, satAngle: Math.random() * Math.PI * 2 };
+        });
     }
 
     function rotate(p, ay, ax) {
@@ -121,6 +147,7 @@ const Hologram = (function () {
         canvas = canvasEl;
         ctx = canvas.getContext('2d');
         if (!parallels.length) buildGeometry();
+        if (!rings.length) buildRings();
         resize();
         scheduleGlitch();
     }
@@ -130,6 +157,7 @@ const Hologram = (function () {
     function connectAnalyser(node) { analyser = node; analyserData = new Uint8Array(analyser.frequencyBinCount); }
     function disconnectAnalyser() { analyser = null; analyserData = null; }
     function scheduleGlitch() { nextGlitchAt = performance.now() + 1800 + Math.random() * 2600; }
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 
     function readLevel() {
         if (analyser && analyserData) {
@@ -149,6 +177,13 @@ const Hologram = (function () {
         rafId = requestAnimationFrame(draw);
         if (!ctx || !w || !h) return;
         readLevel();
+
+        // Matérialisation : à l'ouverture, l'hologramme s'assemble à partir de
+        // particules dispersées et fond en opacité (effet "mise sous tension")
+        const matT = materializeStart ? Math.min(1, (ts - materializeStart) / MATERIALIZE_MS) : 1;
+        const matEase = easeOutCubic(matT);
+        const scatterAmp = (1 - matEase) * baseRadius * 1.3;
+
         angleY += SPEED[state] * (1 + level * 0.6);
         angleX = Math.sin(ts / 3000) * 0.18;
 
@@ -157,8 +192,10 @@ const Hologram = (function () {
 
         const glitching = ts < glitchUntil;
         if (!glitching && ts > nextGlitchAt) { glitchUntil = ts + 90 + Math.random() * 120; scheduleGlitch(); }
+        if (matT < 1 && Math.random() < 0.04) glitchUntil = ts + 60 + Math.random() * 80;
 
         ctx.save();
+        ctx.globalAlpha = matEase;
         if (glitching) ctx.translate((Math.random() - 0.5) * 10, 0);
 
         const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius * 1.9);
@@ -169,13 +206,45 @@ const Hologram = (function () {
 
         const radiusRatio = 1 + level * 0.22;
 
+        // ── Anneaux orbitaux (type Saturne) ───────────────────
+        rings.forEach(ring => {
+            ring.angle += ring.speed * (1 + level * 0.3);
+            ring.satAngle += ring.speed * ring.satSpeed * 3;
+
+            const pts = ring.points.map(p => {
+                const spun = rotate(p, ring.angle, ring.tilt);
+                const cam = rotate(spun, 0, angleX * 0.4);
+                return project({ x: cam.x * radiusRatio, y: cam.y * radiusRatio, z: cam.z });
+            });
+            let avgZ = 0; pts.forEach(pt => avgZ += pt.z); avgZ /= pts.length;
+            ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${0.14 + ((avgZ + 1) / 2) * 0.3})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            pts.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+            ctx.closePath();
+            ctx.stroke();
+
+            // Satellite lumineux orbitant plus vite que l'anneau
+            const satBase = { x: Math.cos(ring.satAngle) * ring.radiusMul, y: 0, z: Math.sin(ring.satAngle) * ring.radiusMul };
+            const satSpun = rotate(satBase, ring.angle, ring.tilt);
+            const satCam = rotate(satSpun, 0, angleX * 0.4);
+            const satPt = project({ x: satCam.x * radiusRatio, y: satCam.y * radiusRatio, z: satCam.z });
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(${Math.min(255, c.r + 30)},${Math.min(255, c.g + 30)},${Math.min(255, c.b + 30)},${0.6 + satPt.persp * 0.4})`;
+            ctx.arc(satPt.x, satPt.y, 1.6 + satPt.persp * 1.6, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // ── Sphère filaire ─────────────────────────────────────
         ctx.lineWidth = 1;
-        [...parallels, ...meridians].forEach(line => {
+        allLines.forEach(line => {
             let avgZ = 0;
             const pts = line.map(p => {
                 const r = rotate(p, angleY, angleX);
                 avgZ += r.z;
-                return project({ x: r.x * radiusRatio, y: r.y * radiusRatio, z: r.z });
+                const proj = project({ x: r.x * radiusRatio, y: r.y * radiusRatio, z: r.z });
+                if (matT < 1) { proj.x += p.sx * scatterAmp; proj.y += p.sy * scatterAmp; }
+                return proj;
             });
             avgZ /= line.length;
             ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${0.12 + ((avgZ + 1) / 2) * 0.35})`;
@@ -190,6 +259,7 @@ const Hologram = (function () {
             if (i % 3 !== 0) return;
             const r = rotate(p, angleY * 1.4, angleX);
             const pt = project({ x: r.x * radiusRatio, y: r.y * radiusRatio, z: r.z });
+            if (matT < 1) { pt.x += p.sx * scatterAmp; pt.y += p.sy * scatterAmp; }
             const jitter = level * 3;
             ctx.beginPath();
             ctx.fillStyle = `rgba(${c.r},${Math.min(255, c.g + 20)},${c.b},${0.4 + pt.persp * 0.5})`;
@@ -206,10 +276,10 @@ const Hologram = (function () {
         ctx.fillStyle = scanGrad;
         ctx.fillRect(0, scanY - 10, w, 20);
 
-        ctx.globalAlpha = 0.05;
+        ctx.globalAlpha = 0.05 * matEase;
         ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},1)`;
         for (let y = 0; y < h; y += 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = matEase;
 
         ctx.beginPath();
         ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${0.5 + level * 0.3})`;
@@ -220,7 +290,10 @@ const Hologram = (function () {
         ctx.restore();
     }
 
-    function start() { if (!rafId) rafId = requestAnimationFrame(draw); }
+    function start() {
+        materializeStart = performance.now();
+        if (!rafId) rafId = requestAnimationFrame(draw);
+    }
     function stop() { if (rafId) cancelAnimationFrame(rafId); rafId = null; }
 
     return { init, start, stop, resize, setState, pulse, connectAnalyser, disconnectAnalyser };
