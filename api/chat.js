@@ -163,15 +163,25 @@ export default async function handler(req) {
     // Émotions possibles : confiance, hesitation, surprise, concentration, empathie, enthousiasme, incertitude
     // Intensité : float 0.0–1.0
     const EMOTION_INSTRUCTION =
-        "\n\n[SIGNAL ÉMOTIONNEL — OBLIGATOIRE]\n" +
-        "Commence CHAQUE réponse par une ligne JSON compacte sur une seule ligne, sans espaces, " +
-        "entre les balises <EM> et </EM>, représentant ton état émotionnel face à cette question. " +
-        "Format EXACT : <EM>{\"e\":\"EMOTION\",\"i\":INTENSITE}</EM>\n" +
-        "Émotions disponibles : confiance, hesitation, surprise, concentration, empathie, enthousiasme, incertitude\n" +
-        "Intensité : nombre entre 0.0 et 1.0\n" +
-        "Exemple : <EM>{\"e\":\"concentration\",\"i\":0.85}</EM>\n" +
-        "Cette balise doit être la toute première chose dans ta réponse, avant tout autre texte. " +
-        "Ne la mentionne jamais à l'utilisateur. C'est un signal interne invisible.";
+        "\n\n[SIGNAL ÉMOTIONNEL + VOCAL — OBLIGATOIRE]\n" +
+        "Commence CHAQUE réponse par un JSON compact sur UNE seule ligne, entre <EM> et </EM>.\n" +
+        "Format EXACT (respecte tous les champs) :\n" +
+        "<EM>{\"e\":\"EMOTION\",\"i\":INTENSITE,\"v\":\"VOIX\",\"r\":RYTHME}</EM>\n\n" +
+        "Champs :\n" +
+        "• e (émotion) : confiance | hesitation | surprise | concentration | empathie | enthousiasme | incertitude\n" +
+        "• i (intensité) : float 0.0–1.0\n" +
+        "• v (voix/posture vocale) : chaleureux | pose | vif | doux | grave | energique | curieux\n" +
+        "  - chaleureux = ton proche, empathique. pose = calme, mesuré. vif = rapide, alerte.\n" +
+        "  - doux = bienveillant, rassurant. grave = sérieux, réfléchi. energique = enthousiaste.\n" +
+        "  - curieux = questionneur, montant en fin de phrase.\n" +
+        "• r (rythme relatif) : float 0.7 (lent/posé) à 1.3 (rapide/enthousiaste). Défaut 1.0.\n\n" +
+        "Exemples :\n" +
+        "<EM>{\"e\":\"concentration\",\"i\":0.85,\"v\":\"grave\",\"r\":0.85}</EM>\n" +
+        "<EM>{\"e\":\"enthousiasme\",\"i\":0.9,\"v\":\"energique\",\"r\":1.2}</EM>\n" +
+        "<EM>{\"e\":\"empathie\",\"i\":0.7,\"v\":\"doux\",\"r\":0.9}</EM>\n\n" +
+        "Choisis toujours selon le VRAI contenu de ta réponse. " +
+        "Une mauvaise nouvelle → empathie + doux + 0.85. Une idée excitante → enthousiasme + energique + 1.15. " +
+        "Cette balise est la toute première chose dans ta réponse. Ne la mentionne jamais à l'utilisateur.";
 
     const systemInstruction = rawSystemInstruction
         ? rawSystemInstruction + ANTI_INTRO_GUARD + EMOTION_INSTRUCTION
