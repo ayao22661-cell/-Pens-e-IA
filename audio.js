@@ -1040,8 +1040,12 @@ function startNativeRecognition() {
 
     recognition.onend = () => {
         // Si une relance automatique est en cours, on ignore cet onend
+        // SAUF si l'utilisateur a appuyé pour envoyer pendant ce restart
         if (AudioState.isRestarting) {
             AudioState.isRestarting = false;
+            if (!AudioState.isIntentional) {
+                finalizeAndSend();
+            }
             return;
         }
 
