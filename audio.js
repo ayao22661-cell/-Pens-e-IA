@@ -186,8 +186,21 @@ const Hologram = (function () {
 
         angleY += SPEED[state] * (1 + level * 0.6);
         angleX = Math.sin(ts / 3000) * 0.18;
+        if (state === 'speaking') {
+            // Dérive lente de l'axe, comme une tête qui cherche ses mots
+            angleX += Math.sin(ts / 5200 + 1.7) * 0.09 + Math.sin(ts / 1900 + 0.3) * 0.04;
+        }
 
-        const c = PALETTE[state];
+        let c = PALETTE[state];
+        if (state === 'speaking') {
+            // Chaleur humaine : le cyan vire vers un blanc chaud sur les pics vocaux
+            const warmth = Math.min(1, level * 1.3);
+            c = {
+                r: lerp(c.r, 255, warmth),
+                g: lerp(c.g, 235, warmth),
+                b: lerp(c.b, 210, warmth * 0.7)
+            };
+        }
         ctx.clearRect(0, 0, w, h);
 
         const glitching = ts < glitchUntil;
@@ -204,15 +217,28 @@ const Hologram = (function () {
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, w, h);
 
-        const radiusRatio = 1 + level * 0.22;
+        let radiusRatio = 1 + level * 0.22;
+        if (state === 'speaking') {
+            // Respiration organique : plusieurs fréquences superposées, jamais identique
+            const t = ts / 1000;
+            const breath = Math.sin(t * 0.9) * 0.35 + Math.sin(t * 1.37 + 1.1) * 0.25 +
+                            Math.sin(t * 0.53 + 2.7) * 0.25 + Math.sin(t * 2.11 + 0.4) * 0.15;
+            radiusRatio += breath * 0.05;
+        }
 
         // ── Anneaux orbitaux (type Saturne) ───────────────────
         rings.forEach(ring => {
             ring.angle += ring.speed * (1 + level * 0.3);
             ring.satAngle += ring.speed * ring.satSpeed * 3;
 
+            let tilt = ring.tilt;
+            if (state === 'speaking') {
+                // Les anneaux se désaxent légèrement pendant la parole
+                tilt += Math.sin(ts / 650 + ring.tilt * 10) * level * 0.12;
+            }
+
             const pts = ring.points.map(p => {
-                const spun = rotate(p, ring.angle, ring.tilt);
+                const spun = rotate(p, ring.angle, tilt);
                 const cam = rotate(spun, 0, angleX * 0.4);
                 return project({ x: cam.x * radiusRatio, y: cam.y * radiusRatio, z: cam.z });
             });
@@ -226,7 +252,7 @@ const Hologram = (function () {
 
             // Satellite lumineux orbitant plus vite que l'anneau
             const satBase = { x: Math.cos(ring.satAngle) * ring.radiusMul, y: 0, z: Math.sin(ring.satAngle) * ring.radiusMul };
-            const satSpun = rotate(satBase, ring.angle, ring.tilt);
+            const satSpun = rotate(satBase, ring.angle, tilt);
             const satCam = rotate(satSpun, 0, angleX * 0.4);
             const satPt = project({ x: satCam.x * radiusRatio, y: satCam.y * radiusRatio, z: satCam.z });
             ctx.beginPath();
@@ -237,12 +263,19 @@ const Hologram = (function () {
 
         // ── Sphère filaire ─────────────────────────────────────
         ctx.lineWidth = 1;
-        allLines.forEach(line => {
+        allLines.forEach((line, li) => {
             let avgZ = 0;
-            const pts = line.map(p => {
+            const pts = line.map((p, pi) => {
+                let lr = radiusRatio;
+                if (state === 'speaking' && level > 0.02) {
+                    // Morphing organique : distorsion irrégulière au rythme de la voix
+                    const seed = li * 7 + pi;
+                    const n = Math.sin(ts / 180 + seed * 0.9) * 0.5 + Math.sin(ts / 340 + seed * 1.7 + 2.1) * 0.5;
+                    lr = radiusRatio * (1 + n * level * 0.045);
+                }
                 const r = rotate(p, angleY, angleX);
                 avgZ += r.z;
-                const proj = project({ x: r.x * radiusRatio, y: r.y * radiusRatio, z: r.z });
+                const proj = project({ x: r.x * lr, y: r.y * lr, z: r.z });
                 if (matT < 1) { proj.x += p.sx * scatterAmp; proj.y += p.sy * scatterAmp; }
                 return proj;
             });
