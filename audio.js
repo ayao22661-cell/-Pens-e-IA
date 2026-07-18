@@ -66,6 +66,21 @@ const Hologram = (function () {
     let materializeStart = 0;
 
     // — Comportements humains —
+
+    // ── Visage holographique ───────────────────────────────
+    let blinkT = 0, nextBlink = 0, blinkDur = 120;
+    let blinkPhase = 0; // 0=ouvert, 1=fermeture, 2=ouverture
+    let pupilX = 0, pupilY = 0, pupilTargetX = 0, pupilTargetY = 0;
+    let nextPupilMove = 0;
+    let mouthOpen = 0, mouthSmile = 0, mouthTargetSmile = 0;
+    let browL = 0, browR = 0, browTargetL = 0, browTargetR = 0;
+    let neckTilt = 0, neckTiltTarget = 0; // hochement de tête
+    let neckNod = 0, neckNodTarget = 0;
+    let nextNod = 0;
+    let faceAlpha = 0; // apparition progressive
+    let laughPhase = 0, laughing = false, laughUntil = 0;
+    let hesitatePhase = 0, hesitating = false;
+
     let saccadeNextAt = 0, saccadeVelY = 0, saccadeDecay = 0;   // saccades oculaires
     let headDriftTarget = 0, headDriftCurrent = 0;               // inclinaison tête
     let breathPhase = 0, breathSpeed = 1;                        // respiration variable
@@ -394,6 +409,15 @@ const Hologram = (function () {
             c.g = lerp(c.g, 235, warmth);
             c.b = lerp(c.b, 210, warmth * 0.7);
         }
+        // Adaptation thème clair : couleurs plus foncées et contrastées
+        const isLightTheme = document.body.getAttribute('data-theme') === 'light';
+        if (isLightTheme) {
+            // Sur fond blanc, on assombrit les couleurs pour le contraste
+            c.r = Math.max(0, c.r - 60);
+            c.g = Math.max(0, c.g - 40);
+            c.b = Math.max(0, c.b - 20);
+        }
+
         ctx.clearRect(0, 0, w, h);
 
         const glitching = ts < glitchUntil;
@@ -503,6 +527,253 @@ const Hologram = (function () {
         ctx.lineWidth = 1.2;
         ctx.arc(cx, cy, baseRadius * radiusRatio * 1.08, 0, Math.PI * 2);
         ctx.stroke();
+
+
+        // ── Visage holographique centré dans la sphère ────────
+        drawFace(ts, c, matEase, level, radiusRatio);
+
+        ctx.restore();
+    }
+
+
+    function drawFace(ts, c, matEase, level, radiusRatio) {
+        if (!ctx) return;
+
+        // Détection thème clair
+        const isLight = document.body.getAttribute('data-theme') === 'light';
+
+        // Alpha progressif à l'apparition
+        faceAlpha += (1 - faceAlpha) * 0.03;
+        const alpha = faceAlpha * matEase;
+        if (alpha < 0.02) return;
+
+        // Couleur adaptée au thème
+        // En dark : couleur de la palette (cyan/bleu). En light : plus foncée et contrastée
+        const fc = isLight
+            ? { r: Math.max(0, c.r - 80), g: Math.max(0, c.g - 60), b: Math.max(0, c.b - 40) }
+            : c;
+
+        const R = baseRadius * radiusRatio;
+        // Centre du visage = centre du canvas, légèrement remonté
+        const fx = cx;
+        const fy = cy - R * 0.04;
+
+        // Échelle du visage proportionnelle au rayon
+        const fs = R * 0.55;
+
+        // ── Clignement ────────────────────────────────────────
+        const now = ts;
+        if (now > nextBlink) {
+            blinkPhase = 1;
+            blinkT = now;
+            nextBlink = now + 2800 + Math.random() * 3500;
+            blinkDur = 80 + Math.random() * 60;
+        }
+        let eyeOpen = 1;
+        if (blinkPhase === 1) {
+            const t = (now - blinkT) / (blinkDur * 0.45);
+            eyeOpen = Math.max(0, 1 - t * t);
+            if (t >= 1) { blinkPhase = 2; blinkT = now; }
+        } else if (blinkPhase === 2) {
+            const t = (now - blinkT) / (blinkDur * 0.55);
+            eyeOpen = Math.min(1, t * t);
+            if (t >= 1) blinkPhase = 0;
+        }
+
+        // ── Mouvement des pupilles ─────────────────────────────
+        if (now > nextPupilMove) {
+            // Regard naturel : zones selon l'état
+            if (state === 'thinking') {
+                // Regard vers le haut-gauche (mémoire/réflexion)
+                pupilTargetX = -0.18 - Math.random() * 0.12;
+                pupilTargetY = -0.14 - Math.random() * 0.08;
+            } else if (state === 'speaking') {
+                // Regard droit avec légères dérives
+                pupilTargetX = (Math.random() - 0.5) * 0.22;
+                pupilTargetY = (Math.random() - 0.5) * 0.12;
+            } else {
+                // Idle : regard légèrement vers l'utilisateur
+                pupilTargetX = (Math.random() - 0.5) * 0.18;
+                pupilTargetY = 0.04 + (Math.random() - 0.5) * 0.08;
+            }
+            nextPupilMove = now + 800 + Math.random() * 2200;
+        }
+        pupilX += (pupilTargetX - pupilX) * 0.06;
+        pupilY += (pupilTargetY - pupilY) * 0.06;
+
+        // ── Sourcils ──────────────────────────────────────────
+        if (state === 'thinking') {
+            browTargetL = -0.12; browTargetR = -0.08; // froncés asymétriques
+        } else if (state === 'speaking' && level > 0.3) {
+            browTargetL = 0.08; browTargetR = 0.06; // légèrement levés
+        } else if (state === 'listening') {
+            browTargetL = 0.05; browTargetR = 0.05;
+        } else {
+            browTargetL = 0; browTargetR = 0;
+        }
+        // Émotion sur les sourcils
+        if (currentEmotion === 'surprise') { browTargetL = 0.22; browTargetR = 0.20; }
+        if (currentEmotion === 'concentration') { browTargetL = -0.16; browTargetR = -0.14; }
+        if (currentEmotion === 'hesitation') { browTargetL = -0.06; browTargetR = 0.06; } // asymétrie
+        browL += (browTargetL - browL) * 0.05;
+        browR += (browTargetR - browR) * 0.05;
+
+        // ── Sourire / bouche ──────────────────────────────────
+        if (state === 'speaking') {
+            // La bouche s'ouvre au rythme du niveau audio
+            mouthOpen += (level * 0.7 - mouthOpen) * 0.18;
+        } else {
+            mouthOpen += (0 - mouthOpen) * 0.08;
+        }
+        if (currentEmotion === 'enthousiasme' || currentEmotion === 'confiance') {
+            mouthTargetSmile = 0.55 + level * 0.2;
+        } else if (currentEmotion === 'empathie') {
+            mouthTargetSmile = 0.3;
+        } else if (currentEmotion === 'hesitation' || currentEmotion === 'incertitude') {
+            mouthTargetSmile = -0.15;
+        } else {
+            mouthTargetSmile = 0.15;
+        }
+        mouthSmile += (mouthTargetSmile - mouthSmile) * 0.04;
+
+        // Rire (enthousiasme fort)
+        if (currentEmotion === 'enthousiasme' && emotionIntensity > 0.7 && !laughing && now > laughUntil + 8000) {
+            laughing = true;
+            laughUntil = now + 600 + Math.random() * 400;
+            laughPhase = 0;
+        }
+        if (laughing) {
+            laughPhase = (now - (laughUntil - 1000)) / 1000;
+            if (now > laughUntil) laughing = false;
+        }
+
+        // ── Hochement de tête ─────────────────────────────────
+        if (now > nextNod && state === 'listening') {
+            neckNodTarget = 0.06 + Math.random() * 0.04;
+            nextNod = now + 1200 + Math.random() * 2000;
+        }
+        neckNod += (neckNodTarget - neckNod) * 0.06;
+        neckNodTarget *= 0.96; // retour au neutre
+        // Inclinaison curiosité
+        if (currentEmotion === 'hesitation' || state === 'thinking') {
+            neckTiltTarget = 0.08;
+        } else {
+            neckTiltTarget = 0;
+        }
+        neckTilt += (neckTiltTarget - neckTilt) * 0.03;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        // Transformation tête (hochement + inclinaison)
+        ctx.translate(fx, fy + neckNod * fs * 0.3);
+        ctx.rotate(neckTilt);
+
+        const br = `rgba(${fc.r},${fc.g},${fc.b},`;
+
+        // ── SOURCILS ──────────────────────────────────────────
+        const browY = -fs * 0.38;
+        const browW = fs * 0.22;
+        const browThick = fs * 0.038;
+        ctx.lineWidth = browThick;
+        ctx.lineCap = 'round';
+
+        // Sourcil gauche
+        ctx.beginPath();
+        ctx.strokeStyle = br + (0.75 + level * 0.15) + ')';
+        const blX = -fs * 0.28, blY = browY - browL * fs;
+        const blX2 = -fs * 0.07, blY2 = browY - browL * fs * 0.6;
+        ctx.moveTo(blX, blY);
+        ctx.quadraticCurveTo(blX + browW * 0.5, blY - fs * 0.03, blX2, blY2);
+        ctx.stroke();
+
+        // Sourcil droit
+        ctx.beginPath();
+        const brX = fs * 0.28, brY2 = browY - browR * fs;
+        const brX2 = fs * 0.07, brY3 = browY - browR * fs * 0.6;
+        ctx.moveTo(brX, brY2);
+        ctx.quadraticCurveTo(brX - browW * 0.5, brY2 - fs * 0.03, brX2, brY3);
+        ctx.stroke();
+
+        // ── YEUX ──────────────────────────────────────────────
+        const eyeY = -fs * 0.18;
+        const eyeRx = fs * 0.13; // demi-largeur oeil
+        const eyeRy = fs * 0.09; // demi-hauteur oeil
+        const eyeSpacing = fs * 0.32;
+
+        [-1, 1].forEach(side => {
+            const ex = side * eyeSpacing;
+
+            // Contour de l'oeil (ellipse)
+            ctx.beginPath();
+            ctx.strokeStyle = br + (0.7 + level * 0.2) + ')';
+            ctx.lineWidth = fs * 0.025;
+            // Paupière supérieure (courbe)
+            const openH = eyeRy * eyeOpen;
+            ctx.ellipse(ex, eyeY, eyeRx, Math.max(0.5, openH), 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Iris
+            if (eyeOpen > 0.1) {
+                const irisR = eyeRx * 0.55;
+                const px = ex + pupilX * eyeRx * 0.6;
+                const py = eyeY + pupilY * eyeRy * 0.6;
+                // Glow iris
+                const irisGlow = ctx.createRadialGradient(px, py, 0, px, py, irisR);
+                irisGlow.addColorStop(0, br + (0.55 * eyeOpen) + ')');
+                irisGlow.addColorStop(0.4, br + (0.35 * eyeOpen) + ')');
+                irisGlow.addColorStop(1, br + '0)');
+                ctx.beginPath();
+                ctx.fillStyle = irisGlow;
+                ctx.arc(px, py, irisR, 0, Math.PI * 2);
+                ctx.fill();
+                // Pupille (point sombre)
+                ctx.beginPath();
+                ctx.fillStyle = isLight ? 'rgba(20,30,50,0.6)' : 'rgba(0,0,0,0.55)';
+                ctx.arc(px, py, irisR * 0.38, 0, Math.PI * 2);
+                ctx.fill();
+                // Reflet
+                ctx.beginPath();
+                ctx.fillStyle = br + (0.8 * eyeOpen) + ')';
+                ctx.arc(px - irisR * 0.22, py - irisR * 0.28, irisR * 0.14, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+
+        // ── NEZ (discret, deux petits points/lignes) ───────────
+        const noseY = fs * 0.05;
+        ctx.lineWidth = fs * 0.018;
+        ctx.strokeStyle = br + '0.35)';
+        // Narine gauche
+        ctx.beginPath();
+        ctx.arc(-fs * 0.065, noseY, fs * 0.025, Math.PI * 0.1, Math.PI * 0.9);
+        ctx.stroke();
+        // Narine droite
+        ctx.beginPath();
+        ctx.arc(fs * 0.065, noseY, fs * 0.025, Math.PI * 0.1, Math.PI * 0.9);
+        ctx.stroke();
+
+        // ── BOUCHE ────────────────────────────────────────────
+        const mouthY = fs * 0.28;
+        const mouthW = fs * (0.22 + mouthOpen * 0.08 + (laughing ? Math.abs(Math.sin(laughPhase * Math.PI * 6)) * 0.06 : 0));
+        const smileAmp = fs * 0.07 * mouthSmile;
+        const openAmp = fs * (mouthOpen * 0.08 + (laughing ? Math.abs(Math.sin(laughPhase * Math.PI * 6)) * 0.05 : 0));
+
+        ctx.lineWidth = fs * 0.028;
+        ctx.strokeStyle = br + (0.75 + level * 0.2) + ')';
+
+        // Lèvre supérieure
+        ctx.beginPath();
+        ctx.moveTo(-mouthW, mouthY - openAmp * 0.3);
+        ctx.quadraticCurveTo(0, mouthY - openAmp * 0.3 - smileAmp, mouthW, mouthY - openAmp * 0.3);
+        ctx.stroke();
+
+        // Lèvre inférieure (seulement si bouche ouverte ou sourire)
+        if (openAmp > 0.005 || Math.abs(smileAmp) > 0.005) {
+            ctx.beginPath();
+            ctx.moveTo(-mouthW * 0.85, mouthY + openAmp * 0.7);
+            ctx.quadraticCurveTo(0, mouthY + openAmp * 0.7 + smileAmp * 0.5, mouthW * 0.85, mouthY + openAmp * 0.7);
+            ctx.stroke();
+        }
 
         ctx.restore();
     }
