@@ -1021,9 +1021,22 @@ function speakWebSpeech(text) {
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
     let index = 0;
 
+    // Simulation de niveau audio pour animer l'hologramme pendant Web Speech
+    let speakSimInterval = null;
+    function startSpeakSim() {
+        if (speakSimInterval) return;
+        speakSimInterval = setInterval(() => {
+            if (AudioState.isSpeaking) Hologram.pulse(0.18 + Math.random() * 0.22);
+        }, 120);
+    }
+    function stopSpeakSim() {
+        if (speakSimInterval) { clearInterval(speakSimInterval); speakSimInterval = null; }
+    }
+
     function next() {
         if (index >= sentences.length || !AudioState.isOpen) {
             AudioState.isSpeaking = false;
+            stopSpeakSim();
             setOrbState('idle');
             setStatus('Appuie pour parler', '');
             return;
@@ -1034,10 +1047,10 @@ function speakWebSpeech(text) {
         utt.pitch  = AUDIO_CONFIG.voicePitch;
         utt.volume = AUDIO_CONFIG.voiceVolume;
         if (AudioState.selectedVoice) utt.voice = AudioState.selectedVoice;
-        utt.onstart = () => { AudioState.isSpeaking = true; setOrbState('speaking'); setStatus('Pensee parle...', 'speaking'); };
+        utt.onstart = () => { AudioState.isSpeaking = true; setOrbState('speaking'); setStatus('Pensee parle...', 'speaking'); startSpeakSim(); };
         utt.onboundary = () => Hologram.pulse(0.55);
-        utt.onend   = () => { index++; next(); };
-        utt.onerror = () => { index++; next(); };
+        utt.onend   = () => { stopSpeakSim(); index++; next(); };
+        utt.onerror = () => { stopSpeakSim(); index++; next(); };
         AudioState.currentUtterance = utt;
         AudioState.synth.speak(utt);
     }
