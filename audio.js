@@ -1351,7 +1351,7 @@ async function speak(text, voiceProfile, rhythmMul) {
         const response = await fetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text })
+            body: JSON.stringify({ text, voiceProfile, rhythmMul })
         });
 
         const ct = response.headers.get('Content-Type') || '';
@@ -1398,85 +1398,147 @@ const VOICE_PROFILES = {
     curieux:    { pitchMod: +0.05, rateMod: +0.02, volumeMod:  0.00 }
 };
 
+// ============================================================
+//  ANALYSE PROSODIQUE
+// ============================================================
+function analyzeSegment(seg) {
+    const s = seg.trim();
+    const isQuestion    = s.endsWith('?');
+    const isExclamation = s.endsWith('!');
+    const stressCount   = (s.match(/\b[A-Z�-�]{2,}\b/g) || []).length;
+    const wordCount     = s.split(/\s+/).length;
+    const hasConnector  = /\b(donc|alors|bref|surtout|en fait|c'est-�-dire|autrement dit|par exemple|notamment|en revanche|cependant|n�anmoins|voil� pourquoi)\b/i.test(s);
+    return { isQuestion, isExclamation, stressCount, wordCount, hasConnector };
+}
+
+// D�coupe en groupes de souffle sur virgules/tirets
+function splitIntoBreathGroups(seg) {
+    const parts = seg.split(/([,;])/).filter(p => p.trim().length > 1);
+    if (parts.length <= 1) return [{ text: seg.trim(), pauseAfter: 0 }];
+    const out = [];
+    let buf = '';
+    parts.forEach(p => {
+        if (p === ',' || p === ';') {
+            if (buf.trim()) out.push({ text: buf.trim(), pauseAfter: 75 + Math.random() * 90 });
+            buf = '';
+        } else {
+            buf += p;
+        }
+    });
+    if (buf.trim()) out.push({ text: buf.trim(), pauseAfter: 0 });
+    return out.filter(g => g.text.length > 0);
+}
+
 function speakWebSpeech(text, voiceProfile, rhythmMul) {
     if (!AudioState.synth) return;
 
-    // Découpage humain : phrases + groupes de mots courts (cola de souffle)
-    // On respecte aussi les virgules et tirets comme micro-pauses naturelles
-    const rawSentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
+    const rawSentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
     const sentences = rawSentences.map(s => s.trim()).filter(Boolean);
-    let index = 0;
 
-    // Profil vocal : valeurs de base + modifications émotionnelles
     const profile = VOICE_PROFILES[voiceProfile] || VOICE_PROFILES.chaleureux;
-    const baseRate = Math.min(1.4, Math.max(0.7,
-        AUDIO_CONFIG.voiceRate * (rhythmMul || 1.0) + profile.rateMod
-    ));
-    const basePitch = Math.min(1.5, Math.max(0.5,
-        AUDIO_CONFIG.voicePitch + profile.pitchMod
-    ));
-    const baseVolume = Math.min(1.0, Math.max(0.5,
-        AUDIO_CONFIG.voiceVolume + profile.volumeMod
-    ));
+    const baseRate   = Math.min(1.4, Math.max(0.7,  AUDIO_CONFIG.voiceRate   * (rhythmMul || 1.0) + profile.rateMod));
+    const basePitch  = Math.min(1.5, Math.max(0.5,  AUDIO_CONFIG.voicePitch  + profile.pitchMod));
+    const baseVolume = Math.min(1.0, Math.max(0.5,  AUDIO_CONFIG.voiceVolume + profile.volumeMod));
 
-    // Simulation niveau audio pour animer l'hologramme pendant Web Speech
+    // Construire la file de groupes avec leurs param�tres prosodiques
+    const queue = [];
+    sentences.forEach((sentence, si) => {
+        const ana    = analyzeSegment(sentence);
+        const groups = splitIntoBreathGroups(sentence);
+
+        groups.forEach((grp, gi) => {
+            if (!grp.text) return;
+            const isLastInSentence = gi === groups.length - 1;
+
+            // --- Pitch : mont�e en question, hausse exclamation, baisse connecteur ---
+            let pitchMod = 0;
+            if (ana.isQuestion    && isLastInSentence) pitchMod = +0.13;
+            if (ana.isExclamation)                     pitchMod = +0.09;
+            if (ana.hasConnector  && gi === 0)         pitchMod = -0.06;
+
+            // --- Rate : phrase longue ralentit, exclamation acc�l�re ---
+            let rateMod = 0;
+            if (ana.wordCount > 14)       rateMod = -0.07;
+            if (ana.isExclamation)        rateMod = +0.09;
+            if (ana.hasConnector && gi===0) rateMod = -0.09;
+            if (ana.stressCount > 0)      rateMod -= ana.stressCount * 0.03;
+
+            const breathVar = 1 + (Math.random() - 0.5) * 0.05;
+
+            // Pause apr�s fin de phrase (prise d'air)
+            let pauseAfter = grp.pauseAfter;
+            if (isLastInSentence && si < sentences.length - 1) {
+                pauseAfter = ana.isQuestion    ? 210 + Math.random() * 110
+                           : ana.isExclamation ? 85  + Math.random() * 75
+                           : ana.hasConnector  ? 165 + Math.random() * 115
+                           :                     115 + Math.random() * 135;
+            }
+
+            queue.push({
+                text:       grp.text,
+                rate:       Math.min(1.45, Math.max(0.65, (baseRate + rateMod) * breathVar)),
+                pitch:      Math.min(1.6,  Math.max(0.4,  basePitch + pitchMod)),
+                volume:     baseVolume,
+                pauseAfter,
+                isStressed: ana.stressCount > 0
+            });
+        });
+    });
+
+    // Simulation hologramme
     let speakSimInterval = null;
     function startSpeakSim() {
         if (speakSimInterval) return;
-        // Variation biométrique : pulse irrégulier calqué sur une vraie voix
         speakSimInterval = setInterval(() => {
             if (!AudioState.isSpeaking) return;
-            const base = 0.15 + Math.random() * 0.20;
-            const burst = Math.random() < 0.12 ? 0.25 : 0; // pic occasionnel (consonne forte)
+            const base  = 0.15 + Math.random() * 0.20;
+            const burst = Math.random() < 0.12 ? 0.28 : 0;
             Hologram.pulse(base + burst);
-        }, 80 + Math.random() * 60); // intervalle irrégulier
+        }, 75 + Math.floor(Math.random() * 55));
     }
     function stopSpeakSim() {
         if (speakSimInterval) { clearInterval(speakSimInterval); speakSimInterval = null; }
     }
 
-    function next() {
-        if (index >= sentences.length || !AudioState.isOpen) {
+    let qIdx = 0;
+    function nextGroup() {
+        if (qIdx >= queue.length || !AudioState.isOpen) {
             AudioState.isSpeaking = false;
             stopSpeakSim();
             setOrbState('idle');
             setStatus('Appuie pour parler', '');
             return;
         }
-
-        const sentence = sentences[index].trim();
-        const utt = new SpeechSynthesisUtterance(sentence);
-        utt.lang = AUDIO_CONFIG.lang;
+        const grp = queue[qIdx];
+        const utt = new SpeechSynthesisUtterance(grp.text);
+        utt.lang   = AUDIO_CONFIG.lang;
+        utt.rate   = grp.rate;
+        utt.pitch  = grp.pitch;
+        utt.volume = grp.volume;
         if (AudioState.selectedVoice) utt.voice = AudioState.selectedVoice;
-
-        // Variation légère entre phrases (respiration naturelle)
-        const sentenceVar = 1 + (Math.random() - 0.5) * 0.06;
-        utt.rate   = baseRate * sentenceVar;
-        utt.pitch  = basePitch;
-        utt.volume = baseVolume;
-
-        // Micro-pause avant chaque phrase (simule la prise d'air)
-        const pauseMs = index === 0 ? 0 : 120 + Math.random() * 160;
 
         utt.onstart = () => {
             AudioState.isSpeaking = true;
             setOrbState('speaking');
-            setStatus('Pensée parle...', 'speaking');
+            setStatus('Pens�e parle...', 'speaking');
             startSpeakSim();
+            if (grp.isStressed) Hologram.pulse(0.60 + Math.random() * 0.15);
         };
         utt.onboundary = (e) => {
-            // Pulse plus fort sur les mots accentués (fin de groupe de souffle)
-            const intensity = e.name === 'sentence' ? 0.65 : 0.35 + Math.random() * 0.2;
+            const intensity = e.name === 'sentence' ? 0.65
+                            : grp.isStressed        ? 0.50 + Math.random() * 0.15
+                            :                         0.30 + Math.random() * 0.20;
             Hologram.pulse(intensity);
         };
-        utt.onend = () => { stopSpeakSim(); index++; setTimeout(next, pauseMs); };
-        utt.onerror = () => { stopSpeakSim(); index++; next(); };
+        utt.onend   = () => { stopSpeakSim(); qIdx++; grp.pauseAfter > 0 ? setTimeout(nextGroup, grp.pauseAfter) : nextGroup(); };
+        utt.onerror = () => { stopSpeakSim(); qIdx++; nextGroup(); };
 
         AudioState.currentUtterance = utt;
         AudioState.synth.speak(utt);
     }
-    next();
+    nextGroup();
 }
+
 
 function stopSpeaking() {
     if (AudioState.currentSource) {
