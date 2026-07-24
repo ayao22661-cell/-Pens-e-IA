@@ -1542,6 +1542,8 @@
     <!-- Pyodide — Interpréteur Python natif via WebAssembly (zéro serveur, zéro coût) -->
     <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
     <script type="module" src="ia.js"></script>
+    <!-- THINKI : etat interne autonome. Doit etre charge AVANT audio.js. -->
+    <script src="thinki.js" defer></script>
     <script src="audio.js" defer></script>
     <script>
         // Masquer l'écran d'accueil dès qu'un message apparaît
