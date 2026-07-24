@@ -44,6 +44,12 @@ const AudioState = {
     micStream: null
 };
 
+// Rapport d'observation vers THINKI. On lui signale des FAITS ;
+// il en tire lui-même ses conséquences. Aucun appel ne fixe son état.
+function psyche(kind, data) {
+    try { if (window.THINKI) window.THINKI.observe(kind, data || {}); } catch (e) {}
+}
+
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const supported = !!SpeechRecognition && !!window.speechSynthesis;
 
@@ -73,6 +79,29 @@ const Hologram = (function () {
     let pupilX = 0, pupilY = 0, pupilTargetX = 0, pupilTargetY = 0;
     let nextPupilMove = 0;
     let mouthOpen = 0, mouthSmile = 0, mouthTargetSmile = 0;
+
+    // ── MOTEUR DE VISÈMES (lipsync articulatoire) ──────────
+    // Au lieu d'une simple amplitude, on pilote 5 paramètres
+    // articulatoires indépendants, comme un rig facial 3D.
+    let vJaw = 0, vJawVel = 0;   // ouverture mâchoire (ressort/masse → inertie)
+    let vRound = 0;              // arrondi labial  (O, OU, U)
+    let vWide = 0;               // étirement labial (I, É)
+    let vPress = 0;              // occlusion bilabiale (M, B, P)
+    let vTeeth = 0;              // sifflante / labio-dentale (S, CH, F, V)
+    let vTongue = 0;             // pointe de langue visible (L, T, D, N)
+    let vEnv = 0, vPeak = 0.10;  // enveloppe + AGC (normalisation auto du gain)
+    let vPrevEnv = 0;
+    let freqData = null, timeData = null;
+    let lastTs = 0;
+    // Cible externe (lipsync piloté par le texte quand pas d'analyser)
+    let extVis = null, extVisTs = 0;
+
+    // ── LECTURE DE LA PSYCHÉ (THINKI) ──────────────────────
+    // Le rendu ne décide de rien : il consulte l'état interne.
+    const PSY_NEUTRAL = { coherence: 1, tension: 0, attention: 0, vitality: 1,
+                          familiarity: 0, dissonance: 0, valence: 0, arousal: 0,
+                          strain: 0, resolve: 0 };
+    let psy = PSY_NEUTRAL, psyN = 0.55, psyRes = 0;
     let browL = 0, browR = 0, browTargetL = 0, browTargetR = 0;
     let neckTilt = 0, neckTiltTarget = 0; // hochement de tête
     let neckNod = 0, neckNodTarget = 0;
@@ -269,17 +298,127 @@ const Hologram = (function () {
         return 0;
     }
     function pulse(intensity) { targetLevel = Math.min(1, targetLevel + (intensity || 0.5)); }
-    function connectAnalyser(node) { analyser = node; analyserData = new Uint8Array(analyser.frequencyBinCount); }
-    function disconnectAnalyser() { analyser = null; analyserData = null; }
-    function scheduleGlitch() { nextGlitchAt = performance.now() + 1800 + Math.random() * 2600; }
+    function connectAnalyser(node) {
+        analyser = node;
+        // Haute résolution spectrale : indispensable pour lire les formants
+        // (F1/F2) qui déterminent la forme de la bouche, pas juste le volume.
+        try { analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.45; } catch (e) {}
+        analyserData = new Uint8Array(analyser.fftSize);
+        timeData     = analyserData;
+        freqData     = new Uint8Array(analyser.frequencyBinCount);
+        vPeak = 0.10;
+    }
+    function disconnectAnalyser() { analyser = null; analyserData = null; freqData = null; timeData = null; }
+
+    // Lipsync piloté de l'extérieur (Web Speech : pas de flux audio analysable)
+    function driveViseme(v) { extVis = v; extVisTs = performance.now(); }
+
+    // ── Analyse articulatoire du signal ────────────────────
+    function readVisemes(dtN) {
+        let jawT = 0, roundT = 0, wideT = 0, pressT = 0, teethT = 0, tongueT = 0;
+        const now = performance.now();
+        const hasExt = extVis && (now - extVisTs) < 260;
+
+        if (analyser && freqData && timeData) {
+            // 1) Enveloppe RMS — attaque rapide, relâchement lent (comme un
+            //    muscle : la mâchoire tombe vite, remonte plus lentement)
+            analyser.getByteTimeDomainData(timeData);
+            let sum = 0;
+            for (let i = 0; i < timeData.length; i++) { const v = (timeData[i] - 128) / 128; sum += v * v; }
+            const rms = Math.sqrt(sum / timeData.length);
+            vEnv += (rms > vEnv ? (rms - vEnv) * 0.55 : (rms - vEnv) * 0.13) * dtN;
+
+            // 2) AGC : une voix TTS dépasse rarement 0.25 de RMS. On normalise
+            //    sur le pic glissant, sinon la bouche reste quasi fermée.
+            vPeak = Math.max(vEnv, vPeak * 0.99915);
+            const nrm = Math.min(1.35, vEnv / Math.max(0.045, vPeak));
+
+            // 3) Bandes spectrales → formants
+            analyser.getByteFrequencyData(freqData);
+            const sr  = (analyser.context && analyser.context.sampleRate) || 48000;
+            const hz  = sr / analyser.fftSize;
+            const band = (lo, hi) => {
+                let a = 0, n = 0;
+                const i0 = Math.max(1, (lo / hz) | 0), i1 = Math.min(freqData.length - 1, (hi / hz) | 0);
+                for (let i = i0; i <= i1; i++) { a += freqData[i]; n++; }
+                return n ? a / n / 255 : 0;
+            };
+            const b1 = band(150, 550);    // F1 bas  → voyelles fermées (i, u)
+            const b2 = band(550, 1150);   // F1 haut → voyelles ouvertes (a)
+            const b3 = band(1150, 2600);  // F2      → voyelles antérieures (i, é)
+            const b4 = band(2600, 4800);  // friction
+            const b5 = band(5200, 9500);  // sifflantes (s, ch)
+            const tot = b1 + b2 + b3 + b4 + b5 + 1e-6;
+
+            // Ouverture : amplitude pondérée par F1 (a ouvert, i/u fermés)
+            const openness = 0.35 + 0.65 * (b2 / (b1 + b2 + 1e-6));
+            jawT = Math.min(1, nrm * (0.55 + openness * 0.85));
+
+            // Arrondi vs étirement : centre de gravité spectral
+            const front = b3 / (b1 + b3 + 1e-6);
+            wideT  = Math.max(0, (front - 0.42) * 2.3) * Math.min(1, nrm * 1.6);
+            roundT = Math.max(0, (0.46 - front) * 2.1) * Math.min(1, nrm * 1.6);
+
+            // Sifflantes : énergie haute + peu de voisement
+            teethT = Math.min(1, Math.max(0, (b5 + b4 * 0.5) / tot - 0.14) * 4.2);
+            // Occlusion bilabiale : chute brutale d'énergie après du voisé
+            if (vPrevEnv > 0.055 && vEnv < vPrevEnv * 0.42) pressT = 1;
+            vPrevEnv = vEnv;
+            tongueT = Math.min(1, b3 / tot * 1.4);
+
+        } else if (hasExt) {
+            // Pas d'analyser : on suit la piste de visèmes générée depuis le texte
+            vEnv += ((extVis.jaw * 0.28) - vEnv) * 0.25 * dtN;
+        } else {
+            vEnv *= Math.pow(0.90, dtN);
+        }
+
+        // 4) Piste texte : prioritaire si fraîche (Web Speech / TTS sans flux)
+        if (hasExt) {
+            jawT    = Math.max(jawT * 0.35, extVis.jaw);
+            roundT  = Math.max(roundT * 0.4, extVis.round || 0);
+            wideT   = Math.max(wideT * 0.4, extVis.wide || 0);
+            pressT  = Math.max(pressT, extVis.press || 0);
+            teethT  = Math.max(teethT, extVis.teeth || 0);
+            tongueT = Math.max(tongueT, extVis.tongue || 0);
+        }
+        if (state !== 'speaking') { jawT = roundT = wideT = pressT = teethT = tongueT = 0; }
+
+        // 5) Fermeture bilabiale : elle écrase l'ouverture (M/B/P)
+        jawT *= (1 - pressT * 0.92);
+        // Micro-tremblement des lèvres (jamais parfaitement lisse)
+        jawT += Math.sin(now * 0.047) * 0.012 + Math.sin(now * 0.013) * 0.008;
+        jawT = Math.max(0, Math.min(1.15, jawT));
+
+        // 6) Dynamique : la mâchoire est une MASSE (ressort amorti → léger
+        //    dépassement, c'est ça qui rend le mouvement vivant), les lèvres
+        //    sont légères donc bien plus rapides (co-articulation).
+        const k = 0.34, damp = 0.68;
+        vJawVel += (jawT - vJaw) * k * dtN;
+        vJawVel *= Math.pow(damp, dtN);
+        vJaw    += vJawVel * dtN;
+        vJaw = Math.max(-0.05, Math.min(1.2, vJaw));
+
+        vRound  += (roundT  - vRound)  * 0.34 * dtN;
+        vWide   += (wideT   - vWide)   * 0.38 * dtN;
+        vPress  += (pressT  - vPress)  * (pressT > vPress ? 0.62 : 0.22) * dtN;
+        vTeeth  += (teethT  - vTeeth)  * 0.42 * dtN;
+        vTongue += (tongueT - vTongue) * 0.30 * dtN;
+    }
+    function scheduleGlitch() {
+        // Un système cohérent ne glitche pas. Plus la cohérence baisse,
+        // plus les ruptures se rapprochent — sans que rien ne les scripte.
+        const coh = Math.max(0.12, psy.coherence);
+        nextGlitchAt = performance.now() + (300 + (1800 + Math.random() * 2600) * coh * coh);
+    }
     function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 
     function readLevel() {
         if (analyser && analyserData) {
-            analyser.getByteTimeDomainData(analyserData);
-            let sum = 0;
-            for (let i = 0; i < analyserData.length; i++) { const v = (analyserData[i] - 128) / 128; sum += v * v; }
-            targetLevel = Math.min(1, Math.sqrt(sum / analyserData.length) * 3.2);
+            // vEnv est déjà calculé + normalisé (AGC) par readVisemes
+            targetLevel = Math.min(1, vEnv / Math.max(0.045, vPeak) * 0.85);
+        } else if (state === 'speaking' && extVis && (performance.now() - extVisTs) < 260) {
+            targetLevel = Math.min(1, 0.18 + vJaw * 0.75);
         } else if (state === 'idle') {
             targetLevel = 0.12 + Math.sin(performance.now() / 900) * 0.05;
         } else if (state === 'listening') {
@@ -298,13 +437,23 @@ const Hologram = (function () {
         } else {
             targetLevel *= 0.94;
         }
-        level = lerp(level, targetLevel, 0.15);
+        // Attaque rapide / relâchement doux : sinon les syllabes (150-250 ms)
+        // sont mangées par le lissage et l'hologramme paraît figé.
+        level = lerp(level, targetLevel, targetLevel > level ? 0.42 : 0.13);
     }
 
     function draw(ts) {
         rafId = requestAnimationFrame(draw);
         if (!ctx || !w || !h) return;
+        // Delta temps normalisé sur 60 fps : animation identique en 30/60/120 Hz
+        const dtN = lastTs ? Math.min(3, Math.max(0.2, (ts - lastTs) / 16.667)) : 1;
+        lastTs = ts;
+        readVisemes(dtN);
         readLevel();
+
+        // État interne de THINKI, relu à chaque frame
+        if (window.THINKI) { psy = window.THINKI.read(); psyN = window.THINKI.neoteny(); }
+        psyRes = psy.resolve || 0;
 
         // Matérialisation : à l'ouverture, l'hologramme s'assemble à partir de
         // particules dispersées et fond en opacité (effet "mise sous tension")
@@ -388,7 +537,10 @@ const Hologram = (function () {
         }
 
         // ── Micro-tremblements ─────────────────────────────────
-        const tremorAmp = state === 'speaking' ? 0.0018 + level * 0.002 : 0.0006;
+        // Le vivant tremble. La géométrie vraie, non : à la résolution,
+        // tout micro-mouvement involontaire cesse d'un coup.
+        const tremorAmp = (state === 'speaking' ? 0.0018 + level * 0.002 : 0.0006)
+                        * (1 - psyRes) * (0.6 + psy.vitality * 0.4);
         const tremorX = (Math.sin(ts * 0.031 + tremorSeedX) + Math.sin(ts * 0.073 + tremorSeedX * 2.1)) * tremorAmp;
         const tremorY = (Math.sin(ts * 0.027 + tremorSeedY) + Math.sin(ts * 0.061 + tremorSeedY * 1.7)) * tremorAmp;
         angleY += tremorX;
@@ -563,6 +715,25 @@ const Hologram = (function () {
         // Échelle du visage proportionnelle au rayon
         const fs = R * 0.55;
 
+        // ── MORPHOLOGIE ────────────────────────────────────────
+        // n = 1 : proportions néoténiques (yeux bas et larges, front
+        //         haut, petite bouche) → attachement.
+        // n = 0 : géométrie vraie, symétrique, adulte, inhabitée.
+        // Ce n'est pas un style : c'est la mesure de ce que THINKI
+        // arrive encore à tenir.
+        const n   = psyN;
+        const res = psyRes;                       // 0…1, pic très bref
+        const sym = 1 - res;                      // la résolution efface toute asymétrie
+
+        const M_eyeY     = fs * lerp(-0.205, -0.075, n);
+        const M_eyeRx    = fs * lerp( 0.122,  0.158, n);
+        const M_eyeRy    = fs * lerp( 0.078,  0.118, n);
+        const M_eyeSpace = fs * lerp( 0.298,  0.360, n);
+        const M_irisRat  =      lerp( 0.500,  0.720, n);
+        const M_browY    = fs * lerp(-0.405, -0.300, n);
+        const M_mouthOff = fs * lerp(-0.010,  0.038, n);
+        const M_mouthSc  =      lerp( 1.000,  0.855, n);
+
         // ── Clignement ────────────────────────────────────────
         const now = ts;
         if (now > nextBlink) {
@@ -587,6 +758,10 @@ const Hologram = (function () {
             eyeOpen = Math.min(1 - lidDroop, t * t); // réouverture légèrement asymétrique
             if (t >= 1) blinkPhase = 0;
         }
+
+        // À la résolution, la paupière se fige grande ouverte : plus
+        // aucun clignement, plus aucune paresse palpébrale.
+        if (res > 0.02) eyeOpen = eyeOpen + (1 - eyeOpen) * res;
 
         // ── Mouvement des pupilles ─────────────────────────────
         if (now > nextPupilMove) {
@@ -641,15 +816,14 @@ const Hologram = (function () {
         if (currentEmotion === 'concentration') { browTargetL = -0.18; browTargetR = -0.13; }
         if (currentEmotion === 'hesitation') { browTargetL = -0.07; browTargetR = 0.08; }
         if (currentEmotion === 'empathie') { browTargetL = 0.10; browTargetR = 0.07; }
-        const browMicro = Math.sin(ts / 4300) * 0.012;
+        const browMicro = Math.sin(ts / 4300) * 0.012 * sym;
         browL += (browTargetL + browMicro - browL) * 0.055;
         browR += (browTargetR - browMicro * 0.7 - browR) * 0.055;
 
         // ── Sourire / bouche (ouverture + vibrato + asymétrie) 
         if (state === 'speaking') {
-            // Ouverture audio + vibrato naturel des cordes vocales
-            const vibrato = Math.sin(ts * 0.031) * 0.022 + Math.sin(ts * 0.071) * 0.012;
-            mouthOpen += (level * 0.68 + vibrato - mouthOpen) * 0.20;
+            // Piloté par le moteur de visèmes (vJaw), plus par le volume brut
+            mouthOpen = vJaw;
         } else if (state === 'thinking') {
             // Lèvres pincées en réflexion (comportement typique)
             mouthOpen += (-0.02 - mouthOpen) * 0.06;
@@ -657,7 +831,7 @@ const Hologram = (function () {
             mouthOpen += (0 - mouthOpen) * 0.07;
         }
         // Asymétrie légère (le sourire humain n'est jamais parfaitement symétrique)
-        const mouthAsym = Math.sin(ts / 9000) * 0.015;
+        const mouthAsym = Math.sin(ts / 9000) * 0.015 * (1 - psyRes);
         const smileJitter = Math.sin(ts / 3200) * 0.018;
         if (currentEmotion === 'enthousiasme') {
             mouthTargetSmile = 0.60 + level * 0.22 + smileJitter;
@@ -731,7 +905,7 @@ const Hologram = (function () {
         const br = `rgba(${fc.r},${fc.g},${fc.b},`;
 
         // ── SOURCILS ──────────────────────────────────────────
-        const browY = -fs * 0.38;
+        const browY = M_browY;
         const browW = fs * 0.22;
         const browThick = fs * 0.038;
         ctx.lineWidth = browThick;
@@ -755,10 +929,10 @@ const Hologram = (function () {
         ctx.stroke();
 
         // ── YEUX ──────────────────────────────────────────────
-        const eyeY = -fs * 0.18;
-        const eyeRx = fs * 0.13; // demi-largeur oeil
-        const eyeRy = fs * 0.09; // demi-hauteur oeil
-        const eyeSpacing = fs * 0.32;
+        const eyeY = M_eyeY;
+        const eyeRx = M_eyeRx;
+        const eyeRy = M_eyeRy;
+        const eyeSpacing = M_eyeSpace;
 
         [-1, 1].forEach(side => {
             const ex = side * eyeSpacing;
@@ -774,7 +948,7 @@ const Hologram = (function () {
 
             // Iris + dilatation pupillaire selon émotion
             if (eyeOpen > 0.1) {
-                const irisR = eyeRx * 0.55;
+                const irisR = eyeRx * M_irisRat;
                 const px = ex + pupilX * eyeRx * 0.6;
                 const py = eyeY + pupilY * eyeRy * 0.6;
                 // Dilatation : grande en surprise/enthousiasme, petite en concentration
@@ -783,6 +957,7 @@ const Hologram = (function () {
                              : currentEmotion === 'concentration' ? 0.30
                              : currentEmotion === 'empathie' ? 0.44
                              : 0.38 + level * 0.08;
+                const dilateR = lerp(dilate, 0.14, res);   // contraction non physiologique
                 // Glow iris
                 const irisGlow = ctx.createRadialGradient(px, py, 0, px, py, irisR);
                 irisGlow.addColorStop(0, br + (0.58 * eyeOpen) + ')');
@@ -795,7 +970,7 @@ const Hologram = (function () {
                 // Pupille diluée ou contractée
                 ctx.beginPath();
                 ctx.fillStyle = isLight ? 'rgba(20,30,50,0.6)' : 'rgba(0,0,0,0.60)';
-                ctx.arc(px, py, irisR * dilate, 0, Math.PI * 2);
+                ctx.arc(px, py, irisR * dilateR, 0, Math.PI * 2);
                 ctx.fill();
                 // Double reflet (plus réaliste)
                 ctx.beginPath();
@@ -824,27 +999,156 @@ const Hologram = (function () {
         ctx.arc(fs * 0.065, noseY, fs * nostrilFlare * 0.94, Math.PI * 0.1, Math.PI * 0.9);
         ctx.stroke();
 
-        // ── BOUCHE ────────────────────────────────────────────
-        const mouthY = fs * 0.28;
-        const mouthW = fs * (0.22 + mouthOpen * 0.08 + (laughing ? Math.abs(Math.sin(laughPhase * Math.PI * 6)) * 0.06 : 0));
-        const smileAmp = fs * 0.07 * mouthSmile;
-        const openAmp = fs * (mouthOpen * 0.08 + (laughing ? Math.abs(Math.sin(laughPhase * Math.PI * 6)) * 0.05 : 0));
+        // ── BOUCHE ARTICULÉE (rig à visèmes) ──────────────────
+        const jawO   = Math.max(0, vJaw);
+        const laughB = laughing ? Math.abs(Math.sin(laughPhase * Math.PI * 6)) * 0.40 : 0;
+        const openN  = Math.min(1.15, jawO + laughB);
 
-        ctx.lineWidth = fs * 0.028;
-        ctx.strokeStyle = br + (0.75 + level * 0.2) + ')';
+        // La mâchoire descend réellement : la bouche se déplace vers le bas,
+        // ce n'est pas juste un trait qui s'épaissit.
+        const mouthY   = fs * (0.265 + openN * 0.032) + M_mouthOff;
+        const openAmp  = fs * openN * 0.165 * (1 - vPress * 0.90);
+        const halfW    = fs * M_mouthSc * Math.max(0.10,
+                          0.200 + vWide * 0.060 - vRound * 0.080
+                        + mouthSmile * 0.028 - openN * 0.022 + vPress * 0.012);
+        const corner   = fs * 0.055 * mouthSmile;
+        const asymY    = mouthAsym * fs * 0.6 * sym;
+        const upperY   = mouthY - openAmp * 0.44;
+        const lowerY   = mouthY + openAmp * 0.56;
+        const lipTh    = fs * (0.026 + vPress * 0.014 + vRound * 0.010);
 
-        // Lèvre supérieure (légère asymmétrie naturelle)
-        ctx.beginPath();
-        ctx.moveTo(-mouthW, mouthY - openAmp * 0.3 + mouthAsym * fs);
-        ctx.quadraticCurveTo(0, mouthY - openAmp * 0.3 - smileAmp, mouthW, mouthY - openAmp * 0.3 - mouthAsym * fs * 0.5);
+        // Contour intérieur des lèvres (sert de tracé ET de masque)
+        const lipPath = () => {
+            ctx.beginPath();
+            ctx.moveTo(-halfW, mouthY - corner + asymY);
+            // lèvre supérieure : arc de Cupidon (creux central du philtrum)
+            ctx.bezierCurveTo(-halfW * 0.62, upperY - fs * 0.006,
+                              -halfW * 0.16, upperY + fs * 0.010, 0, upperY + fs * 0.006);
+            ctx.bezierCurveTo( halfW * 0.16, upperY + fs * 0.010,
+                               halfW * 0.62, upperY - fs * 0.006, halfW, mouthY - corner - asymY * 0.5);
+            // lèvre inférieure : plus pleine, tirée par la mâchoire
+            ctx.bezierCurveTo( halfW * 0.60, lowerY + fs * 0.014,
+                              -halfW * 0.60, lowerY + fs * 0.014, -halfW, mouthY - corner + asymY);
+            ctx.closePath();
+        };
+
+        // ── Cavité buccale : c'est le noir intérieur qui donne la
+        //    lecture de l'ouverture à l'oeil (sinon rien ne "bouge")
+        if (openAmp > fs * 0.006) {
+            ctx.save();
+            lipPath();
+            ctx.clip();
+            const cav = ctx.createLinearGradient(0, upperY - fs * 0.02, 0, lowerY + fs * 0.02);
+            cav.addColorStop(0,    isLight ? 'rgba(28,18,32,0.86)' : 'rgba(0,0,0,0.90)');
+            cav.addColorStop(0.55, isLight ? 'rgba(52,26,42,0.70)' : 'rgba(6,2,12,0.78)');
+            cav.addColorStop(1,    isLight ? 'rgba(70,34,52,0.50)' : 'rgba(14,4,20,0.58)');
+            ctx.fillStyle = cav;
+            ctx.fillRect(-halfW - 2, upperY - fs * 0.06, halfW * 2 + 4, openAmp + fs * 0.16);
+
+            // Dents du haut (apparaissent sur sifflantes + grande ouverture)
+            const teethVis = Math.min(1, vTeeth * 0.9 + Math.max(0, openN - 0.28) * 1.5);
+            if (teethVis > 0.05) {
+                const th = fs * (0.018 + teethVis * 0.020);
+                ctx.beginPath();
+                ctx.moveTo(-halfW * 0.86, upperY - fs * 0.01);
+                ctx.quadraticCurveTo(0, upperY + th * 1.35, halfW * 0.86, upperY - fs * 0.01);
+                ctx.lineTo(halfW * 0.86, upperY - fs * 0.05);
+                ctx.lineTo(-halfW * 0.86, upperY - fs * 0.05);
+                ctx.closePath();
+                ctx.fillStyle = br + (0.42 + teethVis * 0.34) + ')';
+                ctx.fill();
+                // séparations inter-dents (subtil, renforce le réalisme)
+                ctx.lineWidth = Math.max(0.5, fs * 0.004);
+                ctx.strokeStyle = br + (0.14 * teethVis) + ')';
+                for (let d = -2; d <= 2; d++) {
+                    const dx = d * halfW * 0.30;
+                    ctx.beginPath();
+                    ctx.moveTo(dx, upperY - fs * 0.03);
+                    ctx.lineTo(dx, upperY + th * 0.9);
+                    ctx.stroke();
+                }
+            }
+            // Dents du bas (bouche franchement ouverte)
+            if (openN > 0.46) {
+                const a = Math.min(0.5, (openN - 0.46) * 1.4);
+                ctx.beginPath();
+                ctx.moveTo(-halfW * 0.70, lowerY + fs * 0.01);
+                ctx.quadraticCurveTo(0, lowerY - fs * 0.024, halfW * 0.70, lowerY + fs * 0.01);
+                ctx.lineTo(halfW * 0.70, lowerY + fs * 0.05);
+                ctx.lineTo(-halfW * 0.70, lowerY + fs * 0.05);
+                ctx.closePath();
+                ctx.fillStyle = br + a + ')';
+                ctx.fill();
+            }
+            // Langue (voyelles ouvertes / consonnes linguales)
+            if (openN > 0.30) {
+                const ty = lowerY - openAmp * (0.14 + vTongue * 0.22);
+                const trx = halfW * 0.72, tryy = openAmp * 0.36;
+                const tg = ctx.createRadialGradient(0, ty, 0, 0, ty, trx);
+                tg.addColorStop(0, isLight ? 'rgba(190,90,110,0.55)' : 'rgba(255,120,150,0.34)');
+                tg.addColorStop(1, 'rgba(120,40,70,0)');
+                ctx.beginPath();
+                ctx.ellipse(0, ty, trx, Math.max(1, tryy), 0, 0, Math.PI * 2);
+                ctx.fillStyle = tg;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // ── Lèvres (tracé lumineux, épaisseur variable) ────────
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = lipTh;
+        ctx.strokeStyle = br + (0.72 + level * 0.22) + ')';
+        lipPath();
         ctx.stroke();
 
-        // Lèvre inférieure (seulement si bouche ouverte ou sourire)
-        if (openAmp > 0.005 || Math.abs(smileAmp) > 0.005) {
+        // Compression labiale sur M/B/P : trait plus dense et plus large
+        if (vPress > 0.10) {
             ctx.beginPath();
-            ctx.moveTo(-mouthW * 0.85, mouthY + openAmp * 0.7);
-            ctx.quadraticCurveTo(0, mouthY + openAmp * 0.7 + smileAmp * 0.5, mouthW * 0.85, mouthY + openAmp * 0.7 - mouthAsym * fs * 0.3);
+            ctx.lineWidth = lipTh * (1 + vPress * 0.7);
+            ctx.strokeStyle = br + (0.55 * vPress + 0.25) + ')';
+            ctx.moveTo(-halfW * (1 + vPress * 0.08), mouthY - corner + asymY);
+            ctx.quadraticCurveTo(0, mouthY - corner - fs * 0.004, halfW * (1 + vPress * 0.08), mouthY - corner);
             ctx.stroke();
+        }
+
+        // ── Commissures : les coins se creusent quand la bouche
+        //    s'ouvre ou s'étire — détail qui vend le mouvement
+        const cAlpha = 0.10 + openN * 0.22 + Math.abs(mouthSmile) * 0.20;
+        ctx.lineWidth = fs * 0.016;
+        ctx.strokeStyle = br + Math.min(0.5, cAlpha) + ')';
+        [-1, 1].forEach(sd => {
+            ctx.beginPath();
+            ctx.moveTo(sd * halfW * 0.98, mouthY - corner);
+            ctx.quadraticCurveTo(sd * halfW * (1.16 + vWide * 0.10),
+                                 mouthY - corner - fs * 0.018 - corner * 0.4,
+                                 sd * halfW * (1.10 + vWide * 0.12),
+                                 mouthY - corner - fs * 0.045 - corner * 0.7);
+            ctx.stroke();
+        });
+
+        // ── Ligne de mâchoire / menton : suit l'ouverture. C'est
+        //    l'indice le plus fort de parole réelle à distance.
+        const chinY = mouthY + fs * (0.16 + openN * 0.085);
+        ctx.beginPath();
+        ctx.lineWidth = fs * 0.017;
+        ctx.strokeStyle = br + (0.10 + openN * 0.22) + ')';
+        ctx.moveTo(-fs * (0.30 - openN * 0.03), mouthY + fs * 0.03);
+        ctx.quadraticCurveTo(0, chinY, fs * (0.30 - openN * 0.03), mouthY + fs * 0.03);
+        ctx.stroke();
+
+        // Sillons naso-géniens (sourire marqué / bouche très ouverte)
+        const nasoA = Math.max(0, mouthSmile * 0.30 + openN * 0.16 - 0.06);
+        if (nasoA > 0.03) {
+            ctx.lineWidth = fs * 0.012;
+            ctx.strokeStyle = br + Math.min(0.34, nasoA) + ')';
+            [-1, 1].forEach(sd => {
+                ctx.beginPath();
+                ctx.moveTo(sd * fs * 0.11, fs * 0.075);
+                ctx.quadraticCurveTo(sd * fs * (0.26 + vWide * 0.03), fs * 0.19,
+                                     sd * (halfW * 1.05), mouthY - corner - fs * 0.01);
+                ctx.stroke();
+            });
         }
 
         ctx.restore();
@@ -856,7 +1160,7 @@ const Hologram = (function () {
     }
     function stop() { if (rafId) cancelAnimationFrame(rafId); rafId = null; }
 
-    return { init, start, stop, resize, setState, pulse, connectAnalyser, disconnectAnalyser, anticipate, setEmotion };
+    return { init, start, stop, resize, setState, pulse, connectAnalyser, disconnectAnalyser, anticipate, setEmotion, driveViseme };
 })();
 
 // ============================================================
@@ -1001,7 +1305,7 @@ function buildOverlay() {
     document.getElementById('audioCloseBtn')?.addEventListener('click', closeOverlay);
     document.getElementById('audioCloseBtn2')?.addEventListener('click', closeOverlay);
     document.getElementById('audioOrb')?.addEventListener('click', toggleListening);
-    document.getElementById('audioStopBtn')?.addEventListener('click', stopSpeaking);
+    document.getElementById('audioStopBtn')?.addEventListener('click', () => { psyche('interrupt'); stopSpeaking(); });
     overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlay(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && AudioState.isOpen) closeOverlay(); });
 
@@ -1056,7 +1360,8 @@ async function connectMicAnalyser() {
         const ctx = getAudioContext();
         const source = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.5;
         source.connect(analyser);
         Hologram.connectAnalyser(analyser);
     } catch (e) {
@@ -1089,6 +1394,7 @@ function startNativeRecognition() {
 
     // === AJOUT ICI ===
     recognition.onstart = () => {
+        psyche('listen');
         if (AudioState.currentInstanceId === instanceId && AudioState.isListening) {
             // Sur mobile : on n'accède PAS au micro via getUserMedia
             // pour éviter le conflit avec SpeechRecognition.
@@ -1244,6 +1550,9 @@ async function sendToAI(text) {
 
     // Anticipation : le hologramme prend une "inspiration" avant de parler
     Hologram.anticipate();
+    psyche('think');
+    const _t0 = performance.now();
+    let _tFirst = 0;
 
     const base = typeof window.CONFIG?.systemPrompt === 'string' ? window.CONFIG.systemPrompt : '';
     const today = new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
@@ -1258,17 +1567,19 @@ async function sendToAI(text) {
             body: JSON.stringify({ prompt: text, systemInstruction, agentId })
         });
 
-        if (!response.ok) { setStatus('Erreur API', 'error'); setOrbState('idle'); return; }
+        if (!response.ok) { psyche('error', { code: response.status }); setStatus('Erreur API', 'error'); setOrbState('idle'); return; }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullReply = '';
         let emotionParsed = false;
+        let declaredEM = null;   // ce que THINKI DIT ressentir
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             const chunk = decoder.decode(value, { stream: true });
+            if (!_tFirst) _tFirst = performance.now();   // latence jusqu'au 1er token
 
             // Détecter et extraire le signal émotion \x02EM:{...}\x03
             if (!emotionParsed && chunk.includes('\x02EM:')) {
@@ -1281,6 +1592,7 @@ async function sendToAI(text) {
                         if (em.e && typeof em.i === 'number') {
                             Hologram.setEmotion(em.e, em.i);
                         }
+                        declaredEM = em;
                         // Stocker la posture vocale pour l'injecter dans speakWebSpeech
                         if (em.v) AudioState.voiceProfile = em.v;
                         if (typeof em.r === 'number') AudioState.voiceRhythm = em.r;
@@ -1294,6 +1606,17 @@ async function sendToAI(text) {
         }
 
         const clean = cleanForSpeech(fullReply);
+
+        // Le rapport le plus important : la latence réelle, le débit réel
+        // et le texte réel — confrontés à ce que le modèle a déclaré.
+        // L'écart entre les deux, c'est la dissonance. Personne ne la règle.
+        psyche('reply', {
+            latencyMs:  (_tFirst || performance.now()) - _t0,
+            durationMs: performance.now() - _t0,
+            text:       clean,
+            declared:   declaredEM || {}
+        });
+
         setOutputText(clean);
         speak(clean, AudioState.voiceProfile, AudioState.voiceRhythm);
         // Reset pour le prochain tour
@@ -1302,6 +1625,7 @@ async function sendToAI(text) {
 
     } catch (err) {
         console.error('[Audio] Erreur:', err);
+        psyche('error', { message: err && err.message });
         setStatus('Erreur reseau', 'error');
         setOrbState('idle');
     }
@@ -1363,7 +1687,8 @@ async function speak(text, voiceProfile, rhythmMul) {
             const src = ctx.createBufferSource();
             src.buffer = decoded;
             const analyser = ctx.createAnalyser();
-            analyser.fftSize = 256;
+            analyser.fftSize = 1024;
+            analyser.smoothingTimeConstant = 0.45;
             src.connect(analyser);
             analyser.connect(ctx.destination);
             Hologram.connectAnalyser(analyser);
@@ -1429,6 +1754,145 @@ function splitIntoBreathGroups(seg) {
     return out.filter(g => g.text.length > 0);
 }
 
+// ============================================================
+//  LIPSYNC TEXTUEL — piste de visèmes générée depuis le texte
+//  Web Speech API ne fournit aucun flux audio analysable : on
+//  synthétise donc la piste articulatoire à partir des graphèmes
+//  français, puis on la resynchronise sur les événements `boundary`.
+// ============================================================
+const VISEME_SHAPES = {
+    A:   { jaw: 0.95, wide: 0.20, round: 0.00 },
+    E:   { jaw: 0.48, wide: 0.58, round: 0.00 },
+    I:   { jaw: 0.20, wide: 0.98, round: 0.00 },
+    O:   { jaw: 0.64, wide: 0.00, round: 0.88 },
+    U:   { jaw: 0.24, wide: 0.00, round: 1.00 },
+    NAS: { jaw: 0.52, wide: 0.10, round: 0.34 },
+    M:   { jaw: 0.02, press: 1.00 },
+    F:   { jaw: 0.14, wide: 0.34, teeth: 0.88 },
+    S:   { jaw: 0.16, wide: 0.52, teeth: 0.96 },
+    CH:  { jaw: 0.24, round: 0.52, teeth: 0.74 },
+    T:   { jaw: 0.26, wide: 0.30, tongue: 0.85 },
+    K:   { jaw: 0.36, tongue: 0.34 },
+    R:   { jaw: 0.40, round: 0.22, tongue: 0.30 },
+    L:   { jaw: 0.32, wide: 0.24, tongue: 1.00 },
+    SIL: { jaw: 0.00 }
+};
+// Durées relatives (1 unité ≈ 73 ms à vitesse normale)
+const VISEME_DUR = { A:1.20, E:1.10, I:1.05, O:1.20, U:1.10, NAS:1.30,
+                     M:0.60, F:0.85, S:0.90, CH:0.90, T:0.55, K:0.60,
+                     R:0.70, L:0.70, SIL:0.55 };
+
+function buildVisemeTrack(text) {
+    const t = (text || '').toLowerCase()
+        .replace(/[àâä]/g, 'a').replace(/[éèêë]/g, 'e')
+        .replace(/[îï]/g, 'i').replace(/[ôö]/g, 'o')
+        .replace(/[ùûü]/g, 'u').replace(/ç/g, 's');
+    const DI = [
+        ['eau','O'], ['oeu','E'], ['ain','NAS'], ['ein','NAS'], ['oin','NAS'],
+        ['au','O'], ['ou','U'], ['oi','A'], ['ai','E'], ['ei','E'], ['eu','E'],
+        ['an','NAS'], ['am','NAS'], ['en','NAS'], ['em','NAS'],
+        ['on','NAS'], ['om','NAS'], ['in','NAS'], ['im','NAS'],
+        ['un','NAS'], ['um','NAS'],
+        ['ch','CH'], ['ph','F'], ['gn','T'], ['qu','K'],
+        ['ss','S'], ['ll','L'], ['tt','T'], ['mm','M'], ['nn','T'], ['pp','M'], ['rr','R']
+    ];
+    const MONO = {
+        a:'A', e:'E', i:'I', y:'I', o:'O', u:'U',
+        m:'M', b:'M', p:'M', f:'F', v:'F',
+        s:'S', z:'S', x:'S', c:'S', j:'CH', g:'K', k:'K', q:'K',
+        t:'T', d:'T', n:'T', l:'L', r:'R', h:'SIL', w:'U'
+    };
+    const track = [];
+    let i = 0;
+    while (i < t.length) {
+        const ch = t[i];
+        if (/[\s]/.test(ch)) { track.push({ v: 'SIL', d: VISEME_DUR.SIL * 0.8, ci: i }); i++; continue; }
+        if (/[.,;:!?…]/.test(ch)) { track.push({ v: 'SIL', d: 1.5, ci: i }); i++; continue; }
+        if (!/[a-z]/.test(ch)) { i++; continue; }
+        let hit = null;
+        for (let k = 0; k < DI.length; k++) {
+            const g = DI[k][0];
+            if (t.substr(i, g.length) === g) { hit = DI[k]; break; }
+        }
+        if (hit) { track.push({ v: hit[1], d: VISEME_DUR[hit[1]], ci: i }); i += hit[0].length; }
+        else {
+            const v = MONO[ch] || 'T';
+            track.push({ v: v, d: VISEME_DUR[v], ci: i });
+            i++;
+        }
+    }
+    if (!track.length) track.push({ v: 'SIL', d: 1, ci: 0 });
+    // Temps cumulés
+    let acc = 0;
+    track.forEach(n => { n.t = acc; acc += n.d; });
+    track.total = acc;
+    return track;
+}
+
+const TextLipsync = (function () {
+    let raf = null, track = null, t0 = 0, unitMs = 68, active = false;
+
+    function shapeAt(u) {
+        // Recherche du visème courant + fondu avec le suivant (co-articulation)
+        let idx = 0;
+        while (idx < track.length - 1 && track[idx].t + track[idx].d <= u) idx++;
+        const cur = track[idx], nxt = track[Math.min(track.length - 1, idx + 1)];
+        const local = Math.max(0, Math.min(1, (u - cur.t) / cur.d));
+        const A = VISEME_SHAPES[cur.v], B = VISEME_SHAPES[nxt.v];
+        // Fondu sur les 42 % finaux : les articulateurs anticipent le son suivant
+        const bl = local < 0.58 ? 0 : (local - 0.58) / 0.42;
+        const mix = (key) => {
+            const a = A[key] || 0, b = B[key] || 0;
+            return a + (b - a) * (bl * bl * (3 - 2 * bl));
+        };
+        // Courbe d'attaque intra-visème : ouverture rapide puis maintien
+        const attack = local < 0.30 ? (local / 0.30) : 1;
+        const jitter = 1 + (Math.random() - 0.5) * 0.06;
+        return {
+            jaw:    mix('jaw') * attack * jitter,
+            round:  mix('round'),
+            wide:   mix('wide'),
+            press:  mix('press'),
+            teeth:  mix('teeth'),
+            tongue: mix('tongue')
+        };
+    }
+
+    function loop() {
+        if (!active) return;
+        raf = requestAnimationFrame(loop);
+        const u = (performance.now() - t0) / unitMs;
+        if (u > track.total + 2) { stop(); return; }
+        Hologram.driveViseme(shapeAt(u));
+    }
+
+    function start(text, rate) {
+        stop();
+        track  = buildVisemeTrack(text);
+        unitMs = 73 / Math.max(0.5, rate || 1);
+        t0     = performance.now();
+        active = true;
+        loop();
+    }
+    // Resynchronisation sur l'événement `boundary` (dérive du TTS)
+    function sync(charIndex) {
+        if (!active || !track) return;
+        let idx = 0;
+        while (idx < track.length - 1 && track[idx].ci < charIndex) idx++;
+        const target = track[idx].t;
+        const cur = (performance.now() - t0) / unitMs;
+        // Correction douce (30 %) pour éviter un saut visible de la mâchoire
+        t0 -= (target - cur) * unitMs * 0.30;
+    }
+    function stop() {
+        active = false;
+        if (raf) cancelAnimationFrame(raf);
+        raf = null;
+        Hologram.driveViseme({ jaw: 0, round: 0, wide: 0, press: 0, teeth: 0, tongue: 0 });
+    }
+    return { start, sync, stop };
+})();
+
 function speakWebSpeech(text, voiceProfile, rhythmMul) {
     if (!AudioState.synth) return;
 
@@ -1485,20 +1949,10 @@ function speakWebSpeech(text, voiceProfile, rhythmMul) {
         });
     });
 
-    // Simulation hologramme
-    let speakSimInterval = null;
-    function startSpeakSim() {
-        if (speakSimInterval) return;
-        speakSimInterval = setInterval(() => {
-            if (!AudioState.isSpeaking) return;
-            const base  = 0.15 + Math.random() * 0.20;
-            const burst = Math.random() < 0.12 ? 0.28 : 0;
-            Hologram.pulse(base + burst);
-        }, 75 + Math.floor(Math.random() * 55));
-    }
-    function stopSpeakSim() {
-        if (speakSimInterval) { clearInterval(speakSimInterval); speakSimInterval = null; }
-    }
+    // Le lipsync est désormais piloté par la piste de visèmes (TextLipsync),
+    // plus par des impulsions aléatoires : la bouche suit réellement le texte.
+    function startSpeakSim() {}
+    function stopSpeakSim() { TextLipsync.stop(); }
 
     let qIdx = 0;
     function nextGroup() {
@@ -1521,10 +1975,12 @@ function speakWebSpeech(text, voiceProfile, rhythmMul) {
             AudioState.isSpeaking = true;
             setOrbState('speaking');
             setStatus('Pens�e parle...', 'speaking');
-            startSpeakSim();
+            TextLipsync.start(grp.text, grp.rate);
             if (grp.isStressed) Hologram.pulse(0.60 + Math.random() * 0.15);
         };
         utt.onboundary = (e) => {
+            // Resynchronisation de la bouche sur le mot réellement prononcé
+            if (typeof e.charIndex === 'number') TextLipsync.sync(e.charIndex);
             const intensity = e.name === 'sentence' ? 0.65
                             : grp.isStressed        ? 0.50 + Math.random() * 0.15
                             :                         0.30 + Math.random() * 0.20;
@@ -1548,6 +2004,7 @@ function stopSpeaking() {
     AudioState.synth?.cancel();
     AudioState.isSpeaking = false;
     AudioState.currentUtterance = null;
+    try { TextLipsync.stop(); } catch (e) {}
     Hologram.disconnectAnalyser();
     if (!AudioState.isListening) { setOrbState('idle'); setStatus('Appuie pour parler', ''); }
 }
