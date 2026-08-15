@@ -188,10 +188,7 @@ export default async function handler(req) {
             /\b(recherche|cherche|trouve|infos? sur|renseigne[-\s]moi sur)\b/,
         ];
         if (yesSearchPatterns.some(p => p.test(t))) return true;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-console.log("[DEBUG] GEMINI_API_KEY présente:", !!GEMINI_API_KEY); // ← ajoute ça
-console.log("[DEBUG] SUPABASE_URL présente:", !!process.env.SUPABASE_URL); // ← et ça
-if (!GEMINI_API_KEY) {
+
         // Par défaut : pas de recherche pour une question courte (<80 chars sans signal clair)
         return t.length > 120;
     }
