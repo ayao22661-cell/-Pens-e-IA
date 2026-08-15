@@ -339,42 +339,49 @@ export default async function handler(req) {
         + ANTI_INTRO_GUARD
         + EMOTION_INSTRUCTION;
 
-    // ── CASCADE DE MODÈLES — IDs vérifiés août 2026 ──────────
-    let modelsToTry = [];
+   // ── CASCADE DE MODÈLES — optimisée quotas août 2026 ──────────
+let modelsToTry = [];
 
-    if (agentId === 'code' || agentId === 'audit') {
-        modelsToTry = [
-            "gemini-3.7-flash",
-            "gemini-3.6-flash",
-            "gemma-4-31b-it",
-        ];
-    } else if (agentId === 'creatif') {
-        modelsToTry = [
-            "gemini-3.6-flash",
-            "gemini-3.5-flash-lite",
-            "gemma-4-31b-it",
-        ];
-    } else {
-        modelsToTry = [
-            "gemini-3.6-flash",
-            "gemini-3.7-flash",
-            "gemini-3.5-flash-lite",
-            "gemma-4-31b-it",
-        ];
-    }
-
-    // Socle volume — fallback si quota épuisé sur les primaires
-    const allFallback = [
-        "gemini-3.1-flash-lite",
-        "gemma-4-26b-a4b-it",
-        "gemma-3-27b-it",
-        "gemma-3-12b-it",
-        "gemma-3-4b-it",
+if (agentId === 'code' || agentId === 'audit') {
+    modelsToTry = [
+        "gemini-3.5-flash-lite",   // 500 RPD — primaire
+        "gemini-3.1-flash-lite",   // 500 RPD — fallback solide
+        "gemini-3.7-flash",        // 20 RPD
+        "gemini-3.6-flash",        // 20 RPD
+        "gemma-4-31b-it",          // 14 400 RPD
+        "gemma-4-26b-a4b-it",      // 14 400 RPD
     ];
+} else if (agentId === 'creatif') {
+    modelsToTry = [
+        "gemini-3.5-flash-lite",   // 500 RPD
+        "gemini-3.6-flash",        // 20 RPD
+        "gemini-3.1-flash-lite",   // 500 RPD
+        "gemma-4-31b-it",          // 14 400 RPD
+        "gemma-4-26b-a4b-it",      // 14 400 RPD
+    ];
+} else {
+    modelsToTry = [
+        "gemini-3.5-flash-lite",   // 500 RPD — primaire volume
+        "gemini-3.1-flash-lite",   // 500 RPD — primaire volume
+        "gemini-3.7-flash",        // 20 RPD
+        "gemini-3.6-flash",        // 20 RPD
+        "gemini-3.5-flash",        // 20 RPD
+        "gemini-3-flash",          // 20 RPD
+        "gemma-4-31b-it",          // 14 400 RPD
+        "gemma-4-26b-a4b-it",      // 14 400 RPD
+    ];
+}
 
-    allFallback.forEach(m => {
-        if (!modelsToTry.includes(m)) modelsToTry.push(m);
-    });
+// Socle volume — Gemma 3 en dernier recours (IDs à confirmer)
+const allFallback = [
+    "gemma-3-27b-it",
+    "gemma-3-12b-it",
+    "gemma-3-4b-it",
+];
+
+allFallback.forEach(m => {
+    if (!modelsToTry.includes(m)) modelsToTry.push(m);
+});
 
     // Forçage du modèle utilisateur en tête si spécifié
     const { model } = bodyReq;
