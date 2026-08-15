@@ -181,11 +181,6 @@ export default async function handler(req) {
         "Une mauvaise nouvelle → empathie + doux + 0.85. Une idée excitante → enthousiasme + energique + 1.15. " +
         "Cette balise est la toute première chose dans ta réponse. Ne la mentionne jamais à l'utilisateur.";
 
-    const systemInstruction = (rawSystemInstruction || "")
-        + knowledgeContextBlock
-        + ANTI_INTRO_GUARD
-        + EMOTION_INSTRUCTION;
-
     if (!prompt) {
         return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
     }
@@ -337,6 +332,12 @@ export default async function handler(req) {
     const knowledgeContextBlock = knowledgeSettled.status === 'fulfilled'
         ? (knowledgeSettled.value || "")
         : "";
+
+    // ── System instruction finale (assemblée ici, après knowledge) ──
+    const systemInstruction = (rawSystemInstruction || "")
+        + knowledgeContextBlock
+        + ANTI_INTRO_GUARD
+        + EMOTION_INSTRUCTION;
 
    // ============================================================
     //  3. MODEL ROUTING INTELLIGENT (Priorité Disponibilité/Quotas)
