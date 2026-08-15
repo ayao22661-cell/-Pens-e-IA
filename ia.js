@@ -2928,6 +2928,7 @@ bubble.appendChild(chipNode);
 
         creditsLeft--;
         updateCredits();
+        useCreditInDB();
         // Note : la synchro crédits est gérée côté serveur dans chat.js (fire-and-forget)
         if (creditsLeft > 0) setStatus("ok");
 
@@ -3076,6 +3077,7 @@ async function generateImage(prompt) {
         // ── DÉDUCTION CRÉDIT ──────────────────────────────────
         creditsLeft--;
         updateCredits();
+        useCreditInDB();
         // crédits synchro côté serveur (chat.js fire-and-forget)
         if (creditsLeft > 0) setStatus("ok");
 
