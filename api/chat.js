@@ -749,6 +749,28 @@ function buildResponseStream(apiResponse, isGemma, exposethinking) {
 // ============================================================
 //  HANDLER PRINCIPAL
 // ============================================================
+
+// Déclarée au niveau module pour éviter l'erreur de hoisting
+// lors de la minification Vercel Edge
+function needsWebSearch(text) {
+    const t = text.toLowerCase();
+    const no = [
+        /^(bonjour|salut|bonsoir|merci)\b/,
+        /\b(écris|rédige|génère|crée|résume|traduis|corrige|reformule)\b/,
+        /\b(mon code|ce code|ce texte|cette image|ci-dessus)\b/,
+        /\b(tu es|tu peux|tes capacités)\b/,
+    ];
+    if (no.some(p => p.test(t))) return false;
+
+    const yes = [
+        /\b(actu|news|récent|dernier|aujourd'hui|maintenant)\b/,
+        /\b(prix|cours|météo|résultat|classement)\b/,
+        /\b(20(2[5-9]|[3-9]\d))\b/,
+        /\b(recherche|cherche|trouve|infos? sur)\b/,
+    ];
+    return yes.some(p => p.test(t)) || t.length > 120;
+}
+
 export default async function handler(req) {
     if (req.method !== 'POST') {
         return new Response(JSON.stringify({ error: 'Méthode non autorisée' }), { status: 405 });
@@ -868,24 +890,6 @@ export default async function handler(req) {
         neuralSystem + ANTI_INTRO_GUARD + EMOTION_INSTRUCTION;
 
     // ── 6. RECHERCHE WEB + KNOWLEDGE CONTEXT (parallèle) ────────
-    function needsWebSearch(text) {
-        const t = text.toLowerCase();
-        const no = [
-            /^(bonjour|salut|bonsoir|merci)\b/,
-            /\b(écris|rédige|génère|crée|résume|traduis|corrige|reformule)\b/,
-            /\b(mon code|ce code|ce texte|cette image|ci-dessus)\b/,
-            /\b(tu es|tu peux|tes capacités)\b/,
-        ];
-        if (no.some(p => p.test(t))) return false;
-
-        const yes = [
-            /\b(actu|news|récent|dernier|aujourd'hui|maintenant)\b/,
-            /\b(prix|cours|météo|résultat|classement)\b/,
-            /\b(20(2[5-9]|[3-9]\d))\b/,
-            /\b(recherche|cherche|trouve|infos? sur)\b/,
-        ];
-        return yes.some(p => p.test(t)) || t.length > 120;
-    }
 
     // Lance les deux en parallèle — zéro latence ajoutée
     const [searchResult, knowledgeResult] = await Promise.allSettled([
