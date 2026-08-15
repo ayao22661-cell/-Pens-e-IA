@@ -90,7 +90,8 @@ export default async function handler(req) {
     // ============================================================
     const authHeader = req.headers.get('Authorization');
     const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // Clé secrète pour bypasser les RLS
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    let knowledgeUserId = null; // capturé pendant la validation auth
 
     // Si le système est configuré pour la prod (clés présentes), on verrouille.
     if (SUPABASE_URL && SUPABASE_KEY) {
@@ -101,33 +102,30 @@ export default async function handler(req) {
         try {
             const token = authHeader.replace('Bearer ', '');
             
-            // A. Vérification de l'identité via API Supabase
             const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
                 headers: { 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_KEY }
             });
             if (!userRes.ok) throw new Error("Token expiré ou invalide.");
             const user = await userRes.json();
+            knowledgeUserId = user.id; // ← capture pour le knowledge system
 
-            // B. Récupération des crédits dans la table profiles
             const profRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=credits_used`, {
                 headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY }
             });
             const profiles = await profRes.json();
             const creditsUsed = profiles[0]?.credits_used || 0;
 
-            // Limite fixée à 20 crédits par jour
             if (creditsUsed >= 20) {
                 return new Response(JSON.stringify({ error: "Quota journalier épuisé (20/20)." }), { status: 403 });
             }
 
-            // C. Débit immédiat du crédit pour éviter les doubles exécutions (Race Conditions)
             await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`, {
                 method: 'PATCH',
                 headers: { 
                     'Authorization': `Bearer ${SUPABASE_KEY}`, 
                     'apikey': SUPABASE_KEY,
                     'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal' // Optimisation de la bande passante
+                    'Prefer': 'return=minimal'
                 },
                 body: JSON.stringify({ credits_used: creditsUsed + 1 })
             });
@@ -238,33 +236,86 @@ export default async function handler(req) {
         return t.length > 120;
     }
 
-    // ── RECHERCHE WEB + KNOWLEDGE CONTEXT (parallèle, zéro latence ajoutée) ──
+    // ── RECHERCHE WEB + KNOWLEDGE CONTEXT (parallèle) ────────────
     const shouldSearch = agentConfig.useSearch && (
         agentId === 'recherche' || needsWebSearch(prompt)
     );
 
-    const [searchSettled, knowledgeSettled] = await Promise.allSettled([
-        // Web search (conditionnel)
-        shouldSearch
-            ? performWebSearch(prompt, 5)
-            : Promise.resolve(null),
+    // Fonctions knowledge inline (pas de fetch interne — Vercel Edge limitation)
+    async function getKnowledgeContext(userId, agentIdK, promptK) {
+        if (!SUPABASE_URL || !SUPABASE_KEY || !userId) return "";
+        try {
+            const sbH = {
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'apikey': SUPABASE_KEY,
+                'Content-Type': 'application/json',
+            };
 
-        // Knowledge context (systématique — 1 requête Supabase)
-        authHeader
-            ? fetch(
-                (process.env.VERCEL_URL
-                    ? `https://${process.env.VERCEL_URL}`
-                    : 'http://localhost:3000') + '/api/knowledge',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type':  'application/json',
-                        'Authorization': authHeader,
-                    },
-                    body: JSON.stringify({ action: 'get', prompt, agentId }),
+            // Charge les exemples few-shot
+            const rows = await fetch(
+                `${SUPABASE_URL}/rest/v1/knowledge_examples?user_id=eq.${userId}&agent_id=eq.${agentIdK}&order=score.desc&limit=50`,
+                { headers: sbH }
+            ).then(r => r.ok ? r.json() : []).catch(() => []);
+
+            // Charge le profil utilisateur
+            const profiles = await fetch(
+                `${SUPABASE_URL}/rest/v1/user_profile_cache?user_id=eq.${userId}&limit=1`,
+                { headers: sbH }
+            ).then(r => r.ok ? r.json() : []).catch(() => []);
+
+            let contextBlock = "";
+
+            // Profil
+            if (profiles.length > 0) {
+                try {
+                    const p = JSON.parse(profiles[0].profile_json || '{}');
+                    const lines = [];
+                    if (p.expertise?.length)        lines.push(`Expertise : ${p.expertise.slice(0,8).join(', ')}`);
+                    if (p.projects?.length)         lines.push(`Projets actifs : ${p.projects.slice(0,5).join(', ')}`);
+                    if (p.frequent_domains?.length) lines.push(`Domaines fréquents : ${p.frequent_domains.join(', ')}`);
+                    if (p.context)                  lines.push(`Contexte : ${p.context}`);
+                    if (lines.length) {
+                        contextBlock += `[PROFIL UTILISATEUR]\n${lines.join('\n')}\nAdapte ta réponse à ce profil. Ne réexplique pas ce qu'il maîtrise.\n\n`;
+                    }
+                } catch (_) {}
+            }
+
+            // Few-shot : similarité simple par mots-clés communs
+            if (rows.length > 0) {
+                const promptWords = new Set(
+                    promptK.toLowerCase().replace(/[^a-zàâçéèêëîïôùûü\s]/g, ' ')
+                        .split(/\s+/).filter(w => w.length > 4)
+                );
+                const scored = rows
+                    .map(row => {
+                        try {
+                            const kw = JSON.parse(row.prompt_keywords || '[]');
+                            const hits = kw.filter(w => promptWords.has(w)).length;
+                            return { ...row, sim: hits / Math.max(promptWords.size, 1) };
+                        } catch (_) { return { ...row, sim: 0 }; }
+                    })
+                    .filter(r => r.sim > 0.1)
+                    .sort((a, b) => (b.sim * b.score) - (a.sim * a.score))
+                    .slice(0, 2);
+
+                if (scored.length > 0) {
+                    const examples = scored.map((ex, i) =>
+                        `Exemple ${i+1} (qualité ${ex.score}/10) :\n${ex.response_text.slice(0, 500)}`
+                    ).join('\n\n---\n\n');
+                    contextBlock += `[EXEMPLES DE RÉFÉRENCE — TES MEILLEURES RÉPONSES SIMILAIRES]\nCalibrage qualité — même niveau ou mieux. Ne les cite pas.\n\n${examples}\n\n`;
                 }
-              ).then(r => r.ok ? r.json() : null).catch(() => null)
-            : Promise.resolve(null),
+            }
+
+            return contextBlock;
+        } catch (e) {
+            console.warn('[Knowledge inline]', e.message);
+            return "";
+        }
+    }
+
+    const [searchSettled, knowledgeSettled] = await Promise.allSettled([
+        shouldSearch ? performWebSearch(prompt, 5) : Promise.resolve(null),
+        getKnowledgeContext(knowledgeUserId, agentId, prompt),
     ]);
 
     // Web search context
@@ -282,12 +333,10 @@ export default async function handler(req) {
             `Cite tes sources quand c'est pertinent.\n\n`;
     }
 
-    // Knowledge context (few-shot + profil utilisateur)
-    let knowledgeContextBlock = "";
-    const kr = knowledgeSettled.status === 'fulfilled' ? knowledgeSettled.value : null;
-    if (kr?.contextBlock) {
-        knowledgeContextBlock = kr.contextBlock;
-    }
+    // Knowledge context
+    const knowledgeContextBlock = knowledgeSettled.status === 'fulfilled'
+        ? (knowledgeSettled.value || "")
+        : "";
 
    // ============================================================
     //  3. MODEL ROUTING INTELLIGENT (Priorité Disponibilité/Quotas)
