@@ -821,6 +821,7 @@ function switchTab(id) {
     history = [];
     CONFIG.storageKey = getHistoryKey(id);
     loadHistoryFromDB();
+    loadCreditsFromDB(); // ← resync crédits depuis Supabase à chaque changement d'onglet
     renderTabs();
 }
 
