@@ -339,53 +339,45 @@ export default async function handler(req) {
         + ANTI_INTRO_GUARD
         + EMOTION_INSTRUCTION;
 
-   // ============================================================
-    //  3. MODEL ROUTING INTELLIGENT (Priorité Disponibilité/Quotas)
-    // ============================================================
-    const { model } = bodyReq; 
+    // ── CASCADE DE MODÈLES — IDs vérifiés août 2026 ──────────
     let modelsToTry = [];
-    
-    // Stratégie réaliste basée sur les quotas RPD réels :
-    // - gemini-2.5-flash / 2.0-flash / 1.5-pro : RPD ~20 chacun → bonus ponctuel
-    // - gemini-3.1-flash-lite : RPD 500 → meilleur compromis qualité/volume
-    // - gemma : RPD 1.5K par variante, TPM illimité → socle de volume
+
     if (agentId === 'code' || agentId === 'audit') {
         modelsToTry = [
-            "gemini-3.1-flash-lite",   // Bon compromis qualité/quota pour le code
-            "gemini-2.5-flash",        // Bonus qualité (quota très limité, 20 RPD)
-            "gemma-4-31b-it"           // Socle de volume
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
+            "gemma-4-31b-it",
         ];
     } else if (agentId === 'creatif') {
         modelsToTry = [
-            "gemini-3.1-flash-lite",
-            "gemini-2.5-flash-lite",   // Bonus (quota limité, 20 RPD)
-            "gemma-3-27b-it"           // Socle de volume
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite",
+            "gemma-4-31b-it",
         ];
     } else {
-        // Pour les autres agents (stratégie, visionnaire, etc.)
         modelsToTry = [
-            "gemini-3.1-flash-lite",
-            "gemini-2.5-flash",
+            "gemini-3.6-flash",
+            "gemini-3.7-flash",
+            "gemini-3.5-flash-lite",
             "gemma-4-31b-it",
-            "gemma-3-27b-it"
         ];
     }
 
-    // Ajout du reste des modèles Gemma en fin de file (secours ultime,
-    // en cas de saturation totale des modèles ci-dessus)
-    const allGemma = [
-        "gemma-4-26b-it",
+    // Socle volume — fallback si quota épuisé sur les primaires
+    const allFallback = [
+        "gemini-3.1-flash-lite",
+        "gemma-4-26b-a4b-it",
+        "gemma-3-27b-it",
         "gemma-3-12b-it",
         "gemma-3-4b-it",
-        "gemma-3-2b-it",
-        "gemma-3-1b-it"
     ];
 
-    allGemma.forEach(m => {
+    allFallback.forEach(m => {
         if (!modelsToTry.includes(m)) modelsToTry.push(m);
     });
 
-    // Forçage du modèle utilisateur en tête de liste si spécifié
+    // Forçage du modèle utilisateur en tête si spécifié
+    const { model } = bodyReq;
     if (model && !modelsToTry.includes(model)) {
         modelsToTry.unshift(model);
     }
