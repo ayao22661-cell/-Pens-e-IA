@@ -13,55 +13,14 @@ import { performWebSearch } from './search.js';
 //  CONFIGURATION DES AGENTS
 // ============================================================
 const AGENTS = {
-    code: {
-        temperature: 0.2,
-        topP: 0.90,
-        topK: 40,
-        maxOutputTokens: 65536,
-        useSearch: false,
-    },
-    recherche: {
-        temperature: 0.6,
-        topP: 0.95,
-        topK: 64,
-        maxOutputTokens: 8192,
-        useSearch: true,
-    },
-    creatif: {
-        temperature: 1.0,
-        topP: 0.98,
-        topK: 64,
-        maxOutputTokens: 65536,
-        useSearch: false,
-    },
-    strategie: {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 64,
-        maxOutputTokens: 8192,
-        useSearch: true,
-    },
-    visionnaire: {
-        temperature: 0.9,
-        topP: 0.97,
-        topK: 64,
-        maxOutputTokens: 6144,
-        useSearch: true,
-    },
-    audit: {
-        temperature: 0.1,
-        topP: 0.85,
-        topK: 32,
-        maxOutputTokens: 8192,
-        useSearch: false,
-    },
-    default: {
-        temperature: 0.5,
-        topP: 0.95,
-        topK: 64,
-        maxOutputTokens: 16384,
-        useSearch: false,
-    }
+    // temperature/topP/topK dépréciés depuis le 21 juillet 2026 — supprimés
+    code:       { maxOutputTokens: 65536, useSearch: false },
+    recherche:  { maxOutputTokens: 8192,  useSearch: true  },
+    creatif:    { maxOutputTokens: 65536, useSearch: false },
+    strategie:  { maxOutputTokens: 8192,  useSearch: true  },
+    visionnaire:{ maxOutputTokens: 6144,  useSearch: true  },
+    audit:      { maxOutputTokens: 8192,  useSearch: false },
+    default:    { maxOutputTokens: 16384, useSearch: false },
 };
 
 // ============================================================
@@ -376,16 +335,8 @@ export default async function handler(req) {
         ];
     }
 
-    // Socle volume — Gemma 3 en dernier recours (IDs à confirmer)
-    const allFallback = [
-        "gemma-3-27b-it",
-        "gemma-3-12b-it",
-        "gemma-3-4b-it",
-    ];
-
-    allFallback.forEach(m => {
-        if (!modelsToTry.includes(m)) modelsToTry.push(m);
-    });
+    // Socle ultime — Gemma 4 uniquement (Gemma 3 IDs non fiables via API Gemini)
+    // gemma-4-26b-a4b-it et gemma-4-31b-it déjà inclus dans les cascades ci-dessus
 
     // Forçage du modèle utilisateur en tête si spécifié
     const { model } = bodyReq;
@@ -446,9 +397,7 @@ export default async function handler(req) {
             contents: [{ role: "user", parts: finalParts }],
             generationConfig: {
                 maxOutputTokens: agentConfig.maxOutputTokens || 8192,
-                temperature: agentConfig.temperature,
-                topP: agentConfig.topP,
-                topK: agentConfig.topK
+                // temperature, topP, topK supprimés — dépréciés API Gemini depuis juillet 2026
             }
         };
 
