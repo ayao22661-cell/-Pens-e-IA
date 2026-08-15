@@ -4,7 +4,7 @@
 
 const CONFIG = {
     maxCredits: 20,
-    maxFileSizeMB: 10,
+    maxFileSizeMB: 3, // Vercel Edge body limit ~4.5MB, base64 x1.33 → max 3MB brut
     storageKey:  'pensee_ia_history',
     creditsKey:  'pensee_ia_credits',
     langMap: {
