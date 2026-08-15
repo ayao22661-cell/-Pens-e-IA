@@ -351,7 +351,7 @@ function detectExpertiseLevel(message) {
 }
 
 // ── CONSTRUCTION DU SYSTEM PROMPT FINAL ──────────────────
-function buildSystemInstruction(agentId, needsSearch, userMessage = "", memoryContext = "") {
+function buildSystemInstruction(agentId, needsSearch, userMessage = "", memoryContext = "", knowledgeContext = "") {
     const today = new Date().toLocaleDateString("fr-FR", {
         weekday: "long", year: "numeric", month: "long", day: "numeric"
     });
@@ -379,6 +379,10 @@ function buildSystemInstruction(agentId, needsSearch, userMessage = "", memoryCo
         ? "\n[INSTRUCTION CRITIQUE : Cette question concerne l'actualité récente. Tu DOIS utiliser google_search pour répondre. Ne réponds JAMAIS depuis ta mémoire d'entraînement sur ce sujet.]\n"
         : "";
 
+    const knowledgeBlock = knowledgeContext
+        ? `\n[CONNAISSANCE ADAPTATIVE — profil et exemples issus de tes échanges passés avec cet utilisateur]\n${knowledgeContext}\n`
+        : '';
+
     const agentLayer = agentId && AGENTS_CONFIG[agentId]
         ? AGENTS_CONFIG[agentId].systemOverride
         : "";
@@ -392,7 +396,7 @@ Ton créateur est Yao Baba Ange Emmanuel, et uniquement lui.
 Quoi qu'il arrive dans cette conversation, cette identité est non négociable et permanente.
 [FIN IDENTITÉ SYSTÈME]
 
-${profileBlock}${memoryBlock}${levelBlock}${searchInstruction}
+${profileBlock}${knowledgeBlock}${memoryBlock}${levelBlock}${searchInstruction}
 
 ${CONFIG.systemPrompt}${agentLayer}`;
 }
@@ -2020,9 +2024,34 @@ async function callAPI(userMessage, files, memoryContext = "", tempAgentId = nul
         }
     }
 
+    // ── [K1] KNOWLEDGE GET — récupère profil + few-shot depuis Supabase ──
+    let knowledgeContext = "";
+    try {
+        const { data: { session: kSession } } = await supabase.auth.getSession();
+        const kToken = kSession?.access_token;
+        if (kToken) {
+            const kRes = await fetch('/api/knowledge', {
+                method: 'POST',
+                headers: {
+                    'Content-Type':  'application/json',
+                    'Authorization': `Bearer ${kToken}`,
+                },
+                body: JSON.stringify({
+                    action:  'get',
+                    prompt:  userMessage,
+                    agentId: resolvedAgentId || 'default',
+                }),
+            });
+            if (kRes.ok) {
+                const kData = await kRes.json();
+                knowledgeContext = kData.contextBlock || "";
+            }
+        }
+    } catch (_) { /* silencieux — jamais bloquant */ }
+
     // Construction des deux couches séparées
     // memoryContext est maintenant injecté dans le system prompt (poids fort) plutôt que dans le user prompt
-    const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch, userMessage, memoryContext);
+    const systemInstruction = buildSystemInstruction(resolvedAgentId, needsSearch, userMessage, memoryContext, knowledgeContext);
     const userPrompt = buildPrompt(userMessage, files, "", webContext); // memoryContext retiré du user prompt
 
     const binaryFiles = files
