@@ -3,13 +3,14 @@
 //  Stratégie : Cache-First pour assets statiques, Network-First pour l'API
 // ============================================================
 
-const CACHE_NAME = 'pensee-ia-v1';
+const CACHE_NAME = 'pensee-ia-v2';
 
 // Assets statiques à pré-mettre en cache au premier chargement
 const PRECACHE_ASSETS = [
     '/',
     '/index.html',
-    '/ia.js'
+    '/src/main.js',
+    '/src/styles/agent.css'
 ];
 
 // ── INSTALLATION : Pré-cache des assets critiques ─────────────────────────

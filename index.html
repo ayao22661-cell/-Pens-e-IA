@@ -1314,7 +1314,7 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
+    <!-- Pyodide n'est plus chargé ici : il démarre à la demande dans un Web Worker (src/sandbox/python.worker.js) -->
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/default.min.css">
     <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
@@ -1324,6 +1324,8 @@
         });
         window.addEventListener('touchmove', function() {}, {passive: false});
     </script>
+    <!-- Composants de l'agent (outils, terminal, aperçus) -->
+    <link rel="stylesheet" href="src/styles/agent.css">
 </head>
 <body>
 
@@ -1408,7 +1410,7 @@
         </button>
 
         <div id="convList">
-            <!-- Rempli dynamiquement par ia.js -->
+            <!-- Rempli dynamiquement par src/conversations.js -->
         </div>
 
         <div id="sidebar-footer">
@@ -1539,9 +1541,8 @@
 
     <!-- Chargement de Supabase en version globale (UMD) pour éviter les erreurs CORS locales -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Pyodide — Interpréteur Python natif via WebAssembly (zéro serveur, zéro coût) -->
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
-    <script type="module" src="ia.js"></script>
+    <!-- Application (modules ES) — voir src/main.js -->
+    <script type="module" src="src/main.js"></script>
     <!-- THINKI : etat interne autonome. Doit etre charge AVANT audio.js. -->
     <script src="thinki.js" defer></script>
     <script src="audio.js" defer></script>
@@ -1584,7 +1585,7 @@
             });
         })();
 
-        /* ── micBtn fallback gracieux (si ia.js fait display:none) ── */
+        /* ── micBtn fallback gracieux (si src/ui/voice-input.js fait display:none) ── */
         (function() {
             const mic = document.getElementById('micBtn');
             if (!mic) return;

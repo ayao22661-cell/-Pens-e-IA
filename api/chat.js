@@ -1,568 +1,383 @@
 // ============================================================
-//  PENSÉE IA — api/chat.js (Vercel Edge & Streaming)
-//  Multi-agents, Security Validation, Intelligent Model Routing
+//  PENSÉE IA — api/chat.js (Vercel Edge · streaming NDJSON)
+//
+//  Un appel = une étape de la boucle d'agent :
+//    1. auth + quota (1 crédit par message utilisateur, jeton de tour ensuite)
+//    2. prompt système assemblé ICI (jamais fourni par le client)
+//    3. appel modèle avec les outils ; les outils "serveur" (web_search,
+//       fetch_url) sont exécutés ici et le modèle est relancé ;
+//       les outils "client" (Python, fichiers, documents) terminent l'étape :
+//       le navigateur les exécute puis rappelle /api/chat avec les résultats.
+//
+//  Flux de sortie : une ligne JSON par événement
+//    {t:"meta"}  {t:"model"}  {t:"emotion"}  {t:"thinking"}  {t:"text"}
+//    {t:"tool_call"}  {t:"tool_result"}  {t:"append"}  {t:"done"}  {t:"error"}
 // ============================================================
 
-export const config = {
-    runtime: 'edge'
-};
+export const config = { runtime: 'edge' };
 
+import { buildSystemInstruction, AGENT_IDS } from './_lib/prompts.js';
+import { authenticate, consumeCredit, refundCredit, signTurnToken, verifyTurnToken, HttpError } from './_lib/auth.js';
+import { getKnowledgeContext } from './_lib/knowledge-context.js';
+import { functionDeclarations, toolWhere, runServerTool } from './_lib/tools.js';
+import { modelCascade, isGemma, streamGenerate, consumeStream, toPlainContents } from './_lib/gemini.js';
 import { performWebSearch } from './search.js';
 
-// ============================================================
-//  CONFIGURATION DES AGENTS
-// ============================================================
-const AGENTS = {
-    // temperature/topP/topK dépréciés depuis le 21 juillet 2026 — supprimés
-    code:       { maxOutputTokens: 65536, useSearch: false },
-    recherche:  { maxOutputTokens: 8192,  useSearch: true  },
-    creatif:    { maxOutputTokens: 65536, useSearch: false },
-    strategie:  { maxOutputTokens: 8192,  useSearch: true  },
-    visionnaire:{ maxOutputTokens: 6144,  useSearch: true  },
-    audit:      { maxOutputTokens: 8192,  useSearch: false },
-    default:    { maxOutputTokens: 16384, useSearch: false },
+const MAX_OUTPUT = {
+    code: 65536, creatif: 65536, recherche: 8192, strategie: 8192,
+    visionnaire: 6144, audit: 8192, default: 16384, voice: 1024,
 };
+const MAX_SERVER_ROUNDS = 5;      // relances successives après des outils serveur
+const MAX_CONTENTS = 120;         // messages max acceptés dans l'historique
+const MAX_TOOL_RESPONSE_CHARS = 30000;
 
-// ============================================================
-//  UTILITAIRE : Stripper les blocs de thinking Gemma
-//  Gemma 4 encapsule son raisonnement entre <|channel>thought\n...<channel|>
-//  Gemma 3 peut émettre des <think>...</think> ou [INTENT]...[OUTPUT] en texte brut
-//  Ces deux formats doivent être supprimés avant d'envoyer au client.
-// ============================================================
-function stripGemmaThinking(text) {
-    // Format Gemma 4 : <|channel>thought\n....<channel|>
-    text = text.replace(/<\|channel>thought[\s\S]*?<channel\|>/g, "");
-    // Format <think>...</think> (certains modèles Gemma 3)
-    text = text.replace(/<think>[\s\S]*?<\/think>/g, "");
-    // Nettoyage des éventuels sauts de ligne orphelins en début de réponse
-    text = text.replace(/^\n+/, "");
-    return text;
-}
+const jsonError = (status, error) =>
+    new Response(JSON.stringify({ error }), { status, headers: { 'Content-Type': 'application/json' } });
 
 export default async function handler(req) {
-    if (req.method !== "POST") {
-        return new Response(JSON.stringify({ error: "Méthode non autorisée" }), { status: 405 });
-    }
-
-    // ============================================================
-    //  1. SÉCURITÉ : VALIDATION SUPABASE (EDGE)
-    // ============================================================
-    const authHeader = req.headers.get('Authorization');
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    let knowledgeUserId = null; // capturé pendant la validation auth
-
-    // Si le système est configuré pour la prod (clés présentes), on verrouille.
-    if (SUPABASE_URL && SUPABASE_KEY) {
-        if (!authHeader) {
-            return new Response(JSON.stringify({ error: "Accès refusé. Token manquant." }), { status: 401 });
-        }
-
-        try {
-            const token = authHeader.replace('Bearer ', '');
-
-            // 1. Vérification token
-            const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-                headers: { 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_KEY }
-            });
-            if (!userRes.ok) throw new Error("Token expiré ou invalide.");
-            const user = await userRes.json();
-            knowledgeUserId = user.id;
-
-            // 2. Lecture crédits
-            const profRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=credits_used`, {
-                headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY }
-            });
-            const profiles = await profRes.json();
-            const creditsUsed = profiles[0]?.credits_used || 0;
-
-            if (creditsUsed >= 20) {
-                return new Response(JSON.stringify({ error: "Quota journalier épuisé (20/20)." }), { status: 403 });
-            }
-
-            // 3. PATCH crédits en fire-and-forget — ne bloque plus le démarrage du stream
-            fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${SUPABASE_KEY}`,
-                    'apikey': SUPABASE_KEY,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify({ credits_used: creditsUsed + 1 })
-            }).catch(() => {}); // silencieux — jamais bloquant
-
-        } catch (e) {
-            return new Response(JSON.stringify({ error: "Erreur de validation: " + e.message }), { status: 401 });
-        }
-    } else {
-        console.warn("[PENSÉE] Mode dev : Variables Supabase manquantes, sécurité bypassée.");
-    }
-
-    // ============================================================
-    //  2. TRAITEMENT DE LA REQUÊTE
-    // ============================================================
-    const bodyReq = await req.json().catch(() => ({}));
-    const { prompt, files, systemInstruction: rawSystemInstruction, agentId } = bodyReq;
-
-    // ============================================================
-    //  Garde anti-auto-présentation : empêche le modèle de rappeler
-    //  son identité ("Je suis Pensée IA...") à chaque réponse.
-    //  Particulièrement nécessaire pour Gemma, qui suit moins bien
-    //  les instructions implicites et a tendance à se réintroduire
-    //  systématiquement quand l'identité figure dans le system prompt.
-    // ============================================================
-    const ANTI_INTRO_GUARD =
-        "\n\n[RÈGLE DE COMPORTEMENT]\nNe te présente jamais (nom, identité, capacités, " +
-        "qui t'a créé) sauf si l'utilisateur te le demande explicitement dans son message " +
-        "actuel (ex: \"qui es-tu ?\", \"tu es quoi ?\"). Réponds directement et uniquement " +
-        "à la question posée, sans préambule d'identité ni rappel de ton nom.";
-
-    // Instruction émotion : le modèle préfixe chaque réponse avec un token JSON compact
-    // sur UNE seule ligne, avant tout autre texte. Format : {"e":"EMOTION","i":INTENSITE}
-    // Émotions possibles : confiance, hesitation, surprise, concentration, empathie, enthousiasme, incertitude
-    // Intensité : float 0.0–1.0
-    const EMOTION_INSTRUCTION =
-        "\n\n[SIGNAL ÉMOTIONNEL + VOCAL — OBLIGATOIRE]\n" +
-        "Commence CHAQUE réponse par un JSON compact sur UNE seule ligne, entre <EM> et </EM>.\n" +
-        "Format EXACT (respecte tous les champs) :\n" +
-        "<EM>{\"e\":\"EMOTION\",\"i\":INTENSITE,\"v\":\"VOIX\",\"r\":RYTHME}</EM>\n\n" +
-        "Champs :\n" +
-        "• e (émotion) : confiance | hesitation | surprise | concentration | empathie | enthousiasme | incertitude\n" +
-        "• i (intensité) : float 0.0–1.0\n" +
-        "• v (voix/posture vocale) : chaleureux | pose | vif | doux | grave | energique | curieux\n" +
-        "  - chaleureux = ton proche, empathique. pose = calme, mesuré. vif = rapide, alerte.\n" +
-        "  - doux = bienveillant, rassurant. grave = sérieux, réfléchi. energique = enthousiaste.\n" +
-        "  - curieux = questionneur, montant en fin de phrase.\n" +
-        "• r (rythme relatif) : float 0.7 (lent/posé) à 1.3 (rapide/enthousiaste). Défaut 1.0.\n\n" +
-        "Exemples :\n" +
-        "<EM>{\"e\":\"concentration\",\"i\":0.85,\"v\":\"grave\",\"r\":0.85}</EM>\n" +
-        "<EM>{\"e\":\"enthousiasme\",\"i\":0.9,\"v\":\"energique\",\"r\":1.2}</EM>\n" +
-        "<EM>{\"e\":\"empathie\",\"i\":0.7,\"v\":\"doux\",\"r\":0.9}</EM>\n\n" +
-        "Choisis toujours selon le VRAI contenu de ta réponse. " +
-        "Une mauvaise nouvelle → empathie + doux + 0.85. Une idée excitante → enthousiasme + energique + 1.15. " +
-        "Cette balise est la toute première chose dans ta réponse. Ne la mentionne jamais à l'utilisateur.";
-
-    if (!prompt) {
-        return new Response(JSON.stringify({ error: "Prompt manquant." }), { status: 400 });
-    }
+    if (req.method !== 'POST') return jsonError(405, 'Méthode non autorisée');
 
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
-        return new Response(JSON.stringify({ error: "Clé API absente." }), { status: 401 });
+    if (!GEMINI_API_KEY) return jsonError(500, 'Clé API absente côté serveur.');
+
+    const body = await req.json().catch(() => null);
+    if (!body) return jsonError(400, 'Corps de requête invalide.');
+
+    // ── 1. Validation de l'entrée ────────────────────────────
+    let contents;
+    try {
+        contents = sanitizeContents(body);
+    } catch (e) {
+        return jsonError(400, e.message);
     }
+    const mode = body.mode === 'voice' ? 'voice' : 'chat';
+    const agentId = AGENT_IDS.includes(body.agentId) ? body.agentId : 'default';
+    const isContinuation = Boolean(body.continuation?.token);
 
-    const agentConfig = AGENTS[agentId] || AGENTS.default;
-
-    // ============================================================
-    //  2bis. RECHERCHE WEB MANUELLE — déclenchée uniquement si
-    //  l'agent l'autorise ET que la question nécessite réellement
-    //  des informations récentes/externes (détection d'intention).
-    // ============================================================
-
-    // Détection : la question a-t-elle besoin d'une recherche web ?
-    function needsWebSearch(text) {
-        const t = text.toLowerCase();
-
-        // Signaux négatifs explicites → pas de recherche
-        const noSearchPatterns = [
-            /^(bonjour|salut|bonsoir|hello|coucou|ça va|ca va|merci|svp|stp)\b/,
-            /^(explique|c'est quoi|qu'est[-\s]ce que|définis|définition|comment fonctionne)/,
-            /^(aide|aidez|help|aide[-\s]moi|peux[-\s]tu|pouvez[-\s]vous)\b/,
-            /\b(écris|rédige|génère|crée|résume|traduis|corrige|améliore|reformule)\b/,
-            /\b(mon code|ce code|ce texte|ce fichier|cette image|ci[-\s]dessus|ci[-\s]joint)\b/,
-            /\b(exemple|exemples|liste|énumère|compare|différence entre)\b/,
-            /\b(qu'est[-\s]ce que tu|tu es|tu peux|tu sais|tes capacités)\b/,
-        ];
-        if (noSearchPatterns.some(p => p.test(t))) return false;
-
-        // Signaux positifs → recherche utile
-        const yesSearchPatterns = [
-            /\b(actu(alité)?s?|news|récent|dernier|dernière|aujourd'hui|maintenant|en ce moment)\b/,
-            /\b(prix|tarif|cours|bourse|météo|résultat|score|classement|sondage|élection)\b/,
-            /\b(qui est|c'est qui|c'est quoi comme|c'est quoi le)\b.{0,30}\b(président|ceo|directeur|champion)\b/,
-            /\b(version|release|changelog|mise à jour|update)\b.{0,30}\b(20(2[3-9]|[3-9]\d))\b/,
-            /\b(20(2[4-9]|[3-9]\d))\b/, // Mention d'une année récente
-            /\b(sortie|lancé|annoncé|publié)\b.{0,30}(récemment|cette année|ce mois)/,
-            /\b(site|lien|url|page web|article|source)\b/,
-            /\b(recherche|cherche|trouve|infos? sur|renseigne[-\s]moi sur)\b/,
-        ];
-        if (yesSearchPatterns.some(p => p.test(t))) return true;
-
-        // Par défaut : pas de recherche pour une question courte (<80 chars sans signal clair)
-        return t.length > 120;
-    }
-
-    // ── RECHERCHE WEB + KNOWLEDGE CONTEXT (parallèle) ────────────
-    const shouldSearch = agentConfig.useSearch && (
-        agentId === 'recherche' || needsWebSearch(prompt)
-    );
-
-    // Fonctions knowledge inline (pas de fetch interne — Vercel Edge limitation)
-    async function getKnowledgeContext(userId, agentIdK, promptK) {
-        if (!SUPABASE_URL || !SUPABASE_KEY || !userId) return "";
-        try {
-            const sbH = {
-                'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'apikey': SUPABASE_KEY,
-                'Content-Type': 'application/json',
-            };
-
-            // Charge les exemples few-shot
-            const rows = await fetch(
-                `${SUPABASE_URL}/rest/v1/knowledge_examples?user_id=eq.${userId}&agent_id=eq.${agentIdK}&order=score.desc&limit=50`,
-                { headers: sbH }
-            ).then(r => r.ok ? r.json() : []).catch(() => []);
-
-            // Charge le profil utilisateur
-            const profiles = await fetch(
-                `${SUPABASE_URL}/rest/v1/user_profile_cache?user_id=eq.${userId}&limit=1`,
-                { headers: sbH }
-            ).then(r => r.ok ? r.json() : []).catch(() => []);
-
-            let contextBlock = "";
-
-            // Profil
-            if (profiles.length > 0) {
-                try {
-                    const p = JSON.parse(profiles[0].profile_json || '{}');
-                    const lines = [];
-                    if (p.expertise?.length)        lines.push(`Expertise : ${p.expertise.slice(0,8).join(', ')}`);
-                    if (p.projects?.length)         lines.push(`Projets actifs : ${p.projects.slice(0,5).join(', ')}`);
-                    if (p.frequent_domains?.length) lines.push(`Domaines fréquents : ${p.frequent_domains.join(', ')}`);
-                    if (p.context)                  lines.push(`Contexte : ${p.context}`);
-                    if (lines.length) {
-                        contextBlock += `[PROFIL UTILISATEUR]\n${lines.join('\n')}\nAdapte ta réponse à ce profil. Ne réexplique pas ce qu'il maîtrise.\n\n`;
-                    }
-                } catch (_) {}
+    // ── 2. Auth + quota ──────────────────────────────────────
+    let userId, credits = null, turnToken;
+    try {
+        ({ userId } = await authenticate(req));
+        if (isContinuation) {
+            if (!(await verifyTurnToken(body.continuation.token, userId))) {
+                throw new HttpError(401, 'Tour expiré. Renvoie ton message.');
             }
-
-            // Few-shot : similarité simple par mots-clés communs
-            if (rows.length > 0) {
-                const promptWords = new Set(
-                    promptK.toLowerCase().replace(/[^a-zàâçéèêëîïôùûü\s]/g, ' ')
-                        .split(/\s+/).filter(w => w.length > 4)
-                );
-                const scored = rows
-                    .map(row => {
-                        try {
-                            const kw = JSON.parse(row.prompt_keywords || '[]');
-                            const hits = kw.filter(w => promptWords.has(w)).length;
-                            return { ...row, sim: hits / Math.max(promptWords.size, 1) };
-                        } catch (_) { return { ...row, sim: 0 }; }
-                    })
-                    .filter(r => r.sim > 0.1)
-                    .sort((a, b) => (b.sim * b.score) - (a.sim * a.score))
-                    .slice(0, 2);
-
-                if (scored.length > 0) {
-                    const examples = scored.map((ex, i) =>
-                        `Exemple ${i+1} (qualité ${ex.score}/10) :\n${ex.response_text.slice(0, 500)}`
-                    ).join('\n\n---\n\n');
-                    contextBlock += `[EXEMPLES DE RÉFÉRENCE — TES MEILLEURES RÉPONSES SIMILAIRES]\nCalibrage qualité — même niveau ou mieux. Ne les cite pas.\n\n${examples}\n\n`;
-                }
-            }
-
-            return contextBlock;
-        } catch (e) {
-            console.warn('[Knowledge inline]', e.message);
-            return "";
+            turnToken = body.continuation.token;
+        } else {
+            credits = await consumeCredit(userId);
+            turnToken = await signTurnToken(userId);
         }
+    } catch (e) {
+        return jsonError(e.status || 500, e.message);
     }
 
-    const [searchSettled, knowledgeSettled] = await Promise.allSettled([
-        shouldSearch ? performWebSearch(prompt, 5) : Promise.resolve(null),
-        getKnowledgeContext(knowledgeUserId, agentId, prompt),
-    ]);
+    // ── 3. Contexte ─────────────────────────────────────────
+    const lastUserText = findLastUserText(contents);
+    const knowledge = mode === 'chat' ? await getKnowledgeContext(userId, agentId, lastUserText) : '';
+    const context = body.context || {};
+    const systemFor = (toolsEnabled) => buildSystemInstruction({
+        agentId: agentId === 'default' ? null : agentId,
+        mode,
+        userMessage: lastUserText,
+        memory: context.memory,
+        profile: context.profile,
+        knowledge,
+        toolsEnabled,
+    });
 
-    // Web search context
-    let searchContextBlock = "";
-    const sr = searchSettled.status === 'fulfilled' ? searchSettled.value : null;
-    if (sr?.results?.length) {
-        const lines = sr.results.map((r, i) =>
-            `[${i + 1}] ${r.title}\n${r.snippet}\nSource: ${r.url}`
-        ).join('\n\n');
-        searchContextBlock =
-            `[CONTEXTE WEB ACTUALISÉ — résultats de recherche en temps réel]\n` +
-            (sr.directAnswer ? `Réponse directe : ${sr.directAnswer}\n\n` : '') +
-            `${lines}\n\n` +
-            `Utilise ces informations pour répondre de façon précise et à jour. ` +
-            `Cite tes sources quand c'est pertinent.\n\n`;
-    }
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+        async start(controller) {
+            const send = (ev) => controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
+            send({ t: 'meta', turnToken, credits });
 
-    // Knowledge context
-    const knowledgeContextBlock = knowledgeSettled.status === 'fulfilled'
-        ? (knowledgeSettled.value || "")
-        : "";
+            try {
+                const ok = await runAgent({
+                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText,
+                    preferredModel: body.continuation?.model, apiKey: GEMINI_API_KEY, signal: req.signal,
+                });
+                if (!ok && !isContinuation) await refundCredit(userId);
+            } catch (e) {
+                if (!isContinuation) await refundCredit(userId);
+                send({ t: 'error', v: e.message || 'Erreur interne.' });
+            } finally {
+                controller.close();
+            }
+        },
+    });
 
-    // ── System instruction finale (assemblée ici, après knowledge) ──
-    const systemInstruction = (rawSystemInstruction || "")
-        + knowledgeContextBlock
-        + ANTI_INTRO_GUARD
-        + EMOTION_INSTRUCTION;
+    return new Response(stream, {
+        headers: {
+            'Content-Type': 'application/x-ndjson; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',
+        },
+    });
+}
 
-    // ── CASCADE DE MODÈLES — optimisée quotas août 2026 ──────────
-    // Priorité aux modèles à fort quota RPD : Flash Lite (500) > Gemma 4 (14400) > Flash premium (20)
-    let modelsToTry = [];
+// ============================================================
+//  BOUCLE SERVEUR
+//  @returns {Promise<boolean>} false si aucun modèle n'a répondu
+// ============================================================
+async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, preferredModel, apiKey, signal }) {
+    const cascade = modelCascade(agentId, preferredModel);
+    let emotionSent = false;
+    let callSeq = 0;
 
-    if (agentId === 'code' || agentId === 'audit') {
-        modelsToTry = [
-            "gemini-3.5-flash-lite",   // 500 RPD — primaire
-            "gemini-3.1-flash-lite",   // 500 RPD — fallback solide
-            "gemini-3.7-flash",        // 20 RPD
-            "gemini-3.6-flash",        // 20 RPD
-            "gemma-4-31b-it",          // 14 400 RPD
-            "gemma-4-26b-a4b-it",      // 14 400 RPD
-        ];
-    } else if (agentId === 'creatif') {
-        modelsToTry = [
-            "gemini-3.5-flash-lite",   // 500 RPD
-            "gemini-3.6-flash",        // 20 RPD
-            "gemini-3.1-flash-lite",   // 500 RPD
-            "gemma-4-31b-it",          // 14 400 RPD
-            "gemma-4-26b-a4b-it",      // 14 400 RPD
-        ];
-    } else {
-        modelsToTry = [
-            "gemini-3.5-flash-lite",   // 500 RPD — primaire volume
-            "gemini-3.1-flash-lite",   // 500 RPD — primaire volume
-            "gemini-3.7-flash",        // 20 RPD
-            "gemini-3.6-flash",        // 20 RPD
-            "gemini-3.5-flash",        // 20 RPD
-            "gemini-3-flash",          // 20 RPD
-            "gemma-4-31b-it",          // 14 400 RPD
-            "gemma-4-26b-a4b-it",      // 14 400 RPD
-        ];
-    }
+    for (let round = 0; round < MAX_SERVER_ROUNDS; round++) {
+        const firstRound = round === 0 && !isContinuation;
+        const result = await callWithCascade({
+            cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText,
+            forceSearch: firstRound && agentId === 'recherche',
+            allowPreSearch: firstRound,
+            onModel: (model) => send({ t: 'model', v: model }),
+            handlers: {
+                onText: (v) => send({ t: 'text', v }),
+                onThinking: (v) => send({ t: 'thinking', v }),
+                onEmotion: (v) => { if (!emotionSent) { emotionSent = true; send({ t: 'emotion', v }); } },
+            },
+        });
 
-    // Socle ultime — Gemma 4 uniquement (Gemma 3 IDs non fiables via API Gemini)
-    // gemma-4-26b-a4b-it et gemma-4-31b-it déjà inclus dans les cascades ci-dessus
+        if (result.error) {
+            send({ t: 'error', v: result.error, code: result.code });
+            return false;
+        }
 
-    // Forçage du modèle utilisateur en tête si spécifié
-    const { model } = bodyReq;
-    if (model && !modelsToTry.includes(model)) {
-        modelsToTry.unshift(model);
-    }
+        const { content, calls, finishReason, blockReason } = result;
+        // La cascade suivante (même requête) privilégie le modèle qui a répondu
+        if (cascade[0] !== result.model) {
+            cascade.splice(cascade.indexOf(result.model), 1);
+            cascade.unshift(result.model);
+        }
 
-    // ============================================================
-    //  4. EXÉCUTION EN CASCADE
-    // ============================================================
-    for (const model of modelsToTry) {
-        const isGemma = model.startsWith("gemma");
-        // Contexte web injecté en texte brut → fonctionne pour Gemini ET Gemma
-        const promptWithContext = searchContextBlock + prompt;
-        const parts = [{ text: promptWithContext }];
+        if (!calls.length) {
+            send({ t: 'append', content });
+            send({ t: 'done', reason: blockReason ? 'blocked' : (finishReason || 'STOP').toLowerCase() });
+            return true;
+        }
 
-        if (files && files.length > 0) {
-            files.forEach(file => {
-                if (file.base64) {
-                    parts.push({
-                        inline_data: { mime_type: file.mime, data: file.base64 }
-                    });
-                }
-                if (file.url) {
-                    parts.push({
-                        file_data: { mime_type: file.mime || "image/jpeg", file_uri: file.url }
-                    });
-                }
+        // ── Appels d'outils ─────────────────────────────────
+        const ids = calls.map(() => `call_${Date.now().toString(36)}_${callSeq++}`);
+        calls.forEach((c, i) => send({
+            t: 'tool_call', id: ids[i], name: c.name, args: c.args || {}, where: toolWhere(c.name),
+        }));
+
+        const serverIdx = calls.map((c, i) => i).filter(i => toolWhere(calls[i].name) === 'server');
+        const executed = await Promise.all(serverIdx.map(i => runServerTool(calls[i].name, calls[i].args || {})));
+
+        const serverResponses = {};
+        serverIdx.forEach((i, k) => {
+            const { response, display } = executed[k];
+            send({ t: 'tool_result', id: ids[i], name: calls[i].name, ok: !response.error, display });
+            serverResponses[ids[i]] = functionResponsePart(calls[i], response);
+        });
+
+        send({ t: 'append', content });
+
+        const clientIdx = calls.map((c, i) => i).filter(i => toolWhere(calls[i].name) === 'client');
+        if (clientIdx.length) {
+            // Le navigateur exécute ses outils puis rappelle /api/chat
+            // avec TOUTES les réponses, dans l'ordre des appels.
+            send({
+                t: 'done',
+                reason: 'client_tools',
+                order: ids,
+                serverResponses,
+                callMeta: Object.fromEntries(ids.map((id, i) => [id, { name: calls[i].name, modelId: calls[i].id || null }])),
             });
+            return true;
         }
 
-        // Gemma ne supporte PAS systemInstruction nativement — injection dans le user message
-        let finalParts = parts;
-        if (isGemma && systemInstruction) {
-            finalParts = [
-                { text: "[INSTRUCTIONS SYSTÈME]\n" + systemInstruction + "\n\n[MESSAGE UTILISATEUR]\n" + parts[0].text },
-                ...parts.slice(1)
-            ];
-        }
+        contents.push(content, { role: 'user', parts: ids.map(id => serverResponses[id]) });
+        send({ t: 'append', content: contents[contents.length - 1] });
+    }
 
-        // Le tool googleSearch natif n'est plus utilisé : la recherche est
-        // désormais injectée manuellement en amont (searchContextBlock),
-        // de façon identique pour tous les modèles, Gemma inclus.
-        const canUseCodeExecution = !isGemma && ["code", "audit", "strategie", "default"].includes(agentId);
+    send({ t: 'text', v: "\n\n*[Limite d'étapes atteinte pour cette réponse.]*" });
+    send({ t: 'done', reason: 'max_rounds' });
+    return true;
+}
 
-        let finalSystemInstruction = systemInstruction;
-        if (isGemma && systemInstruction) {
-            finalSystemInstruction = systemInstruction
-                .replace(/\[INSTRUCTION CRITIQUE[^\]]*\][^\n]*/gi, "")
-                .replace(/Tu DOIS utiliser google_search[^.]*\./gi, "")
-                .trim();
-        }
+function functionResponsePart(call, response) {
+    let payload = response;
+    const raw = JSON.stringify(response);
+    if (raw.length > MAX_TOOL_RESPONSE_CHARS) payload = { truncated: true, content: raw.slice(0, MAX_TOOL_RESPONSE_CHARS) };
+    const fr = { name: call.name, response: payload };
+    if (call.id) fr.id = call.id;
+    return { functionResponse: fr };
+}
 
-        const body = {
-            ...((!isGemma && finalSystemInstruction) && {
-                systemInstruction: { parts: [{ text: finalSystemInstruction }] }
-            }),
-            contents: [{ role: "user", parts: finalParts }],
-            generationConfig: {
-                maxOutputTokens: agentConfig.maxOutputTokens || 8192,
-                // temperature, topP, topK supprimés — dépréciés API Gemini depuis juillet 2026
-            }
-        };
+// ============================================================
+//  CASCADE DE MODÈLES
+// ============================================================
+async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceSearch, allowPreSearch, lastUserText, onModel, handlers }) {
+    const hasToolParts = contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
 
-        let activeTools = [];
-        if (canUseCodeExecution) activeTools.push({ codeExecution: {} });
-        if (activeTools.length > 0) body.tools = activeTools;
+    for (const model of cascade) {
+        const gemma = isGemma(model);
+        let useTools = mode === 'chat' && !gemma;
+        let useThinking = !gemma;
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
-
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body)
+        // Chaque modèle a droit à 3 variantes si le 400 vient d'un paramètre non supporté
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const body = await buildBody({
+                model, contents, agentId, mode, systemFor, useTools, useThinking,
+                forceSearch: forceSearch && useTools,
+                preSearchQuery: allowPreSearch && !useTools && mode === 'chat' ? preSearchQuery(agentId, lastUserText) : null,
             });
+
+            let response;
+            try {
+                response = await streamGenerate(model, body, apiKey, signal);
+            } catch (e) {
+                if (signal?.aborted) return { error: 'Requête annulée.' };
+                break; // erreur réseau → modèle suivant
+            }
 
             if (response.ok) {
-                const stream = new ReadableStream({
-                    async start(controller) {
-                        const reader = response.body.getReader();
-                        const decoder = new TextDecoder();
-                        let sseBuffer = "";   // Buffer SSE ligne par ligne
-                        let fullText = "";    // Accumulation totale pour détecter les marqueurs fichiers
-                        let sentUpTo = 0;     // Curseur : nb de chars déjà envoyés au client
-
-                        try {
-                            let emotionSent = false;
-                            let emotionBuffer = ""; // accumule jusqu'à </EM>
-
-                            while (true) {
-                                const { done, value } = await reader.read();
-                                if (done) break;
-
-                                sseBuffer += decoder.decode(value, { stream: true });
-                                const lines = sseBuffer.split('\n');
-                                sseBuffer = lines.pop() || "";
-
-                                for (const line of lines) {
-                                    if (!line.startsWith('data: ')) continue;
-                                    const dataStr = line.slice(6).trim();
-                                    if (dataStr === '[DONE]') continue;
-                                    try {
-                                        const dataObj = JSON.parse(dataStr);
-                                        const responseParts = dataObj.candidates?.[0]?.content?.parts || [];
-                                        let textChunk = responseParts
-                                            .filter(p => typeof p.text === "string" && !p.thought)
-                                            .map(p => p.text)
-                                            .join("");
-
-                                        if (!textChunk) continue;
-
-                                        if (isGemma) {
-                                            textChunk = stripGemmaThinking(textChunk);
-                                        }
-
-                                        if (!textChunk) continue;
-
-                                        // ── Extraction du token émotion ───────────────────
-                                        // Le modèle émet <EM>{...}</EM> en tout début de réponse.
-                                        // On accumule jusqu'à trouver </EM>, on extrait, on envoie
-                                        // un signal spécial \x02EM:{...}\x03 au client, puis on
-                                        // continue le stream sans cette balise.
-                                        if (!emotionSent) {
-                                            emotionBuffer += textChunk;
-                                            const closeIdx = emotionBuffer.indexOf('</EM>');
-                                            if (closeIdx !== -1) {
-                                                emotionSent = true;
-                                                const openIdx = emotionBuffer.indexOf('<EM>');
-                                                if (openIdx !== -1) {
-                                                    const emJson = emotionBuffer.slice(openIdx + 4, closeIdx);
-                                                    // Signal émotion : \x02EM:{json}\x03 (non-printable delimiters)
-                                                    controller.enqueue(new TextEncoder().encode(`\x02EM:${emJson}\x03`));
-                                                }
-                                                // Texte après </EM>
-                                                textChunk = emotionBuffer.slice(closeIdx + 5).replace(/^\n/, '');
-                                                emotionBuffer = "";
-                                                if (!textChunk) continue;
-                                            } else {
-                                                // Pas encore </EM> — on accumule, rien à streamer
-                                                continue;
-                                            }
-                                        }
-
-                                        fullText += textChunk;
-
-                                        // Stratégie de streaming sécurisée pour les marqueurs fichiers :
-                                        // Un marqueur [GENERATE_FILE:...] ou [GENERATE_PDF:...] peut arriver
-                                        // fragmenté sur plusieurs chunks SSE. On ne streame en temps réel
-                                        // que le texte "safe" (avant tout marqueur potentiellement ouvert),
-                                        // puis on envoie le marqueur complet uniquement une fois le stream fini.
-                                        const markerOpenIdx = fullText.indexOf('\n[GENERATE_');
-                                        const safeEnd = markerOpenIdx > -1 ? markerOpenIdx : fullText.length;
-
-                                        if (safeEnd > sentUpTo) {
-                                            const toSend = fullText.slice(sentUpTo, safeEnd);
-                                            if (toSend) {
-                                                controller.enqueue(new TextEncoder().encode(toSend));
-                                            }
-                                            sentUpTo = safeEnd;
-                                        }
-
-                                    } catch (e) {
-                                        // Ignore les erreurs de parsing JSON partiel (chunks SSE incomplets)
-                                    }
-                                }
-                            }
-
-                            // Fin du stream : envoyer le(s) marqueur(s) fichier complets s'ils existent
-                            // On cherche TOUS les marqueurs présents dans la réponse finale
-                            const remainingText = fullText.slice(sentUpTo);
-                            if (remainingText) {
-                                controller.enqueue(new TextEncoder().encode(remainingText));
-                            }
-
-                        } catch (err) {
-                            controller.enqueue(new TextEncoder().encode("\n[Interruption réseau locale]"));
-                        } finally {
-                            controller.close();
-                        }
-                    }
-                });
-
-                return new Response(stream, {
-                    headers: {
-                        "Content-Type": "text/plain; charset=utf-8",
-                        "Cache-Control": "no-cache",
-                        "Connection": "keep-alive"
-                    }
-                });
+                onModel(model);
+                const out = await consumeStream(response, handlers);
+                return { ...out, model };
             }
 
-            if (response.status === 429 || response.status >= 500) {
-                // Quota épuisé ou erreur serveur → on essaie le suivant
-                continue;
-            }
+            if (response.status === 429 || response.status >= 500) break;
 
+            const errMsg = (await response.json().catch(() => ({})))?.error?.message || '';
             if (response.status === 400 || response.status === 404) {
-                // 400 peut signifier :
-                // A) Paramètres incompatibles (Gemma + systemInstruction) → cascade normale
-                // B) Prompt trop long (fichier volumineux → token overflow) → erreur utile
-                const errBody = await response.json().catch(() => ({}));
-                const errMsg  = errBody?.error?.message || "";
-                const isTokenOverflow = /too long|token|context|exceed|limit|maximum/i.test(errMsg);
-
-                if (isTokenOverflow) {
-                    // On arrête la cascade : changer de modèle ne résoudra pas le problème
-                    // (c'est la TAILLE du prompt qui pose problème, pas le modèle)
-                    return new Response(JSON.stringify({
-                        error: "Le fichier est trop volumineux pour être analysé en entier. "
-                             + "Copie-colle uniquement la section qui t'intéresse (une classe, une fonction)."
-                    }), { status: 413 }); // 413 = Payload Too Large
+                if (/too long|exceeds? the maximum|context window|token count/i.test(errMsg)) {
+                    return {
+                        error: "Le contenu est trop volumineux pour être analysé en entier. Copie-colle uniquement la section qui t'intéresse.",
+                        code: 413,
+                    };
                 }
-
-                // Paramètres incompatibles → on continue la cascade
-                continue;
+                if (useThinking && /thinking|thought/i.test(errMsg)) { useThinking = false; continue; }
+                if (useTools && !hasToolParts && /function|tool/i.test(errMsg)) { useTools = false; continue; }
+                break;
             }
-
-            const errorData = await response.json().catch(() => ({}));
-            return new Response(JSON.stringify({ error: errorData.error?.message || `Erreur API (${response.status})` }), { status: response.status });
-
-        } catch (fetchError) {
-            continue; // Failover sur erreur réseau
+            return { error: errMsg || `Erreur API (${response.status})`, code: response.status };
         }
     }
+    return { error: 'Serveurs IA saturés. Réessaie dans quelques secondes.', code: 503 };
+}
 
-    // Si on sort de la boucle, tous les modèles ont échoué
-    return new Response(JSON.stringify({ error: "Serveurs IA saturés. Réessaie dans quelques secondes." }), { status: 503 });
+async function buildBody({ model, contents, agentId, mode, systemFor, useTools, useThinking, forceSearch, preSearchQuery: query }) {
+    const systemInstruction = systemFor(useTools);
+    let finalContents = contents;
+
+    // Modèles sans outils : recherche web injectée en amont (heuristique)
+    if (query) {
+        const ctx = await performWebSearch(query, 5).then(formatSearchContext).catch(() => '');
+        if (ctx) finalContents = prependToLastUser(contents, ctx);
+    }
+
+    const body = {
+        contents: isGemma(model) ? toPlainContents(finalContents, systemInstruction) : finalContents,
+        generationConfig: {
+            maxOutputTokens: mode === 'voice' ? MAX_OUTPUT.voice : (MAX_OUTPUT[agentId] || MAX_OUTPUT.default),
+        },
+    };
+    if (!isGemma(model)) body.systemInstruction = { parts: [{ text: systemInstruction }] };
+    if (useThinking) body.generationConfig.thinkingConfig = { includeThoughts: true };
+    if (useTools) {
+        body.tools = [{ functionDeclarations: functionDeclarations() }];
+        if (forceSearch) {
+            body.toolConfig = { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['web_search'] } };
+        }
+    }
+    return body;
+}
+
+// ── Heuristique de recherche (uniquement pour les modèles sans outils) ──
+function preSearchQuery(agentId, text) {
+    if (!text) return null;
+    const t = text.toLowerCase();
+    if (agentId === 'recherche') return text.slice(0, 200);
+    if (!['strategie', 'visionnaire'].includes(agentId)) return null;
+    const yes = [
+        /\b(actu(alité)?s?|news|récent|dernier|dernière|aujourd'hui|maintenant|en ce moment)\b/,
+        /\b(prix|tarif|cours|bourse|météo|résultat|score|classement|sondage|élection)\b/,
+        /\b(20(2[4-9]|[3-9]\d))\b/,
+        /\b(recherche|cherche|trouve|infos? sur|renseigne[-\s]moi sur)\b/,
+    ];
+    return yes.some(p => p.test(t)) ? text.slice(0, 200) : null;
+}
+
+function formatSearchContext(sr) {
+    if (!sr?.results?.length) return '';
+    const lines = sr.results.map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}\nSource: ${r.url}`).join('\n\n');
+    return `[CONTEXTE WEB ACTUALISÉ — résultats de recherche en temps réel]\n`
+        + (sr.directAnswer ? `Réponse directe : ${sr.directAnswer}\n\n` : '')
+        + `${lines}\n\nUtilise ces informations et cite les sources [n] quand c'est pertinent.\n\n`;
+}
+
+function prependToLastUser(contents, text) {
+    const copy = contents.slice();
+    for (let i = copy.length - 1; i >= 0; i--) {
+        if (copy[i].role === 'user') {
+            copy[i] = { role: 'user', parts: [{ text }, ...copy[i].parts] };
+            break;
+        }
+    }
+    return copy;
+}
+
+// ============================================================
+//  VALIDATION DE L'HISTORIQUE ENVOYÉ PAR LE CLIENT
+// ============================================================
+function sanitizeContents(body) {
+    let messages = body.messages;
+
+    // Compatibilité : ancien format { prompt, files } (client en cache, mode vocal v1)
+    if (!Array.isArray(messages) && typeof body.prompt === 'string') {
+        const parts = [{ text: body.prompt }];
+        for (const f of body.files || []) {
+            if (f?.base64 && f.mime) parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
+        }
+        messages = [{ role: 'user', parts }];
+    }
+
+    if (!Array.isArray(messages) || !messages.length) throw new Error('Historique de messages manquant.');
+
+    const out = [];
+    for (const m of messages.slice(-MAX_CONTENTS)) {
+        const role = m?.role === 'model' || m?.role === 'assistant' ? 'model' : 'user';
+        const parts = (Array.isArray(m?.parts) ? m.parts : []).map(sanitizePart).filter(Boolean);
+        if (!parts.length) continue;
+        // Fusion des messages consécutifs de même rôle (exigé par l'API)
+        const prev = out[out.length - 1];
+        if (prev && prev.role === role) prev.parts.push(...parts);
+        else out.push({ role, parts });
+    }
+    if (!out.length || out[out.length - 1].role !== 'user') throw new Error('Le dernier message doit venir de l\'utilisateur.');
+    if (out[0].role !== 'user') out.unshift({ role: 'user', parts: [{ text: '(suite de la conversation)' }] });
+    return out;
+}
+
+function sanitizePart(p) {
+    if (!p || typeof p !== 'object') return null;
+    const sig = typeof p.thoughtSignature === 'string' ? { thoughtSignature: p.thoughtSignature } : {};
+    if (typeof p.text === 'string') return { text: p.text, ...sig };
+    const inline = p.inlineData || p.inline_data;
+    if (inline?.data) return { inlineData: { mimeType: String(inline.mimeType || inline.mime_type || ''), data: String(inline.data) } };
+    const file = p.fileData || p.file_data;
+    if (file?.fileUri || file?.file_uri) return { fileData: { mimeType: String(file.mimeType || file.mime_type || ''), fileUri: String(file.fileUri || file.file_uri) } };
+    if (p.functionCall?.name) {
+        const fc = { name: String(p.functionCall.name), args: p.functionCall.args || {} };
+        if (p.functionCall.id) fc.id = String(p.functionCall.id);
+        return { functionCall: fc, ...sig };
+    }
+    if (p.functionResponse?.name) {
+        const fr = { name: String(p.functionResponse.name), response: p.functionResponse.response || {} };
+        if (p.functionResponse.id) fr.id = String(p.functionResponse.id);
+        return { functionResponse: fr };
+    }
+    return null;
+}
+
+function findLastUserText(contents) {
+    for (let i = contents.length - 1; i >= 0; i--) {
+        if (contents[i].role !== 'user') continue;
+        const text = contents[i].parts.filter(p => typeof p.text === 'string').map(p => p.text).join('\n').trim();
+        if (text) return text.slice(-4000);
+    }
+    return '';
 }

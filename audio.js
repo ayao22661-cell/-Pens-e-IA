@@ -1554,55 +1554,60 @@ async function sendToAI(text) {
     const _t0 = performance.now();
     let _tFirst = 0;
 
-    const base = typeof window.CONFIG?.systemPrompt === 'string' ? window.CONFIG.systemPrompt : '';
-    const today = new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-    const systemInstruction = `[DATE : ${today}]\n\n${base}\n\n--- MODE VOCAL ---\nReponds en 3 a 5 phrases maximum. Zero markdown, zero asterisques, zero listes. Tu parles, tu n'ecris pas. Si la reponse necessite du code, resume en 2 phrases.`;
-
+    // Le prompt système (y compris la consigne "mode vocal") est assemblé côté serveur.
     const agentId = (typeof window.activeAgentId !== 'undefined' && window.activeAgentId) ? window.activeAgentId : 'default';
 
     try {
+        let token = '';
+        try {
+            const { data } = await window.supabase.auth.getSession();
+            token = data?.session?.access_token || '';
+        } catch {}
+
         const response = await fetch('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: text, systemInstruction, agentId })
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ mode: 'voice', agentId, messages: [{ role: 'user', parts: [{ text }] }] })
         });
 
         if (!response.ok) { psyche('error', { code: response.status }); setStatus('Erreur API', 'error'); setOrbState('idle'); return; }
 
+        // Flux NDJSON : une ligne JSON par événement ({t:"text"}, {t:"emotion"}, …)
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullReply = '';
-        let emotionParsed = false;
+        let lineBuf = '';
         let declaredEM = null;   // ce que THINKI DIT ressentir
+
+        const onEvent = (ev) => {
+            if (ev.t === 'text') {
+                if (!_tFirst) _tFirst = performance.now();   // latence jusqu'au 1er token
+                fullReply += ev.v;
+            } else if (ev.t === 'emotion' && !declaredEM) {
+                const em = ev.v || {};
+                if (em.e && typeof em.i === 'number') Hologram.setEmotion(em.e, em.i);
+                declaredEM = em;
+                // Posture vocale injectée dans speakWebSpeech
+                if (em.v) AudioState.voiceProfile = em.v;
+                if (typeof em.r === 'number') AudioState.voiceRhythm = em.r;
+            } else if (ev.t === 'error') {
+                throw new Error(ev.v);
+            }
+        };
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            if (!_tFirst) _tFirst = performance.now();   // latence jusqu'au 1er token
-
-            // Détecter et extraire le signal émotion \x02EM:{...}\x03
-            if (!emotionParsed && chunk.includes('\x02EM:')) {
-                const emStart = chunk.indexOf('\x02EM:');
-                const emEnd = chunk.indexOf('\x03', emStart);
-                if (emEnd !== -1) {
-                    try {
-                        const emJson = chunk.slice(emStart + 4, emEnd);
-                        const em = JSON.parse(emJson);
-                        if (em.e && typeof em.i === 'number') {
-                            Hologram.setEmotion(em.e, em.i);
-                        }
-                        declaredEM = em;
-                        // Stocker la posture vocale pour l'injecter dans speakWebSpeech
-                        if (em.v) AudioState.voiceProfile = em.v;
-                        if (typeof em.r === 'number') AudioState.voiceRhythm = em.r;
-                    } catch {}
-                    emotionParsed = true;
-                    fullReply += chunk.slice(0, emStart) + chunk.slice(emEnd + 1);
-                    continue;
-                }
+            lineBuf += decoder.decode(value, { stream: true });
+            let nl;
+            while ((nl = lineBuf.indexOf('\n')) !== -1) {
+                const line = lineBuf.slice(0, nl).trim();
+                lineBuf = lineBuf.slice(nl + 1);
+                if (!line) continue;
+                let ev;
+                try { ev = JSON.parse(line); } catch { continue; }
+                onEvent(ev);
             }
-            fullReply += chunk;
         }
 
         const clean = cleanForSpeech(fullReply);
