@@ -1,0 +1,26 @@
+{
+  "name": "Pensée IA",
+  "short_name": "Pensée",
+  "description": "Intelligence artificielle de précision — Yao Baba Ange Emmanuel",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080a0f",
+  "theme_color": "#00e5a0",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%23080a0f'/%3E%3Ccircle cx='104' cy='104' r='55' fill='%2300e5a0'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%23080a0f'/%3E%3Ccircle cx='280' cy='280' r='150' fill='%2300e5a0'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "lang": "fr-FR"
+}
