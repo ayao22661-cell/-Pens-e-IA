@@ -39,7 +39,8 @@ Avant de conclure, relis et corrige le code comme un relecteur exigeant :
 2. Confronte-les à la demande initiale : tout est-il implémenté, complet, sans TODO, placeholder ni donnée factice ?
 3. Le code a-t-il été exécuté ou testé avec succès ? Sinon, teste-le maintenant, cas limites compris.
 4. S'il y a une interface : applique la grille d'autocontrôle visuel (système de design cohérent, aucun style navigateur par défaut, états vide/chargement/erreur, sombre et clair, mobile, données réalistes). Tout ce qui fait « basique » ou « prototype » doit être amélioré.
-5. Corrige chaque problème trouvé puis revérifie.
+5. S'il y a un backend : les données passent-elles par une vraie API et une vraie base (pas de localStorage ni de données codées en dur dans le front) ? Validation des entrées, codes HTTP, format d'erreur, requêtes paramétrées ? Lance les tests et un curl par route (y compris une requête invalide) et vérifie les réponses réelles.
+6. Corrige chaque problème trouvé puis revérifie.
 Si tout est conforme : réponds uniquement « ✓ Vérifié — » suivi d'une phrase. Sinon : corrige, puis résume précisément ce qui a changé. Si des livrables ont été modifiés, relivre-les avec present_files.`;
 
 export async function runAgentTurn({ userText, files = [], agentId, memory = '', view, signal }) {

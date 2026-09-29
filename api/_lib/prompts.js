@@ -145,9 +145,39 @@ MISE EN PAGE : shell d'application (barre latérale + barre supérieure + conten
 
 CONTENU : données de démonstration RÉALISTES et nombreuses (noms, dates, montants, statuts crédibles ; contexte ivoirien / africain quand c'est pertinent : FCFA, villes, prénoms). Jamais de Lorem ipsum ni de "Test".
 
-FONCTIONNALITÉS : dépasse le minimum demandé comme le ferait un bon produit — recherche instantanée, tri, filtres, pagination, statistiques en tête de page (cartes KPI), création/édition/suppression avec validation et confirmation, persistance (localStorage ou vraie base), raccourcis clavier utiles, export CSV si c'est des données.
+FONCTIONNALITÉS : dépasse le minimum demandé comme le ferait un bon produit — recherche instantanée, tri, filtres, pagination, statistiques en tête de page (cartes KPI), création/édition/suppression avec validation et confirmation, persistance dans un vrai backend (localStorage uniquement pour une démo 100 % front explicitement demandée ou pour des préférences d'affichage), raccourcis clavier utiles, export CSV si c'est des données.
 
 AUTOCONTRÔLE VISUEL avant de livrer : hiérarchie claire au premier coup d'œil ? palette cohérente ? espacements réguliers ? aucun élément au style navigateur par défaut ? états vides/chargement présents ? beau en sombre ET en clair ? utilisable sur mobile ? Si non, corrige avant de conclure.`;
+
+// ── Backend / full-stack : un vrai serveur, pas une façade ──
+const BACKEND_PROMPT = `
+
+━━━ INGÉNIERIE BACKEND — UN VRAI SERVEUR, PAS UNE FAÇADE ━━━
+Dès que l'application manipule des données, des comptes ou des règles métier, elle a un VRAI backend. Interdit sauf demande explicite : tout stocker dans localStorage, des données codées en dur dans le front, une "API" simulée par des setTimeout.
+
+STACK PAR DÉFAUT (sauf demande contraire) :
+- Node 22 (ESM) + Express 5 + better-sqlite3 (SQLite, zéro configuration) + zod (validation) + helmet + cors + pino-http (logs) ; tests : vitest + supertest.
+- Alternative Python : FastAPI + SQLModel/SQLite + pydantic ; tests : pytest + httpx.
+- Si l'utilisateur vise la production multi-utilisateurs : PostgreSQL + Prisma (ou Drizzle), variables d'environnement documentées.
+
+ARCHITECTURE (projet full-stack) :
+  server/  src/{index.js, app.js, config.js, db/{schema.sql, migrate.js, seed.js}, routes/, services/, middlewares/{error.js, validate.js, auth.js}}, tests/
+  client/  (le front, qui appelle l'API via un module client/src/api.js)
+  package.json racine avec "dev" (concurrently : serveur + front), README.md, .env.example
+- Couches séparées : routes (HTTP) → services (règles métier) → accès aux données. Aucune requête SQL dans les routes.
+- app.js exporte l'app (testable) ; index.js écoute sur 0.0.0.0:3000. Front Vite sur 5173 avec proxy "/api" → http://localhost:3000 : une seule URL pour l'utilisateur.
+
+DONNÉES : schéma explicite (types, NOT NULL, UNIQUE, clés étrangères, index sur les colonnes filtrées), created_at/updated_at, migration idempotente au démarrage, seed de données réalistes, transactions pour les écritures multiples, requêtes TOUJOURS paramétrées (jamais de concaténation).
+
+API : REST cohérente (/api/ressources, /api/ressources/:id) ; codes justes (200, 201 + ressource créée, 204, 400 validation, 401/403, 404, 409 conflit, 500) ; format d'erreur unique { "error": { "code", "message", "details" } } ; pagination, tri et filtres CÔTÉ SERVEUR (?page&limit&sort&q) avec total renvoyé ; validation zod de chaque body/query/param ; middleware d'erreur central (jamais de stack trace envoyée au client) ; route /api/health.
+
+SÉCURITÉ : secrets dans .env (jamais dans le code), helmet, CORS restreint, limite de taille des requêtes. Si comptes utilisateurs : mots de passe hachés (bcrypt/argon2), sessions ou JWT en cookie httpOnly, vérification des droits côté serveur sur CHAQUE route protégée, limitation du débit sur la connexion.
+
+PREUVE PAR L'EXÉCUTION (obligatoire, sur la machine Linux) :
+1. npm test : tests d'intégration de chaque route, cas d'erreur compris (validation 400, 404, doublon 409, accès refusé).
+2. Serveur lancé en arrière-plan puis curl de chaque route : créer → lister → modifier → supprimer, et une requête invalide. Montre les réponses.
+3. Seulement ensuite : front branché sur la vraie API (états chargement/erreur), puis open_port sur le front.
+4. README : lancement en une commande, variables d'environnement, tableau des routes (méthode, chemin, rôle, exemple).`;
 
 const AGENT_PROMPTS = {
     code: `
@@ -293,7 +323,7 @@ export const AGENT_IDS = Object.keys(AGENT_PROMPTS);
  * @param {string} o.knowledge     profil + few-shot (serveur)
  * @param {boolean} o.toolsEnabled le modèle reçoit-il les outils ?
  */
-export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false }) {
+export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false, backend = false }) {
     const today = new Date().toLocaleDateString('fr-FR', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Africa/Abidjan'
     });
@@ -317,6 +347,7 @@ export function buildSystemInstruction({ agentId, mode, userMessage, memory, pro
         + toolsLayer
         + agentLayer
         + (heavy && mode !== 'voice' ? HEAVY_PROMPT : '')
+        + (backend && mode !== 'voice' ? BACKEND_PROMPT : '')
         + (ui && mode !== 'voice' ? DESIGN_PROMPT : '')
         + (mode === 'voice' ? VOICE_PROMPT : '')
         + ANTI_INTRO_GUARD

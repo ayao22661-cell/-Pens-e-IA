@@ -79,12 +79,14 @@ export default async function handler(req) {
     const lastUserText = findLastUserText(contents);
     const taskText = findTaskText(contents) || lastUserText;
     const heavy = mode === 'chat' && isHeavyTask(agentId, taskText);
-    const ui = mode === 'chat' && UI_TASK.test(taskText);
+    const ui = heavy && UI_TASK.test(taskText);
+    const backend = heavy && BACKEND_TASK.test(taskText);
     const knowledge = mode === 'chat' ? await getKnowledgeContext(userId, agentId, lastUserText) : '';
     const context = body.context || {};
     const systemFor = (toolsEnabled) => buildSystemInstruction({
         heavy,
         ui,
+        backend,
         agentId: agentId === 'default' ? null : agentId,
         mode,
         userMessage: lastUserText,
@@ -327,9 +329,12 @@ const EXPLICIT_RUN = /\b(ex[ée]cut\w*|lance[rz]?|run|teste[rz]?|calcule[rz]?|si
 const SHELL_TASK = /\b(npm|npx|pnpm|yarn|pip3?|git|bash|shell|terminal|ligne de commande|en commande|compile[rz]?|build|tests? unitaires|lance[rz]? (le|un) serveur|install(e|er|ez)\b)/i;
 
 // ── Tâche lourde → modèles complets + réflexion maximale ─────
-const CODE_WORK = /\b(cr[ée]e[rz]?|d[ée]veloppe[rz]?|code[rz]?|impl[ée]mente[rz]?|construi[st]|programme[rz]?|refactor\w*|d[ée]bogue[rz]?|debug\w*|corrige[rz]?|r[ée]pare[rz]?|optimise[rz]?|migre[rz]?|int[èe]gre[rz]?)\b[^.?!]{0,80}\b(app\w*|site|api|jeu|script|projet|programme|fonction|classe|module|composant|bug|erreur|code|backend|frontend|base de donn[ée]es|serveur|bot|extension|algorithme)\b/i;
+const CODE_WORK = /\b(cr[ée]e[rz]?|d[ée]veloppe[rz]?|code[rz]?|impl[ée]mente[rz]?|construi[st]|programme[rz]?|refactor\w*|d[ée]bogue[rz]?|debug\w*|corrige[rz]?|r[ée]pare[rz]?|optimise[rz]?|migre[rz]?|int[èe]gre[rz]?)\b[^.?!]{0,80}\b(app\w*|site|page|landing|dashboard|tableau de bord|interface|portfolio|maquette|formulaire|api|jeu|script|projet|programme|fonction|classe|module|composant|bug|erreur|code|backend|frontend|base de donn[ée]es|serveur|bot|extension|algorithme|plateforme|logiciel|outil)\b/i;
 // Tâche avec une interface visible → direction artistique exigeante
 const UI_TASK = /\b(app\w*|application|site|page|landing|dashboard|tableau de bord|interface|ui|ux|front\w*|react|vue|svelte|next|tailwind|composant|formulaire|jeu|game|portfolio|maquette|design|admin|back[- ]?office|crm|gestion)\b/i;
+
+// Tâche qui manipule des données, des comptes ou une API → vrai backend exigé
+const BACKEND_TASK = /\b(api|back[- ]?end|backend|serveur|server|base de donn[ée]es|bdd|database|sql\w*|postgres\w*|mysql|mongo\w*|prisma|supabase|firebase|crud|auth\w*|login|connexion|inscription|utilisateurs?|comptes?|r[ôo]les?|express|fastify|nest\w*|django|flask|fastapi|laravel|webhook|paiement|stripe|full[- ]?stack|gestion|crm|erp|admin|back[- ]?office|inventaire|stock|r[ée]servation|e-?commerce|boutique|commandes?|factur\w*|messagerie|chat en temps r[ée]el)\b/i;
 
 /** Texte de la demande en cours (ignore les consignes internes : auto-revue, relances). */
 function findTaskText(contents) {
