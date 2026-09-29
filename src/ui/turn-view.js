@@ -99,7 +99,7 @@ export class TurnView {
         this._closeThinking();
         if (!this.cur) {
             const el = document.createElement('div');
-            el.className = 'bubble pz-seg';
+            el.className = 'bubble pz-seg pz-streaming';
             this.flow.appendChild(el);
             this.cur = { el, text: '' };
             this.segments.push(this.cur);
@@ -121,6 +121,7 @@ export class TurnView {
 
     _endSegment() {
         if (!this.cur) return;
+        this.cur.el.classList.remove('pz-streaming');
         this.cur.el.innerHTML = formatResponse(this.cur.text);
         highlightIn(this.cur.el);
         this.cur = null;

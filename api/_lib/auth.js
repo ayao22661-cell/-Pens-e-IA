@@ -135,6 +135,8 @@ async function hmac(message) {
 }
 
 export async function signTurnToken(userId) {
+    // Sans secret (mode dev, variables absentes) : jeton non signé, accepté par verifyTurnToken
+    if (!turnSecret()) return 'dev';
     const turnId = crypto.randomUUID();
     const exp = Date.now() + TURN_TTL_MS;
     const sig = await hmac(`${userId || 'dev'}.${turnId}.${exp}`);
