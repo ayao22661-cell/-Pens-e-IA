@@ -135,6 +135,18 @@ export async function portUrl(ws, port) {
     return data.url;
 }
 
+/** Publie un fichier de la machine dans le stockage (jusqu'à 50 Mo). @throws si absent de la machine */
+export async function publishFromMachine(ws, path) {
+    const res = await post({ action: 'publish', ws, path });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const err = new Error(data.error || `HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+    }
+    return data; // { filename, size, storagePath, url }
+}
+
 export async function resetMachine(ws) {
     await post({ action: 'reset', ws });
     setLastSync(ws, 0);

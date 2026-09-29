@@ -105,10 +105,10 @@ async function persist(blob, folder, filename, tabId) {
  * Produit le fichier, le copie dans /workspace, l'archive, et renvoie une puce de téléchargement.
  * @returns {Promise<{filename: string, size: number, persisted: boolean, element: HTMLElement}>}
  */
-async function deliver(blob, filename, folder, stored = null) {
+async function deliver(blob, filename, folder, stored = null, { copyToWorkspace = true } = {}) {
     const tabId = state.activeTabId;
     const ws = workspaceId();
-    await vfs.write(ws, filename, new Uint8Array(await blob.arrayBuffer())).catch(() => {});
+    if (copyToWorkspace) await vfs.write(ws, filename, new Uint8Array(await blob.arrayBuffer())).catch(() => {});
 
     let url = URL.createObjectURL(blob);
     let persisted = false;
@@ -130,6 +130,27 @@ async function deliver(blob, filename, folder, stored = null) {
     el.innerHTML = `<a href="${escapeHtml(url)}" ${persisted ? 'target="_blank" rel="noopener"' : `download="${escapeHtml(filename)}"`} class="file-chip pz-file-chip">${ICONS.file} ${escapeHtml(filename)} ${ICONS.download}</a>`
         + (persisted ? '<div class="pz-file-note">Disponible pendant 30 jours · copié dans /workspace</div>' : '<div class="pz-file-note">Copié dans /workspace</div>');
     return { filename, size: blob.size, persisted, element: el };
+}
+
+const fmtSize = (n) => n < 1024 ? `${n} o` : n < 1048576 ? `${(n / 1024).toFixed(1)} Ko` : `${(n / 1048576).toFixed(1)} Mo`;
+
+/** Livre dans la conversation un fichier déjà présent dans /workspace. */
+export async function deliverWorkspaceFile(rec) {
+    const filename = rec.path.split('/').pop();
+    const blob = new Blob([rec.data], { type: rec.mime || 'application/octet-stream' });
+    const res = await deliver(blob, filename, 'fichiers', null, { copyToWorkspace: false });
+    res.element.querySelector('.pz-file-note').textContent = `${fmtSize(blob.size)} · /workspace/${rec.path}` + (res.persisted ? ' · disponible 30 jours' : '');
+    return res;
+}
+
+/** Livre un fichier déjà archivé côté serveur (publié depuis la machine Linux). */
+export async function presentStoredFile({ url, filename, storagePath, size, path }) {
+    await saveMessage('assistant', `[FILE_URL:${url}|${filename}|${storagePath}]`);
+    const el = document.createElement('div');
+    el.className = 'pz-deliverable';
+    el.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="file-chip pz-file-chip">${ICONS.file} ${escapeHtml(filename)} ${ICONS.download}</a>`
+        + `<div class="pz-file-note">${fmtSize(size || 0)} · ${escapeHtml(path || filename)} · disponible 30 jours</div>`;
+    return { filename, size, persisted: true, element: el };
 }
 
 export async function generateOfficeFile(spec) {

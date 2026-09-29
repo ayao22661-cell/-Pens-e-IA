@@ -129,7 +129,7 @@ function onServerResult(ev, { view, sources, trace }) {
 
 function traceSummary(call) {
     const a = call.args || {};
-    return a.command ? String(a.command).slice(0, 60) : a.port ? 'port ' + a.port : a.path || a.filename || a.title || (a.prompt ? String(a.prompt).slice(0, 40) : '');
+    return a.paths ? a.paths.join(', ').slice(0, 60) : a.command ? String(a.command).slice(0, 60) : a.port ? 'port ' + a.port : a.path || a.filename || a.title || (a.prompt ? String(a.prompt).slice(0, 40) : '');
 }
 
 // ── Modèles sans outils (Gemma) : marqueurs texte hérités ─────

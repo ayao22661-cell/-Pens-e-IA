@@ -41,6 +41,44 @@ const BACKGROUND_WAIT_MS = 8000;
 const MAX_STREAM_CHARS = 200_000;
 const MAX_PULL_FILE = 512 * 1024;
 const MAX_PULL_TOTAL = 3 * 1024 * 1024;
+const MAX_DOWNLOAD = 3 * 1024 * 1024;   // réponse de fonction Vercel ≤ 4,5 Mo (base64 ×1.33)
+const MAX_PUBLISH = 50 * 1024 * 1024;
+
+const MIME = {
+    zip: 'application/zip', pdf: 'application/pdf', json: 'application/json', csv: 'text/csv', txt: 'text/plain',
+    md: 'text/markdown', html: 'text/html', js: 'text/javascript', css: 'text/css', png: 'image/png', jpg: 'image/jpeg',
+    jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', gz: 'application/gzip', tgz: 'application/gzip',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    mp3: 'audio/mpeg', mp4: 'video/mp4', wav: 'audio/wav',
+};
+
+/** Envoie un fichier dans le bucket "attachments" et renvoie une URL signée 30 jours. */
+async function publishToStorage(userId, path, buf) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+    const filename = path.split('/').pop();
+    const ext = (filename.split('.').pop() || '').toLowerCase();
+    const storagePath = `fichiers/${userId}/${Date.now()}_${filename.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+    const headers = { 'Authorization': `Bearer ${key}`, 'apikey': key };
+
+    const up = await fetch(`${url}/storage/v1/object/attachments/${storagePath}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': MIME[ext] || 'application/octet-stream', 'x-upsert': 'true' },
+        body: buf,
+    });
+    if (!up.ok) throw new Error((await up.json().catch(() => ({}))).message || `HTTP ${up.status}`);
+
+    const sign = await fetch(`${url}/storage/v1/object/sign/attachments/${storagePath}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 30 }),
+    });
+    const signed = await sign.json().catch(() => ({}));
+    if (!signed.signedURL) throw new Error('URL signée indisponible');
+    return { filename, size: buf.length, storagePath, url: `${url}/storage/v1${signed.signedURL}` };
+}
 const EXCLUDES = ['node_modules', '.git', '__pycache__', '.next', '.cache', '.npm', '.venv', 'venv', '.pz_mark'];
 
 const json = (data, status = 200) =>
@@ -88,6 +126,22 @@ async function openSandbox(name, userId, onStatus) {
     }
     return { sb, created: true };
 }
+
+// Préparation d'une machine neuve (Amazon Linux 2023, utilisateur non root) :
+//  - npm install -g sans sudo (préfixe dans le HOME)
+//  - pip / pip3 installables en --user, binaires dans ~/.local/bin
+//  - pip, zip, unzip, git installés en arrière-plan via dnf (sudo)
+const BOOTSTRAP = `
+mkdir -p "$HOME/.npm-global" "$HOME/.local/bin"
+npm config set prefix "$HOME/.npm-global" >/dev/null 2>&1
+cat >> "$HOME/.bashrc" <<'RC'
+export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:$PATH"
+export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1
+alias pip='python3 -m pip'
+RC
+nohup bash -c 'sudo dnf install -y -q python3-pip zip unzip git tar gzip >/tmp/pz_bootstrap.log 2>&1; touch /tmp/pz_bootstrap.done' >/dev/null 2>&1 &
+true
+`;
 
 function shellQuote(s) {
     return `'${String(s).replace(/'/g, `'\\''`)}'`;
@@ -143,7 +197,11 @@ async function execStream({ userId, body, send }) {
     if (pushed) send({ t: 'status', v: `${pushed} fichier(s) synchronisé(s)` });
     Promise.resolve().then(() => sb.extendTimeout(10 * 60 * 1000)).catch(() => {});
 
-    await sb.runCommand({ cmd: 'bash', args: ['-lc', 'touch /tmp/.pz_mark && sleep 0.01'] });
+    // Préparation unique de la machine (idempotente : marqueur ~/.pz_boot), puis marqueur de synchro
+    await sb.runCommand({
+        cmd: 'bash',
+        args: ['-c', `[ -f "$HOME/.pz_boot" ] || { ${BOOTSTRAP} touch "$HOME/.pz_boot"; }; touch /tmp/.pz_mark; sleep 0.01`],
+    }).catch(() => {});
 
     const background = Boolean(body.background);
     const limitMs = background ? BACKGROUND_WAIT_MS : Math.min(Math.max(Number(body.timeoutS) || DEFAULT_CMD_S, 5), MAX_CMD_S) * 1000;
@@ -216,6 +274,43 @@ export async function POST(req) {
     if (body.action === 'reset') {
         try { const sb = await Sandbox.get({ name }); await sb.delete(); } catch (_) { /* déjà supprimé */ }
         return json({ ok: true });
+    }
+
+    // Publie un fichier de la machine dans Supabase Storage (livrable jusqu'à 50 Mo)
+    if (body.action === 'publish') {
+        const path = String(body.path || '').replace(/^\/+/, '').replace(/^workspace\//, '');
+        if (!path || path.split('/').includes('..')) return json({ error: 'Chemin invalide.' }, 400);
+        let buf;
+        try {
+            const sb = await Sandbox.get({ name });
+            buf = await sb.readFileToBuffer({ path: `${ROOT}/${path}` });
+        } catch (_) {
+            return json({ error: 'Aucune machine active pour cette conversation.' }, 404);
+        }
+        if (!buf) return json({ error: `Fichier introuvable sur la machine : ${path}` }, 404);
+        if (buf.length > MAX_PUBLISH) return json({ error: `Fichier trop volumineux (${(buf.length / 1048576).toFixed(1)} Mo, max 50 Mo).` }, 413);
+        try {
+            return json(await publishToStorage(userId, path, buf));
+        } catch (e) {
+            return json({ error: `Archivage impossible : ${e.message}` }, 502);
+        }
+    }
+
+    // Récupère un fichier de la machine (livrables trop gros pour la synchro automatique)
+    if (body.action === 'download') {
+        const path = String(body.path || '').replace(/^\/+/, '').replace(/^workspace\//, '');
+        if (!path || path.split('/').includes('..')) return json({ error: 'Chemin invalide.' }, 400);
+        try {
+            const sb = await Sandbox.get({ name });
+            const buf = await sb.readFileToBuffer({ path: `${ROOT}/${path}` });
+            if (!buf) return json({ error: `Fichier introuvable sur la machine : ${path}` }, 404);
+            if (buf.length > MAX_DOWNLOAD) {
+                return json({ error: `Fichier trop volumineux (${(buf.length / 1048576).toFixed(1)} Mo, max ${MAX_DOWNLOAD / 1048576} Mo). Compresse-le ou découpe-le.` }, 413);
+            }
+            return json({ path, b64: Buffer.from(buf).toString('base64') });
+        } catch (e) {
+            return json({ error: "Aucune machine active pour cette conversation." }, 404);
+        }
     }
 
     if (body.action !== 'exec' || typeof body.command !== 'string' || !body.command.trim()) {

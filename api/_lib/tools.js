@@ -64,6 +64,19 @@ export const TOOLS = {
         },
     },
 
+    present_files: {
+        where: 'client',
+        final: true,
+        description: "Livre des fichiers à l'utilisateur DANS LA CONVERSATION (bouton de téléchargement conservé 30 jours). À utiliser pour tout livrable : archive .zip d'un projet, build, rapport, export, script final. Fonctionne pour les fichiers de /workspace et ceux de la machine Linux (jusqu'à 50 Mo).",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                paths: arrayOf({ type: 'STRING' }, 'Chemins relatifs à /workspace, ex: ["mon-app.zip", "rapport.pdf"]. 10 max.'),
+            },
+            required: ['paths'],
+        },
+    },
+
     // ── Client : espace de travail ──────────────────────────
     run_python: {
         where: 'client',

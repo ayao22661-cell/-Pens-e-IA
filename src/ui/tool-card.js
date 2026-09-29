@@ -17,6 +17,7 @@ export function argsSummary(name, args = {}) {
         case 'fetch_url': try { return new URL(args.url).hostname; } catch { return args.url || ''; }
         case 'bash': return (args.background ? '& ' : '$ ') + String(args.command || '').split('\n')[0].slice(0, 80);
         case 'open_port': return 'port ' + (args.port || '');
+        case 'present_files': return (args.paths || []).join(', ');
         case 'run_python': {
             const line = String(args.code || '').split('\n').find(l => l.trim() && !l.trim().startsWith('#')) || '';
             return line.trim().slice(0, 60);

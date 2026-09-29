@@ -11,8 +11,8 @@
 import { vfs, isTextPath, extOf, downloadRecord } from '../sandbox/vfs.js';
 import { runPython } from '../sandbox/python.js';
 import { buildPreviewDocument, mountPreview, bytesToBase64 } from '../sandbox/preview.js';
-import { generateOfficeFile, generatePdf, generateImage } from '../generators.js';
-import { execCommand, portUrl } from '../sandbox/machine.js';
+import { generateOfficeFile, generatePdf, generateImage, deliverWorkspaceFile, presentStoredFile } from '../generators.js';
+import { execCommand, portUrl, publishFromMachine } from '../sandbox/machine.js';
 import { escapeHtml } from '../ui/dom.js';
 
 const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
@@ -94,6 +94,31 @@ export const CLIENT_TOOLS = {
                 ...(r.skippedPull.length ? { files_too_large_to_sync: r.skippedPull.slice(0, 50) } : {}),
                 ...(r.skippedPush.length ? { files_not_uploaded: r.skippedPush } : {}),
             },
+        };
+    },
+
+    async present_files({ paths = [] }, { ws, card, terminal }) {
+        const delivered = [];
+        const errors = [];
+        for (const raw of paths.slice(0, 10)) {
+            const path = String(raw).replace(/^\/+/, '').replace(/^workspace\//, '');
+            try {
+                const rec = await vfs.read(ws, path).catch(() => null);
+                // Petit fichier déjà dans /workspace : livré depuis le navigateur ; sinon publié depuis la machine
+                const res = rec && rec.size <= 3 * 1024 * 1024
+                    ? await deliverWorkspaceFile(rec)
+                    : await presentStoredFile({ ...(await publishFromMachine(ws, path)), path });
+                card.addOutput(res.element);
+                delivered.push(path);
+                terminal.log(`livré dans la conversation : ${path}`, 'ok');
+            } catch (e) {
+                errors.push(`${path} : ${e.message}`);
+            }
+        }
+        return {
+            ok: delivered.length > 0 && !errors.length,
+            summary: `${delivered.length} fichier(s)`,
+            response: { delivered, ...(errors.length ? { errors } : {}), note: delivered.length ? 'Fichiers proposés au téléchargement dans la conversation.' : undefined },
         };
     },
 
@@ -239,7 +264,7 @@ export const CLIENT_TOOLS = {
 };
 
 /** Outils dont le résultat n'a pas besoin d'être relu par le modèle (économise un appel). */
-export const FINAL_TOOLS = new Set(['render_preview', 'open_port', 'generate_file', 'generate_pdf', 'generate_image']);
+export const FINAL_TOOLS = new Set(['render_preview', 'open_port', 'present_files', 'generate_file', 'generate_pdf', 'generate_image']);
 
 export async function executeClientTool(name, args, ctx) {
     const tool = CLIENT_TOOLS[name];
