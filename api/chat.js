@@ -128,7 +128,7 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
         const firstRound = round === 0 && !isContinuation;
         const result = await callWithCascade({
             cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText,
-            forceSearch: firstRound && agentId === 'recherche',
+            forceTools: firstRound ? forcedTools(agentId, lastUserText) : null,
             allowPreSearch: firstRound,
             onModel: (model) => send({ t: 'model', v: model }),
             handlers: {
@@ -209,7 +209,7 @@ function functionResponsePart(call, response) {
 // ============================================================
 //  CASCADE DE MODÈLES
 // ============================================================
-async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceSearch, allowPreSearch, lastUserText, onModel, handlers }) {
+async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, onModel, handlers }) {
     const hasToolParts = contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
 
     for (const model of cascade) {
@@ -221,7 +221,7 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
         for (let attempt = 0; attempt < 3; attempt++) {
             const body = await buildBody({
                 model, contents, agentId, mode, systemFor, useTools, useThinking,
-                forceSearch: forceSearch && useTools,
+                forceTools: useTools ? forceTools : null,
                 preSearchQuery: allowPreSearch && !useTools && mode === 'chat' ? preSearchQuery(agentId, lastUserText) : null,
             });
 
@@ -259,7 +259,7 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
     return { error: 'Serveurs IA saturés. Réessaie dans quelques secondes.', code: 503 };
 }
 
-async function buildBody({ model, contents, agentId, mode, systemFor, useTools, useThinking, forceSearch, preSearchQuery: query }) {
+async function buildBody({ model, contents, agentId, mode, systemFor, useTools, useThinking, forceTools, preSearchQuery: query }) {
     const systemInstruction = systemFor(useTools);
     let finalContents = contents;
 
@@ -279,11 +279,22 @@ async function buildBody({ model, contents, agentId, mode, systemFor, useTools, 
     if (useThinking) body.generationConfig.thinkingConfig = { includeThoughts: true };
     if (useTools) {
         body.tools = [{ functionDeclarations: functionDeclarations() }];
-        if (forceSearch) {
-            body.toolConfig = { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['web_search'] } };
+        if (forceTools) {
+            body.toolConfig = { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: forceTools } };
         }
     }
     return body;
+}
+
+// ── Outils imposés au premier tour ──────────────────────────
+// Les modèles Lite appellent rarement un outil d'eux-mêmes : quand la demande
+// l'exige explicitement, on force l'appel (mode ANY) au premier tour seulement.
+const EXPLICIT_RUN = /\b(ex[ée]cut\w*|lance[rz]?|run|teste[rz]?|calcule[rz]?|simule[rz]?)\b[^.?!]{0,60}\bpython\b|\bpython\b[^.?!]{0,60}\b(ex[ée]cut\w*|lance[rz]?|run)\b/i;
+function forcedTools(agentId, text) {
+    if (agentId === 'recherche') return ['web_search'];
+    if (agentId === 'audit') return ['run_python', 'read_file', 'list_files'];
+    if (EXPLICIT_RUN.test(text || '')) return ['run_python'];
+    return null;
 }
 
 // ── Heuristique de recherche (uniquement pour les modèles sans outils) ──
