@@ -20,7 +20,10 @@ import { buildSystemInstruction, AGENT_IDS } from './_lib/prompts.js';
 import { authenticate, consumeCredit, refundCredit, signTurnToken, verifyTurnToken, HttpError } from './_lib/auth.js';
 import { getKnowledgeContext } from './_lib/knowledge-context.js';
 import { functionDeclarations, toolWhere, runServerTool } from './_lib/tools.js';
-import { modelCascade, isGemma, streamGenerate, consumeStream, toPlainContents } from './_lib/gemini.js';
+import {
+    modelCascade, isGemma, streamGenerate, consumeStream, toPlainContents,
+    neutralizeSignatures, THINKING_VARIANTS, thinkingConfig,
+} from './_lib/gemini.js';
 import { performWebSearch } from './search.js';
 
 const MAX_OUTPUT = {
@@ -73,9 +76,11 @@ export default async function handler(req) {
 
     // ── 3. Contexte ─────────────────────────────────────────
     const lastUserText = findLastUserText(contents);
+    const heavy = mode === 'chat' && isHeavyTask(agentId, lastUserText);
     const knowledge = mode === 'chat' ? await getKnowledgeContext(userId, agentId, lastUserText) : '';
     const context = body.context || {};
     const systemFor = (toolsEnabled) => buildSystemInstruction({
+        heavy,
         agentId: agentId === 'default' ? null : agentId,
         mode,
         userMessage: lastUserText,
@@ -89,11 +94,11 @@ export default async function handler(req) {
     const stream = new ReadableStream({
         async start(controller) {
             const send = (ev) => controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
-            send({ t: 'meta', turnToken, credits });
+            send({ t: 'meta', turnToken, credits, heavy });
 
             try {
                 const ok = await runAgent({
-                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText,
+                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy,
                     preferredModel: body.continuation?.model, apiKey: GEMINI_API_KEY, signal: req.signal,
                 });
                 if (!ok && !isContinuation) await refundCredit(userId);
@@ -119,15 +124,16 @@ export default async function handler(req) {
 //  BOUCLE SERVEUR
 //  @returns {Promise<boolean>} false si aucun modèle n'a répondu
 // ============================================================
-async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, preferredModel, apiKey, signal }) {
-    const cascade = modelCascade(agentId, preferredModel);
+async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, preferredModel, apiKey, signal }) {
+    const cascade = modelCascade(agentId, preferredModel, heavy);
+    let sigModel = isContinuation ? preferredModel : null; // modèle auteur des thoughtSignature présentes
     let emotionSent = false;
     let callSeq = 0;
 
     for (let round = 0; round < MAX_SERVER_ROUNDS; round++) {
         const firstRound = round === 0 && !isContinuation;
         const result = await callWithCascade({
-            cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText,
+            cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText, heavy, sigModel,
             forceTools: firstRound ? forcedTools(agentId, lastUserText) : null,
             allowPreSearch: firstRound,
             onModel: (model) => send({ t: 'model', v: model }),
@@ -144,6 +150,7 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
         }
 
         const { content, calls, finishReason, blockReason } = result;
+        sigModel = result.model;
         // La cascade suivante (même requête) privilégie le modèle qui a répondu
         if (cascade[0] !== result.model) {
             cascade.splice(cascade.indexOf(result.model), 1);
@@ -209,18 +216,21 @@ function functionResponsePart(call, response) {
 // ============================================================
 //  CASCADE DE MODÈLES
 // ============================================================
-async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, onModel, handlers }) {
+async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, sigModel, onModel, handlers }) {
     const hasToolParts = contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
 
     for (const model of cascade) {
         const gemma = isGemma(model);
         let useTools = mode === 'chat' && !gemma;
-        let useThinking = !gemma;
+        const variants = gemma ? ['off'] : THINKING_VARIANTS[heavy ? 'heavy' : 'normal'];
+        let variant = 0;
+        const modelContents = sigModel && model !== sigModel && hasToolParts ? neutralizeSignatures(contents) : contents;
 
-        // Chaque modèle a droit à 3 variantes si le 400 vient d'un paramètre non supporté
-        for (let attempt = 0; attempt < 3; attempt++) {
+        // Plusieurs variantes par modèle si le 400 vient d'un paramètre non supporté
+        for (let attempt = 0; attempt < 6; attempt++) {
             const body = await buildBody({
-                model, contents, agentId, mode, systemFor, useTools, useThinking,
+                model, contents: modelContents, agentId, mode, systemFor, useTools,
+                thinking: thinkingConfig(variants[variant]),
                 forceTools: useTools ? forceTools : null,
                 preSearchQuery: allowPreSearch && !useTools && mode === 'chat' ? preSearchQuery(agentId, lastUserText) : null,
             });
@@ -249,7 +259,7 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
                         code: 413,
                     };
                 }
-                if (useThinking && /thinking|thought/i.test(errMsg)) { useThinking = false; continue; }
+                if (/thinking|thought/i.test(errMsg) && variant < variants.length - 1) { variant++; continue; }
                 if (useTools && !hasToolParts && /function|tool/i.test(errMsg)) { useTools = false; continue; }
                 break;
             }
@@ -259,7 +269,7 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
     return { error: 'Serveurs IA saturés. Réessaie dans quelques secondes.', code: 503 };
 }
 
-async function buildBody({ model, contents, agentId, mode, systemFor, useTools, useThinking, forceTools, preSearchQuery: query }) {
+async function buildBody({ model, contents, agentId, mode, systemFor, useTools, thinking, forceTools, preSearchQuery: query }) {
     const systemInstruction = systemFor(useTools);
     let finalContents = contents;
 
@@ -276,7 +286,7 @@ async function buildBody({ model, contents, agentId, mode, systemFor, useTools, 
         },
     };
     if (!isGemma(model)) body.systemInstruction = { parts: [{ text: systemInstruction }] };
-    if (useThinking) body.generationConfig.thinkingConfig = { includeThoughts: true };
+    if (thinking) body.generationConfig.thinkingConfig = thinking;
     if (useTools) {
         body.tools = [{ functionDeclarations: functionDeclarations() }];
         if (forceTools) {
@@ -291,12 +301,22 @@ async function buildBody({ model, contents, agentId, mode, systemFor, useTools, 
 // l'exige explicitement, on force l'appel (mode ANY) au premier tour seulement.
 const EXPLICIT_RUN = /\b(ex[ée]cut\w*|lance[rz]?|run|teste[rz]?|calcule[rz]?|simule[rz]?)\b[^.?!]{0,60}\bpython\b|\bpython\b[^.?!]{0,60}\b(ex[ée]cut\w*|lance[rz]?|run)\b/i;
 const SHELL_TASK = /\b(npm|npx|pnpm|yarn|pip3?|git|bash|shell|terminal|ligne de commande|en commande|compile[rz]?|build|tests? unitaires|lance[rz]? (le|un) serveur|install(e|er|ez)\b)/i;
-const WORKSPACE_TOOLS = ['bash', 'run_python', 'write_file', 'edit_file', 'read_file', 'list_files'];
+
+// ── Tâche lourde → modèles complets + réflexion maximale ─────
+const CODE_WORK = /\b(cr[ée]e[rz]?|d[ée]veloppe[rz]?|code[rz]?|impl[ée]mente[rz]?|construi[st]|programme[rz]?|refactor\w*|d[ée]bogue[rz]?|debug\w*|corrige[rz]?|r[ée]pare[rz]?|optimise[rz]?|migre[rz]?|int[èe]gre[rz]?)\b[^.?!]{0,80}\b(app\w*|site|api|jeu|script|projet|programme|fonction|classe|module|composant|bug|erreur|code|backend|frontend|base de donn[ée]es|serveur|bot|extension|algorithme)\b/i;
+function isHeavyTask(agentId, text) {
+    const t = text || '';
+    if (agentId === 'audit') return true;
+    if (CODE_WORK.test(t) || SHELL_TASK.test(t)) return true;
+    if (agentId === 'code' && (t.length > 250 || /```/.test(t))) return true;
+    return t.length > 1500; // longue demande détaillée, quel que soit l'agent
+}
 function forcedTools(agentId, text) {
     if (agentId === 'recherche') return ['web_search'];
     if (agentId === 'audit') return ['run_python', 'bash', 'read_file', 'list_files'];
-    if (SHELL_TASK.test(text || '')) return WORKSPACE_TOOLS;
-    if (EXPLICIT_RUN.test(text || '')) return ['run_python', 'bash'];
+    // Tâches de code lourdes : pas d'appel imposé (le mode ANY interdit de rédiger le plan
+    // avant d'agir) ; les modèles Flash complets choisissent leurs outils eux-mêmes.
+    if (EXPLICIT_RUN.test(text || '') && !CODE_WORK.test(text || '')) return ['run_python', 'bash'];
     return null;
 }
 

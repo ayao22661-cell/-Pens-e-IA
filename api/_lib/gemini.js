@@ -24,8 +24,15 @@ const CASCADES = {
 };
 CASCADES.audit = CASCADES.code;
 
-export function modelCascade(agentId, preferred) {
-    const list = [...(CASCADES[agentId] || CASCADES.default)];
+// Tâches lourdes (code, projets, débogage) : les modèles Flash complets d'abord —
+// plus lents et à quota réduit, mais qui raisonnent vraiment. Lite en secours.
+const HEAVY_CASCADE = [
+    'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3-flash',
+    'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemma-4-31b-it', 'gemma-4-26b-a4b-it',
+];
+
+export function modelCascade(agentId, preferred, heavy = false) {
+    const list = [...(heavy ? HEAVY_CASCADE : (CASCADES[agentId] || CASCADES.default))];
     // Le client ne peut que RÉORDONNER la cascade (continuité d'un tour d'outils),
     // jamais y introduire un modèle arbitraire.
     if (preferred && list.includes(preferred)) {
@@ -36,6 +43,33 @@ export function modelCascade(agentId, preferred) {
 }
 
 export const isGemma = (model) => model.startsWith('gemma');
+
+/**
+ * Les thoughtSignature sont propres au modèle qui les a produites. Si la cascade
+ * bascule sur un autre modèle en plein tour d'outils (quota épuisé), on les
+ * remplace par la valeur neutre documentée par Google pour les historiques transférés.
+ */
+export function neutralizeSignatures(contents) {
+    return contents.map(c => ({
+        role: c.role,
+        parts: c.parts.map(p => (p.thoughtSignature ? { ...p, thoughtSignature: 'skip_thought_signature_validator' } : p)),
+    }));
+}
+
+// Niveaux de réflexion essayés dans l'ordre ; on descend d'un cran si le modèle refuse le paramètre.
+export const THINKING_VARIANTS = {
+    heavy: ['high', 'dynamic', 'basic', 'off'],
+    normal: ['basic', 'off'],
+};
+
+export function thinkingConfig(variant) {
+    switch (variant) {
+        case 'high': return { includeThoughts: true, thinkingLevel: 'high' };
+        case 'dynamic': return { includeThoughts: true, thinkingBudget: -1 };
+        case 'basic': return { includeThoughts: true };
+        default: return null;
+    }
+}
 
 export function streamGenerate(model, body, apiKey, signal) {
     return fetch(`${API_BASE}/${model}:streamGenerateContent?alt=sse&key=${apiKey}`, {

@@ -30,6 +30,17 @@ import { executeClientTool, FINAL_TOOLS } from './tools.js';
  * @param {AbortSignal} o.signal
  * @returns {Promise<{text: string, sources: object[], trace: object[]}>}
  */
+const CODE_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'run_python']);
+
+// Message technique envoyé au modèle (jamais affiché ni sauvegardé comme message utilisateur)
+const REVIEW_PROMPT = `[AUTO-REVUE — consigne interne, pas un message de l'utilisateur]
+Avant de conclure, relis et corrige le code comme un relecteur exigeant :
+1. Relis réellement les fichiers créés ou modifiés (read_file, ou bash : cat / git diff).
+2. Confronte-les à la demande initiale : tout est-il implémenté, complet, sans TODO, placeholder ni donnée factice ?
+3. Le code a-t-il été exécuté ou testé avec succès ? Sinon, teste-le maintenant, cas limites compris.
+4. Corrige chaque problème trouvé puis revérifie.
+Si tout est conforme : réponds uniquement « ✓ Vérifié — » suivi d'une phrase. Sinon : corrige, puis résume précisément ce qui a changé. Si des livrables ont été modifiés, relivre-les avec present_files.`;
+
 export async function runAgentTurn({ userText, files = [], agentId, memory = '', view, signal }) {
     const ws = workspaceId();
     const workspacePaths = files.length ? await copyToWorkspace(files, ws) : [];
@@ -38,6 +49,8 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
 
     let token = null;
     let model = null;
+    let heavy = false;
+    let reviewed = false;
     const sources = [];
     const trace = [];
 
@@ -58,6 +71,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
                     case 'meta':
                         if (ev.turnToken) token = ev.turnToken;
                         if (typeof ev.credits === 'number') setCredits(ev.credits);
+                        if (ev.heavy) heavy = true;
                         break;
                     case 'model': model = ev.v; break;
                     case 'emotion': view.emotion(ev.v); break;
@@ -82,7 +96,17 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
         if (!done) throw new Error('Connexion interrompue pendant la réponse.');
         if (done.reason === 'blocked') view.note('Réponse bloquée par le filtre de sécurité du modèle.', 'warn');
         if (done.reason === 'max_tokens') view.note('Réponse tronquée (longueur maximale atteinte). Demande la suite.', 'warn');
-        if (done.reason !== 'client_tools') break;
+        if (done.reason !== 'client_tools') {
+            // Tâche lourde qui a produit du code : une relecture obligatoire avant de conclure
+            const producedCode = trace.some(t => CODE_TOOLS.has(t.name));
+            if (heavy && producedCode && !reviewed && done.reason === 'stop' && step < CONFIG.maxAgentSteps - 2) {
+                reviewed = true;
+                view.note('Auto-vérification du travail…');
+                contents.push({ role: 'user', parts: [{ text: REVIEW_PROMPT }] });
+                continue;
+            }
+            break;
+        }
 
         // ── Exécution locale des outils demandés ──────────────
         const responses = { ...done.serverResponses };
@@ -101,8 +125,16 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
         }
         contents.push({ role: 'user', parts: done.order.map(id => responses[id]).filter(Boolean) });
 
-        // Livrables affichés sans erreur : inutile de relancer le modèle
-        if (allFinal) break;
+        // Livrables affichés sans erreur : inutile de relancer le modèle… sauf relecture due
+        if (allFinal) {
+            if (heavy && !reviewed && trace.some(t => CODE_TOOLS.has(t.name)) && step < CONFIG.maxAgentSteps - 2) {
+                reviewed = true;
+                view.note('Auto-vérification du travail…');
+                contents.push({ role: 'user', parts: [{ text: REVIEW_PROMPT }] });
+                continue;
+            }
+            break;
+        }
         if (step === CONFIG.maxAgentSteps - 1) view.note(`Limite de ${CONFIG.maxAgentSteps} étapes atteinte. Dis « continue » pour poursuivre.`, 'warn');
     }
 
