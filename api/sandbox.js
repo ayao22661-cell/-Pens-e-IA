@@ -23,6 +23,17 @@ import { authenticate, isAuthEnabled, consumeCredit, refundCredit, HttpError } f
 
 const ROOT = '/vercel/sandbox';                 // miroir de /workspace
 export const PORTS = [3000, 5173, 8000, 8080];  // ports exposables (serveurs de dev)
+
+// Environnement de chaque commande : les serveurs de dev sont vus via *.vercel.run,
+// il faut donc désactiver leurs contrôles d'hôte ; CI=1 évite les questions interactives.
+const CMD_ENV = {
+    CI: '1',
+    __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: '.vercel.run', // Vite ≥ 6 (server.allowedHosts)
+    DANGEROUSLY_DISABLE_HOST_CHECK: 'true',                // create-react-app / webpack-dev-server
+    WDS_SOCKET_PORT: '443',                                // HMR derrière le proxy HTTPS
+    HOST: '0.0.0.0',
+    npm_config_yes: 'true',                                // npx sans confirmation
+};
 const SANDBOX_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_CMD_S = 120;
 const MAX_CMD_S = 280;                          // < maxDuration (vercel.json : 300 s)
@@ -141,6 +152,7 @@ async function execStream({ userId, body, send }) {
         cmd: 'bash',
         args: ['-lc', background ? `nohup bash -lc ${shellQuote(body.command)} > /tmp/pz_bg_$$.log 2>&1 & echo "PID $!"; sleep 5; tail -n 50 /tmp/pz_bg_$$.log` : body.command],
         cwd: ROOT,
+        env: CMD_ENV,
         detached: true,
     });
 
