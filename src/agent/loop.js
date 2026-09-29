@@ -75,6 +75,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
                         break;
                     case 'model': model = ev.v; break;
                     case 'emotion': view.emotion(ev.v); break;
+                    case 'notice': view.note(ev.v, 'warn'); break;
                     case 'thinking': view.thinking(ev.v); break;
                     case 'text': view.text(ev.v); break;
                     case 'tool_call': {
@@ -96,6 +97,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
         if (!done) throw new Error('Connexion interrompue pendant la réponse.');
         if (done.reason === 'blocked') view.note('Réponse bloquée par le filtre de sécurité du modèle.', 'warn');
         if (done.reason === 'max_tokens') view.note('Réponse tronquée (longueur maximale atteinte). Demande la suite.', 'warn');
+        if (/malformed|unexpected_tool/.test(done.reason)) view.note("Le modèle n'a pas réussi à formuler son appel d'outil. Dis « continue » ou découpe la demande.", 'warn');
         if (done.reason !== 'client_tools') {
             // Tâche lourde qui a produit du code : une relecture obligatoire avant de conclure
             const producedCode = trace.some(t => CODE_TOOLS.has(t.name));

@@ -31,6 +31,7 @@ const MAX_OUTPUT = {
     visionnaire: 6144, audit: 8192, default: 16384, voice: 1024,
 };
 const MAX_SERVER_ROUNDS = 5;      // relances successives après des outils serveur
+const MAX_EMPTY_RETRIES = 2;      // relances automatiques d'une réponse vide / appel mal formé
 const MAX_CONTENTS = 120;         // messages max acceptés dans l'historique
 const MAX_TOOL_RESPONSE_CHARS = 30000;
 
@@ -129,6 +130,7 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
     let sigModel = isContinuation ? preferredModel : null; // modèle auteur des thoughtSignature présentes
     let emotionSent = false;
     let callSeq = 0;
+    let emptyRetries = 0;
 
     for (let round = 0; round < MAX_SERVER_ROUNDS; round++) {
         const firstRound = round === 0 && !isContinuation;
@@ -155,6 +157,18 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
         if (cascade[0] !== result.model) {
             cascade.splice(cascade.indexOf(result.model), 1);
             cascade.unshift(result.model);
+        }
+
+        // Réponse vide (réflexion seule) ou appel d'outil au JSON cassé : on relance avec une consigne
+        const empty = !calls.length && !blockReason && !content.parts.some(p => p.text && p.text.trim());
+        if (empty && emptyRetries < MAX_EMPTY_RETRIES && round < MAX_SERVER_ROUNDS - 1) {
+            emptyRetries++;
+            const malformed = /MALFORMED|UNEXPECTED_TOOL/i.test(finishReason || '');
+            send({ t: 'notice', v: malformed ? "Appel d'outil mal formé — nouvelle tentative…" : 'Réponse vide — nouvelle tentative…' });
+            nudgeLastUser(contents, malformed
+                ? "[Consigne système] Ton dernier appel d'outil était mal formé (JSON invalide ou contenu trop long). Reprends exactement où tu en étais. Découpe les gros fichiers : write_file de moins de 250 lignes, puis complète avec d'autres write_file (fichiers séparés) ou edit_file. Échappe correctement les guillemets et retours à la ligne."
+                : "[Consigne système] Ta dernière réponse était vide. Reprends où tu en étais : annonce ton plan en une phrase puis appelle l'outil nécessaire, ou donne ta réponse finale.");
+            continue;
         }
 
         if (!calls.length) {
@@ -202,6 +216,13 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
     send({ t: 'text', v: "\n\n*[Limite d'étapes atteinte pour cette réponse.]*" });
     send({ t: 'done', reason: 'max_rounds' });
     return true;
+}
+
+/** Ajoute une consigne au dernier message utilisateur (l'API exige l'alternance des rôles). */
+function nudgeLastUser(contents, text) {
+    const last = contents[contents.length - 1];
+    if (last && last.role === 'user') last.parts.push({ text });
+    else contents.push({ role: 'user', parts: [{ text }] });
 }
 
 function functionResponsePart(call, response) {
