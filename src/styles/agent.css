@@ -14,7 +14,7 @@ body.pz-noscroll { overflow: hidden; }
 /* ── Réponse multi-blocs ─────────────────────────────────── */
 .msg.bot:has(.pz-tool, .pz-preview) { max-width: min(100%, 880px); width: 100%; }
 .pz-flow { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-width: 100%; width: 100%; }
-.pz-flow > .bubble { align-self: flex-start; }
+.pz-flow > .bubble { align-self: stretch; }
 .pz-flow > .typing-bubble { align-self: flex-start; }
 
 .pz-note { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text2); padding: 2px 4px; }
