@@ -91,7 +91,10 @@ export const CLIENT_TOOLS = {
                 background: r.background,
                 output: clip(r.output, 14000),
                 files_changed: r.changed.slice(0, 100),
-                ...(r.skippedPull.length ? { files_too_large_to_sync: r.skippedPull.slice(0, 50) } : {}),
+                ...(r.skippedPull.length ? {
+                    files_on_machine_only: r.skippedPull.slice(0, 50),
+                    note_large_files: "Ces fichiers (> 512 Ko) existent bien sur la machine mais ne sont pas copiés dans /workspace. Pour les livrer à l'utilisateur, appelle present_files avec leur chemin (jusqu'à 50 Mo).",
+                } : {}),
                 ...(r.skippedPush.length ? { files_not_uploaded: r.skippedPush } : {}),
             },
         };
