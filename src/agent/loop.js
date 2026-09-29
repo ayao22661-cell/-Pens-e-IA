@@ -38,7 +38,8 @@ Avant de conclure, relis et corrige le code comme un relecteur exigeant :
 1. Relis réellement les fichiers créés ou modifiés (read_file, ou bash : cat / git diff).
 2. Confronte-les à la demande initiale : tout est-il implémenté, complet, sans TODO, placeholder ni donnée factice ?
 3. Le code a-t-il été exécuté ou testé avec succès ? Sinon, teste-le maintenant, cas limites compris.
-4. Corrige chaque problème trouvé puis revérifie.
+4. S'il y a une interface : applique la grille d'autocontrôle visuel (système de design cohérent, aucun style navigateur par défaut, états vide/chargement/erreur, sombre et clair, mobile, données réalistes). Tout ce qui fait « basique » ou « prototype » doit être amélioré.
+5. Corrige chaque problème trouvé puis revérifie.
 Si tout est conforme : réponds uniquement « ✓ Vérifié — » suivi d'une phrase. Sinon : corrige, puis résume précisément ce qui a changé. Si des livrables ont été modifiés, relivre-les avec present_files.`;
 
 export async function runAgentTurn({ userText, files = [], agentId, memory = '', view, signal }) {

@@ -77,11 +77,14 @@ export default async function handler(req) {
 
     // ── 3. Contexte ─────────────────────────────────────────
     const lastUserText = findLastUserText(contents);
-    const heavy = mode === 'chat' && isHeavyTask(agentId, lastUserText);
+    const taskText = findTaskText(contents) || lastUserText;
+    const heavy = mode === 'chat' && isHeavyTask(agentId, taskText);
+    const ui = mode === 'chat' && UI_TASK.test(taskText);
     const knowledge = mode === 'chat' ? await getKnowledgeContext(userId, agentId, lastUserText) : '';
     const context = body.context || {};
     const systemFor = (toolsEnabled) => buildSystemInstruction({
         heavy,
+        ui,
         agentId: agentId === 'default' ? null : agentId,
         mode,
         userMessage: lastUserText,
@@ -325,6 +328,21 @@ const SHELL_TASK = /\b(npm|npx|pnpm|yarn|pip3?|git|bash|shell|terminal|ligne de 
 
 // ── Tâche lourde → modèles complets + réflexion maximale ─────
 const CODE_WORK = /\b(cr[ée]e[rz]?|d[ée]veloppe[rz]?|code[rz]?|impl[ée]mente[rz]?|construi[st]|programme[rz]?|refactor\w*|d[ée]bogue[rz]?|debug\w*|corrige[rz]?|r[ée]pare[rz]?|optimise[rz]?|migre[rz]?|int[èe]gre[rz]?)\b[^.?!]{0,80}\b(app\w*|site|api|jeu|script|projet|programme|fonction|classe|module|composant|bug|erreur|code|backend|frontend|base de donn[ée]es|serveur|bot|extension|algorithme)\b/i;
+// Tâche avec une interface visible → direction artistique exigeante
+const UI_TASK = /\b(app\w*|application|site|page|landing|dashboard|tableau de bord|interface|ui|ux|front\w*|react|vue|svelte|next|tailwind|composant|formulaire|jeu|game|portfolio|maquette|design|admin|back[- ]?office|crm|gestion)\b/i;
+
+/** Texte de la demande en cours (ignore les consignes internes : auto-revue, relances). */
+function findTaskText(contents) {
+    for (let i = contents.length - 1; i >= 0; i--) {
+        if (contents[i].role !== 'user') continue;
+        const text = contents[i].parts
+            .filter(p => typeof p.text === 'string' && !/^\[(AUTO-REVUE|Consigne système)/.test(p.text))
+            .map(p => p.text).join('\n').trim();
+        if (text) return text.slice(-4000);
+    }
+    return '';
+}
+
 function isHeavyTask(agentId, text) {
     const t = text || '';
     if (agentId === 'audit') return true;

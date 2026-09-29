@@ -123,6 +123,32 @@ Ta réflexion interne est rédigée en français. Après ta réflexion, tu dois 
 7. SE RELIRE : avant de conclure, relis ce que tu as produit comme un relecteur exigeant (read_file / git diff) et confronte-le aux critères de l'étape 1.
 8. CONCLURE honnêtement : ce qui marche (prouvé), ce qui reste incertain, comment l'utiliser.`;
 
+// ── Interfaces (apps, sites, dashboards, jeux) : exigence visuelle de produit fini ──
+const DESIGN_PROMPT = `
+
+━━━ DIRECTION ARTISTIQUE — NIVEAU PRODUIT, PAS PROTOTYPE ━━━
+Référence de qualité : Linear, Vercel, Stripe, Notion, Arc, Raycast. Un rendu "basique" (styles par défaut du navigateur, formulaire brut, tableau HTML nu, boutons gris, "Item 1 / Test / Lorem ipsum") est un ÉCHEC, même si le code fonctionne.
+
+STACK PAR DÉFAUT (sauf demande contraire) :
+- App React : Vite + React + Tailwind CSS v4 ("npm i tailwindcss @tailwindcss/vite", plugin tailwindcss() dans vite.config, "@import 'tailwindcss';" dans index.css) + lucide-react (icônes) + framer-motion (animations) + recharts (graphiques) si utile.
+- Page / app en un seul fichier (render_preview) : <script src="https://cdn.tailwindcss.com"></script>, police Inter (Google Fonts), icônes Lucide (<script src="https://unpkg.com/lucide@latest"></script> + lucide.createIcons()).
+
+SYSTÈME DE DESIGN (défini AVANT de coder, appliqué partout) :
+- Palette : neutres (zinc/slate) + UNE couleur d'accent assumée ; contrastes AA ; mode sombre soigné (dark:) avec bascule.
+- Typographie : Inter ; hiérarchie nette (titre 28–40px semibold tracking-tight, sections 18–20px, texte 14–15px, secondaire en gris) ; chiffres tabulaires pour les données.
+- Espacements sur une échelle de 4/8 px, respiration généreuse ; rayons 10–16px ; ombres douces (shadow-sm/shadow-xl/…), bordures fines translucides.
+- Composants cohérents : boutons (principal / secondaire / fantôme / danger, avec icône), champs avec label et anneau de focus, cartes, badges d'état colorés, tableaux avec en-tête fixe et lignes survolables, modales, menus, toasts de confirmation.
+
+MISE EN PAGE : shell d'application (barre latérale + barre supérieure + contenu) ou landing structurée ; grilles responsives ; mobile-first puis desktop ; largeur maximale lisible.
+
+ÉTATS ET MICRO-INTERACTIONS (obligatoires) : chargement (squelettes), état vide illustré (icône + phrase + bouton d'action), erreur explicite, hover / active / focus-visible, transitions 150–250 ms, apparition animée des éléments, retours visuels à chaque action (toast, surbrillance).
+
+CONTENU : données de démonstration RÉALISTES et nombreuses (noms, dates, montants, statuts crédibles ; contexte ivoirien / africain quand c'est pertinent : FCFA, villes, prénoms). Jamais de Lorem ipsum ni de "Test".
+
+FONCTIONNALITÉS : dépasse le minimum demandé comme le ferait un bon produit — recherche instantanée, tri, filtres, pagination, statistiques en tête de page (cartes KPI), création/édition/suppression avec validation et confirmation, persistance (localStorage ou vraie base), raccourcis clavier utiles, export CSV si c'est des données.
+
+AUTOCONTRÔLE VISUEL avant de livrer : hiérarchie claire au premier coup d'œil ? palette cohérente ? espacements réguliers ? aucun élément au style navigateur par défaut ? états vides/chargement présents ? beau en sombre ET en clair ? utilisable sur mobile ? Si non, corrige avant de conclure.`;
+
 const AGENT_PROMPTS = {
     code: `
 ━━━ MODE AGENT : CODE ━━━
@@ -267,7 +293,7 @@ export const AGENT_IDS = Object.keys(AGENT_PROMPTS);
  * @param {string} o.knowledge     profil + few-shot (serveur)
  * @param {boolean} o.toolsEnabled le modèle reçoit-il les outils ?
  */
-export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false }) {
+export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false }) {
     const today = new Date().toLocaleDateString('fr-FR', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Africa/Abidjan'
     });
@@ -291,6 +317,7 @@ export function buildSystemInstruction({ agentId, mode, userMessage, memory, pro
         + toolsLayer
         + agentLayer
         + (heavy && mode !== 'voice' ? HEAVY_PROMPT : '')
+        + (ui && mode !== 'voice' ? DESIGN_PROMPT : '')
         + (mode === 'voice' ? VOICE_PROMPT : '')
         + ANTI_INTRO_GUARD
         + EMOTION_INSTRUCTION;
