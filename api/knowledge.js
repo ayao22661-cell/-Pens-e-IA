@@ -58,7 +58,7 @@ export default async function handler(req) {
 
     // ── Env vars lues dans le handler (Vercel Edge) ───────────
     const SB_URL = process.env.SUPABASE_URL;
-    const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const SB_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY);
 
     if (!SB_URL || !SB_KEY) {
         return new Response(JSON.stringify({ score: 0, saved: false }), {

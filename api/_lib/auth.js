@@ -9,7 +9,7 @@ const TURN_TTL_MS = 45 * 60 * 1000; // un tour d'agent (boucle d'outils, tâches
 function sbEnv() {
     return {
         url: process.env.SUPABASE_URL,
-        key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        key: (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY),
     };
 }
 
@@ -117,7 +117,7 @@ export async function refundCredit(userId) {
 // ============================================================
 
 function turnSecret() {
-    return process.env.TURN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    return process.env.TURN_SECRET || (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY) || '';
 }
 
 function b64url(bytes) {
