@@ -290,10 +290,13 @@ async function buildBody({ model, contents, agentId, mode, systemFor, useTools, 
 // Les modèles Lite appellent rarement un outil d'eux-mêmes : quand la demande
 // l'exige explicitement, on force l'appel (mode ANY) au premier tour seulement.
 const EXPLICIT_RUN = /\b(ex[ée]cut\w*|lance[rz]?|run|teste[rz]?|calcule[rz]?|simule[rz]?)\b[^.?!]{0,60}\bpython\b|\bpython\b[^.?!]{0,60}\b(ex[ée]cut\w*|lance[rz]?|run)\b/i;
+const SHELL_TASK = /\b(npm|npx|pnpm|yarn|pip3?|git|bash|shell|terminal|ligne de commande|en commande|compile[rz]?|build|tests? unitaires|lance[rz]? (le|un) serveur|install(e|er|ez)\b)/i;
+const WORKSPACE_TOOLS = ['bash', 'run_python', 'write_file', 'edit_file', 'read_file', 'list_files'];
 function forcedTools(agentId, text) {
     if (agentId === 'recherche') return ['web_search'];
-    if (agentId === 'audit') return ['run_python', 'read_file', 'list_files'];
-    if (EXPLICIT_RUN.test(text || '')) return ['run_python'];
+    if (agentId === 'audit') return ['run_python', 'bash', 'read_file', 'list_files'];
+    if (SHELL_TASK.test(text || '')) return WORKSPACE_TOOLS;
+    if (EXPLICIT_RUN.test(text || '')) return ['run_python', 'bash'];
     return null;
 }
 

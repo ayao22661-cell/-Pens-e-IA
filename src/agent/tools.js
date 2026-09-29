@@ -12,6 +12,7 @@ import { vfs, isTextPath, extOf, downloadRecord } from '../sandbox/vfs.js';
 import { runPython } from '../sandbox/python.js';
 import { buildPreviewDocument, mountPreview, bytesToBase64 } from '../sandbox/preview.js';
 import { generateOfficeFile, generatePdf, generateImage } from '../generators.js';
+import { execCommand, portUrl } from '../sandbox/machine.js';
 import { escapeHtml } from '../ui/dom.js';
 
 const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
@@ -65,6 +66,64 @@ function diffHtml(oldStr, newStr) {
 }
 
 export const CLIENT_TOOLS = {
+    async bash({ command = '', timeout_s, background = false }, { ws, card, terminal }) {
+        card.setCode(command, 'bash');
+        card.open(true);
+        terminal.log(background ? `${command} &` : command, 'cmd');
+        const r = await execCommand(command, {
+            ws, timeoutS: timeout_s, background,
+            onOutput: (s, stream) => { card.appendLog(s, stream); terminal.log(s, stream); },
+            onStatus: (v) => { card.setDetail(v); terminal.log(v, 'info'); },
+        });
+        const status = r.timedOut ? `interrompu après ${Math.round(r.ms / 1000)}s`
+            : r.background ? 'en arrière-plan'
+            : `code ${r.exitCode} · ${(r.ms / 1000).toFixed(1)}s`;
+        card.setDetail(status);
+        if (r.changed.length) terminal.log(`✓ /workspace : ${r.changed.length} fichier(s) mis à jour`, 'ok');
+        await showWorkspaceImages(ws, r.changed, card);
+        const ok = r.background || (!r.timedOut && r.exitCode === 0);
+        return {
+            ok,
+            summary: status,
+            response: {
+                exit_code: r.exitCode,
+                timed_out: r.timedOut,
+                background: r.background,
+                output: clip(r.output, 14000),
+                files_changed: r.changed.slice(0, 100),
+                ...(r.skippedPull.length ? { files_too_large_to_sync: r.skippedPull.slice(0, 50) } : {}),
+                ...(r.skippedPush.length ? { files_not_uploaded: r.skippedPush } : {}),
+            },
+        };
+    },
+
+    async open_port({ port, title }, { ws, card, terminal }) {
+        const url = await portUrl(ws, Number(port));
+        const holder = document.createElement('div');
+        card.addOutput(holder);
+        const frame = document.createElement('div');
+        frame.className = 'pz-preview';
+        frame.innerHTML = `<div class="pz-preview-bar"><span class="pz-preview-dots"><i></i><i></i><i></i></span>
+            <a class="pz-preview-title" target="_blank" rel="noopener"></a>
+            <button type="button" class="pz-icon-btn" data-act="reload" title="Recharger">↻</button>
+            <button type="button" class="pz-icon-btn" data-act="expand" title="Agrandir">⤢</button></div>`;
+        const link = frame.querySelector('a');
+        link.href = url;
+        link.textContent = title ? `${title} · ${url}` : url;
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups');
+        iframe.src = url;
+        frame.appendChild(iframe);
+        frame.querySelector('[data-act="reload"]').addEventListener('click', () => { iframe.src = url; });
+        frame.querySelector('[data-act="expand"]').addEventListener('click', () => {
+            frame.classList.toggle('pz-preview-full');
+            document.body.classList.toggle('pz-noscroll', frame.classList.contains('pz-preview-full'));
+        });
+        holder.appendChild(frame);
+        terminal.log(`port ${port} → ${url}`, 'ok');
+        return { ok: true, summary: url.replace(/^https?:\/\//, ''), response: { ok: true, url, note: "Aperçu affiché à l'utilisateur." } };
+    },
+
     async run_python({ code = '' }, { ws, card, terminal }) {
         card.setCode(code, 'python');
         card.open(true);
@@ -180,7 +239,7 @@ export const CLIENT_TOOLS = {
 };
 
 /** Outils dont le résultat n'a pas besoin d'être relu par le modèle (économise un appel). */
-export const FINAL_TOOLS = new Set(['render_preview', 'generate_file', 'generate_pdf', 'generate_image']);
+export const FINAL_TOOLS = new Set(['render_preview', 'open_port', 'generate_file', 'generate_pdf', 'generate_image']);
 
 export async function executeClientTool(name, args, ctx) {
     const tool = CLIENT_TOOLS[name];

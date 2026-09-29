@@ -7,7 +7,7 @@
 export const CONFIG = {
     maxCredits: 20,
     maxFileSizeMB: 3,              // Vercel Edge ~4.5 Mo par requête, base64 ×1.33
-    maxAgentSteps: 8,              // allers-retours outils max par message
+    maxAgentSteps: 25,             // allers-retours outils max par message (tâches de code longues)
     contextMessages: 40,           // messages d'historique envoyés au modèle
     contextChars: 60000,
     maxInlineTextChars: 60000,     // texte de fichier joint injecté dans le message

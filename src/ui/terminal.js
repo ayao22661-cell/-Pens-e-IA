@@ -1,18 +1,22 @@
 // ============================================================
 //  PENSÉE IA — src/ui/terminal.js
 //  Panneau "Terminal" : journal de tout ce que l'agent exécute,
-//  invite Python pour l'utilisateur, explorateur de /workspace.
+//  invite shell (machine Linux) ou Python (navigateur) pour
+//  l'utilisateur, explorateur de /workspace.
 // ============================================================
 
 import { workspaceId } from '../state.js';
 import { vfs, downloadRecord } from '../sandbox/vfs.js';
 import { runPython } from '../sandbox/python.js';
+import { execCommand, resetMachine } from '../sandbox/machine.js';
 import { buildPreviewDocument, mountPreview } from '../sandbox/preview.js';
 import { escapeHtml } from './dom.js';
 import { ICONS } from './icons.js';
 
-let panel, logEl, filesEl, inputEl, countEl;
+let panel, logEl, filesEl, inputEl, countEl, promptEl;
 let activeTab = 'log';
+let mode = (() => { try { return localStorage.getItem('pz_term_mode') || 'sh'; } catch { return 'sh'; } })();
+let running = false;
 
 const fmtSize = (n) => n < 1024 ? `${n} o` : n < 1048576 ? `${(n / 1024).toFixed(1)} Ko` : `${(n / 1048576).toFixed(1)} Mo`;
 
@@ -105,21 +109,56 @@ async function onFilesClick(e) {
     }
 }
 
-async function runUserPython() {
+function setMode(next) {
+    mode = next;
+    try { localStorage.setItem('pz_term_mode', mode); } catch { /* stockage indisponible */ }
+    promptEl.textContent = mode === 'sh' ? '$' : 'py>';
+    promptEl.title = mode === 'sh' ? 'Shell Linux (clic : passer en Python)' : 'Python navigateur (clic : passer en shell)';
+    inputEl.placeholder = mode === 'sh'
+        ? 'npm install, git status, ls -la…  —  Entrée pour exécuter'
+        : "print('bonjour')  —  Entrée pour exécuter, Maj+Entrée : nouvelle ligne";
+}
+
+async function runUserInput() {
     const code = inputEl.value.trim();
-    if (!code) return;
+    if (!code || running) return;
     inputEl.value = '';
     inputEl.style.height = '';
     const ws = workspaceId();
-    terminal.log(code.split('\n').join('\n  '), 'cmd');
-    const r = await runPython(code, {
-        ws,
-        onOutput: (s, stream) => terminal.log(s, stream),
-        onStatus: (st) => { if (st === 'loading') terminal.log('Chargement de Python (première exécution)…', 'info'); },
-    });
-    if (r.result) terminal.log(r.result + '\n', 'stdout');
-    if (r.error) terminal.log(r.error + '\n', 'stderr');
-    if (r.changed.length) terminal.log(`✓ Fichiers modifiés : ${r.changed.join(', ')}`, 'ok');
+    running = true;
+    promptEl.classList.add('busy');
+    try {
+        if (mode === 'sh') {
+            if (code === 'reset') {
+                await resetMachine(ws);
+                terminal.log('Machine réinitialisée. La prochaine commande en démarrera une neuve.', 'info');
+                return;
+            }
+            terminal.log(code, 'cmd');
+            const r = await execCommand(code, {
+                ws,
+                onOutput: (s, stream) => terminal.log(s, stream),
+                onStatus: (v) => terminal.log(v, 'info'),
+            });
+            terminal.log(r.timedOut ? `✗ interrompu (délai dépassé)` : `→ code ${r.exitCode} · ${(r.ms / 1000).toFixed(1)}s`, r.exitCode === 0 ? 'ok' : 'err');
+            if (r.changed.length) terminal.log(`✓ /workspace : ${r.changed.length} fichier(s) mis à jour`, 'ok');
+        } else {
+            terminal.log(code.split('\n').join('\n  '), 'cmd');
+            const r = await runPython(code, {
+                ws,
+                onOutput: (s, stream) => terminal.log(s, stream),
+                onStatus: (st) => { if (st === 'loading') terminal.log('Chargement de Python (première exécution)…', 'info'); },
+            });
+            if (r.result) terminal.log(r.result + '\n', 'stdout');
+            if (r.error) terminal.log(r.error + '\n', 'stderr');
+            if (r.changed.length) terminal.log(`✓ Fichiers modifiés : ${r.changed.join(', ')}`, 'ok');
+        }
+    } catch (e) {
+        terminal.log(e.message, 'err');
+    } finally {
+        running = false;
+        promptEl.classList.remove('busy');
+    }
 }
 
 export function initTerminal() {
@@ -135,12 +174,13 @@ export function initTerminal() {
             <button type="button" class="pz-icon-btn" data-act="close" title="Fermer">✕</button>
         </div>
         <div class="pz-term-pane-log">
-            <pre class="pz-term-log"><span class="pz-term-info">Pensée · Python (WebAssembly) · /workspace
-Tout ce que l'agent exécute s'affiche ici. Tu peux aussi taper du Python ci-dessous.
+            <pre class="pz-term-log"><span class="pz-term-info">Pensée · machine Linux (Node, npm, git, python3) + Python navigateur · /workspace
+Tout ce que l'agent exécute s'affiche ici. Tu peux aussi taper tes propres commandes.
+Clique sur l'invite ($ / py>) pour changer de mode. « reset » réinitialise la machine.
 </span></pre>
             <div class="pz-term-input">
-                <span class="pz-term-prompt">py&gt;</span>
-                <textarea rows="1" placeholder="print('bonjour')  —  Entrée pour exécuter, Maj+Entrée pour une nouvelle ligne" spellcheck="false"></textarea>
+                <button type="button" class="pz-term-prompt"></button>
+                <textarea rows="1" spellcheck="false"></textarea>
             </div>
         </div>
         <div class="pz-term-pane-files" hidden><div class="pz-term-files"></div></div>`;
@@ -150,12 +190,15 @@ Tout ce que l'agent exécute s'affiche ici. Tu peux aussi taper du Python ci-des
     filesEl = panel.querySelector('.pz-term-files');
     inputEl = panel.querySelector('textarea');
     countEl = panel.querySelector('.pz-term-count');
+    promptEl = panel.querySelector('.pz-term-prompt');
+    promptEl.addEventListener('click', () => { setMode(mode === 'sh' ? 'py' : 'sh'); inputEl.focus(); });
+    setMode(mode);
 
     panel.querySelectorAll('.pz-term-tab').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab)));
     panel.querySelector('[data-act="close"]').addEventListener('click', () => terminal.close());
     filesEl.addEventListener('click', onFilesClick);
     inputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runUserPython(); }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runUserInput(); }
     });
     inputEl.addEventListener('input', () => {
         inputEl.style.height = 'auto';

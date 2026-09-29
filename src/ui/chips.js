@@ -26,6 +26,8 @@ export function renderSources(sources) {
 }
 
 export const TOOL_LABELS = {
+    bash: { icon: ICONS.terminal, label: 'Terminal' },
+    open_port: { icon: ICONS.globe, label: 'Serveur' },
     run_python: { icon: ICONS.terminal, label: 'Python' },
     write_file: { icon: ICONS.pencil, label: 'Écriture' },
     edit_file: { icon: ICONS.pencil, label: 'Modification' },

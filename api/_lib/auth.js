@@ -4,7 +4,7 @@
 // ============================================================
 
 export const MAX_DAILY_CREDITS = 20;
-const TURN_TTL_MS = 10 * 60 * 1000; // un tour d'agent (boucle d'outils) dure au plus 10 min
+const TURN_TTL_MS = 45 * 60 * 1000; // un tour d'agent (boucle d'outils, tâches de code longues) dure au plus 45 min
 
 function sbEnv() {
     return {

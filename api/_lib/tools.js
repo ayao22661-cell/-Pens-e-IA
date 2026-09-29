@@ -36,6 +36,34 @@ export const TOOLS = {
         },
     },
 
+    // ── Client → machine Linux (api/sandbox.js) ─────────────
+    bash: {
+        where: 'client',
+        description: "Exécute une commande shell sur une vraie machine Linux (Node 22, npm, git, python3, pip, accès internet) dont le dossier courant est synchronisé avec /workspace. Pour : installer des dépendances, lancer des tests, compiler, exécuter des scripts lourds, utiliser git, démarrer un serveur (background=true). Retourne la sortie et le code de sortie.",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                command: S('Commande bash complète (enchaîne avec && si besoin).'),
+                timeout_s: { type: 'INTEGER', description: 'Délai max en secondes (120 par défaut, 280 max).' },
+                background: { type: 'BOOLEAN', description: "Lance en arrière-plan (serveur de dev, watcher) et rend la main après quelques secondes de logs." },
+            },
+            required: ['command'],
+        },
+    },
+    open_port: {
+        where: 'client',
+        final: true,
+        description: "Affiche à l'utilisateur un serveur qui tourne sur la machine Linux (ports 3000, 5173, 8000 ou 8080), via une URL publique temporaire.",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                port: { type: 'INTEGER', description: 'Port du serveur : 3000, 5173, 8000 ou 8080.' },
+                title: S("Titre court de l'aperçu."),
+            },
+            required: ['port'],
+        },
+    },
+
     // ── Client : espace de travail ──────────────────────────
     run_python: {
         where: 'client',
