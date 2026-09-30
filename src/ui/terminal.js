@@ -98,7 +98,14 @@ async function onFilesClick(e) {
     } else if (btn.dataset.act === 'delete') {
         await vfs.remove(ws, path);
     } else if (btn.dataset.act === 'preview') {
-        const doc = await buildPreviewDocument(ws, path);
+        let doc;
+        try {
+            doc = await buildPreviewDocument(ws, path);
+        } catch (err) {
+            selectTab('log');
+            terminal.log(`Aperçu impossible : ${err.message}`, 'err');
+            return;
+        }
         const holder = document.createElement('div');
         holder.className = 'pz-term-preview';
         filesEl.prepend(holder);

@@ -10,7 +10,7 @@
 
 import { vfs, isTextPath, extOf, downloadRecord } from '../sandbox/vfs.js';
 import { runPython } from '../sandbox/python.js';
-import { buildPreviewDocument, mountPreview, bytesToBase64 } from '../sandbox/preview.js';
+import { buildPreviewDocument, mountPreview, bytesToBase64, probePreview, PreviewError } from '../sandbox/preview.js';
 import { generateOfficeFile, generatePdf, generateImage, deliverWorkspaceFile, presentStoredFile } from '../generators.js';
 import { execCommand, portUrl, publishFromMachine } from '../sandbox/machine.js';
 import { escapeHtml } from '../ui/dom.js';
@@ -237,12 +237,47 @@ export const CLIENT_TOOLS = {
     },
 
     async render_preview({ path, title }, { ws, card, terminal }) {
-        const doc = await buildPreviewDocument(ws, path);
+        let doc;
+        const probeId = 'pz' + Math.random().toString(36).slice(2);
+        try {
+            doc = await buildPreviewDocument(ws, path, { probeId });
+        } catch (e) {
+            if (!(e instanceof PreviewError)) throw e;
+            card.appendLog(e.message + '\n', 'stderr');
+            terminal.log(`aperçu impossible : ${e.message}`, 'err');
+            return { ok: false, summary: 'non affichable', response: { error: e.message } };
+        }
+
+        // La sonde écoute avant le chargement de l'iframe : erreurs JS, ressources manquantes, page blanche
+        const verdict = probePreview(probeId);
         const holder = document.createElement('div');
         card.addOutput(holder);
         mountPreview(holder, doc, { title: title || path, onReload: () => buildPreviewDocument(ws, path) });
-        terminal.log(`aperçu ${path}`, 'info');
-        return { ok: true, summary: 'affiché', response: { ok: true, shown: path, note: "L'aperçu est affiché à l'utilisateur." } };
+        const { errors, missing, stats } = await verdict;
+
+        const blank = stats ? stats.nodes < 3 && stats.text < 5 : errors.length > 0;
+        const problems = [
+            ...errors.map(m => `Erreur JavaScript : ${m}`),
+            ...missing.map(m => `Ressource introuvable : ${m}`),
+            ...(blank ? ['La page est vide à l\'affichage (rien de visible dans <body>).'] : []),
+            ...(!stats && !errors.length ? ["La page n'a pas fini de charger en 4 s (boucle bloquante ? script externe lent ?)."] : []),
+        ];
+        problems.forEach(p => card.appendLog(p + '\n', 'stderr'));
+        terminal.log(problems.length ? `aperçu ${path} : ${problems.length} problème(s)` : `aperçu ${path} ✓`, problems.length ? 'err' : 'ok');
+
+        if (problems.length) {
+            return {
+                ok: false,
+                summary: `${problems.length} problème(s)`,
+                response: {
+                    shown: path,
+                    problems,
+                    stats,
+                    instruction: "L'aperçu ne fonctionne pas correctement. Corrige la cause (read_file sur les fichiers concernés, chemins relatifs, ordre des scripts, erreurs JS), puis rappelle render_preview jusqu'à zéro problème.",
+                },
+            };
+        }
+        return { ok: true, summary: 'affiché', response: { ok: true, shown: path, stats, note: "L'aperçu est affiché à l'utilisateur, sans erreur détectée." } };
     },
 
     async generate_file(args, { card, terminal }) {
