@@ -31,7 +31,7 @@ const MAX_OUTPUT = {
     visionnaire: 6144, audit: 8192, default: 16384, voice: 1024,
 };
 const MAX_SERVER_ROUNDS = 5;      // relances successives après des outils serveur
-const MAX_EMPTY_RETRIES = 2;      // relances automatiques d'une réponse vide / appel mal formé
+const MAX_EMPTY_RETRIES = 3;      // relances automatiques d'une réponse vide / appel mal formé
 const MAX_CONTENTS = 120;         // messages max acceptés dans l'historique
 const MAX_TOOL_RESPONSE_CHARS = 30000;
 
@@ -141,6 +141,7 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
         const firstRound = round === 0 && !isContinuation;
         const result = await callWithCascade({
             cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText, heavy, sigModel,
+            thinkingShift: emptyRetries,
             forceTools: firstRound ? forcedTools(agentId, lastUserText) : null,
             allowPreSearch: firstRound,
             onModel: (model) => send({ t: 'model', v: model }),
@@ -166,10 +167,15 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
 
         // Réponse vide (réflexion seule) ou appel d'outil au JSON cassé : on relance avec une consigne
         const empty = !calls.length && !blockReason && !content.parts.some(p => p.text && p.text.trim());
+        if (empty) console.warn('[PENSÉE] réponse vide', result.model, finishReason, JSON.stringify(result.usage || {}));
         if (empty && emptyRetries < MAX_EMPTY_RETRIES && round < MAX_SERVER_ROUNDS - 1) {
             emptyRetries++;
             const malformed = /MALFORMED|UNEXPECTED_TOOL/i.test(finishReason || '');
-            send({ t: 'notice', v: malformed ? "Appel d'outil mal formé — nouvelle tentative…" : 'Réponse vide — nouvelle tentative…' });
+            // Changer de stratégie à chaque relance : 1re → réflexion réduite, 2e → modèle suivant
+            if (emptyRetries >= 2 && cascade.length > 1) cascade.push(cascade.shift());
+            const why = [finishReason || 'sans raison', result.usage?.thoughtsTokenCount ? `réflexion ${result.usage.thoughtsTokenCount} tokens` : '']
+                .filter(Boolean).join(', ');
+            send({ t: 'notice', v: `${malformed ? "Appel d'outil mal formé" : 'Réponse vide'} (${result.model} · ${why}) — nouvelle tentative…` });
             nudgeLastUser(contents, malformed
                 ? "[Consigne système] Ton dernier appel d'outil était mal formé (JSON invalide ou contenu trop long). Reprends exactement où tu en étais. Découpe les gros fichiers : write_file de moins de 250 lignes, puis complète avec d'autres write_file (fichiers séparés) ou edit_file. Échappe correctement les guillemets et retours à la ligne."
                 : "[Consigne système] Ta dernière réponse était vide. Reprends où tu en étais : annonce ton plan en une phrase puis appelle l'outil nécessaire, ou donne ta réponse finale.");
@@ -242,20 +248,20 @@ function functionResponsePart(call, response) {
 // ============================================================
 //  CASCADE DE MODÈLES
 // ============================================================
-async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, sigModel, onModel, handlers }) {
+async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, sigModel, thinkingShift = 0, onModel, handlers }) {
     const hasToolParts = contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
 
     for (const model of cascade) {
         const gemma = isGemma(model);
         let useTools = mode === 'chat' && !gemma;
         const variants = gemma ? ['off'] : THINKING_VARIANTS[heavy ? 'heavy' : 'normal'];
-        let variant = 0;
+        let variant = Math.min(thinkingShift, variants.length - 1); // après une réponse vide : réflexion moins gourmande
         const modelContents = sigModel && model !== sigModel && hasToolParts ? neutralizeSignatures(contents) : contents;
 
         // Plusieurs variantes par modèle si le 400 vient d'un paramètre non supporté
         for (let attempt = 0; attempt < 6; attempt++) {
             const body = await buildBody({
-                model, contents: modelContents, agentId, mode, systemFor, useTools,
+                model, contents: modelContents, agentId, mode, systemFor, useTools, heavy,
                 thinking: thinkingConfig(variants[variant]),
                 forceTools: useTools ? forceTools : null,
                 preSearchQuery: allowPreSearch && !useTools && mode === 'chat' ? preSearchQuery(agentId, lastUserText) : null,
@@ -295,7 +301,7 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
     return { error: 'Serveurs IA saturés. Réessaie dans quelques secondes.', code: 503 };
 }
 
-async function buildBody({ model, contents, agentId, mode, systemFor, useTools, thinking, forceTools, preSearchQuery: query }) {
+async function buildBody({ model, contents, agentId, mode, systemFor, useTools, heavy, thinking, forceTools, preSearchQuery: query }) {
     const systemInstruction = systemFor(useTools);
     let finalContents = contents;
 
@@ -308,7 +314,9 @@ async function buildBody({ model, contents, agentId, mode, systemFor, useTools, 
     const body = {
         contents: isGemma(model) ? toPlainContents(finalContents, systemInstruction) : finalContents,
         generationConfig: {
-            maxOutputTokens: mode === 'voice' ? MAX_OUTPUT.voice : (MAX_OUTPUT[agentId] || MAX_OUTPUT.default),
+            // La réflexion est décomptée de cette limite : en mode lourd, la réflexion "high"
+            // peut consommer 16k+ tokens et ne rien laisser pour la réponse.
+            maxOutputTokens: mode === 'voice' ? MAX_OUTPUT.voice : heavy ? 65536 : (MAX_OUTPUT[agentId] || MAX_OUTPUT.default),
         },
     };
     if (!isGemma(model)) body.systemInstruction = { parts: [{ text: systemInstruction }] };

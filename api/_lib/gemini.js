@@ -195,15 +195,17 @@ export async function consumeStream(response, { onText, onThinking, onEmotion })
     let sseBuf = '';
     let finishReason = null;
     let blockReason = null;
+    let usage = null;
 
     const filter = new TagFilter((kind, v) => {
         if (kind === 'text') {
             if (!curText) { curText = { text: '' }; parts.push(curText); }
             curText.text += v;
             onText(v);
-        } else if (kind === 'thinking') onThinking(v);
+        } else if (kind === 'thinking') { tagThinking += v; onThinking(v); }
         else if (kind === 'emotion') onEmotion(v);
     });
+    let tagThinking = ''; // texte placé par le modèle dans <think>…</think> (et non dans les "thought" natifs)
 
     const handlePart = (p) => {
         if (p.thought) {
@@ -241,12 +243,21 @@ export async function consumeStream(response, { onText, onThinking, onEmotion })
             let obj;
             try { obj = JSON.parse(data); } catch { continue; }
             if (obj.promptFeedback?.blockReason) blockReason = obj.promptFeedback.blockReason;
+            if (obj.usageMetadata) usage = obj.usageMetadata;
             const cand = obj.candidates?.[0];
             if (cand?.finishReason) finishReason = cand.finishReason;
             for (const p of cand?.content?.parts || []) handlePart(p);
         }
     }
     filter.end();
+
+    // Réponse entière écrite dans une balise <think> jamais refermée : on la rend visible
+    // plutôt que de renvoyer une réponse vide.
+    if (!calls.length && !parts.some(p => p.text && p.text.trim()) && tagThinking.trim().length > 40) {
+        const text = tagThinking.trim();
+        parts.push({ text });
+        onText(text);
+    }
 
     return {
         content: {
@@ -256,6 +267,7 @@ export async function consumeStream(response, { onText, onThinking, onEmotion })
         calls,
         finishReason,
         blockReason,
+        usage,
     };
 }
 
