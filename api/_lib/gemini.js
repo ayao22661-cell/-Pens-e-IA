@@ -4,6 +4,8 @@
 //  événements typés (text / thinking / emotion / functionCall).
 // ============================================================
 
+import { parseTextToolCall } from './tools.js';
+
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // ── Cascades — optimisées quotas août 2026 ──────────────────
@@ -90,6 +92,7 @@ const TAGS = [
     { open: '<EM>', close: '</EM>', kind: 'emotion' },
     { open: '<think>', close: '</think>', kind: 'thinking' },
     { open: '<|channel>thought', close: '<channel|>', kind: 'thinking' },
+    { open: '<tool_call>', close: '</tool_call>', kind: 'tool' }, // protocole texte (Gemma)
 ];
 const MAX_EMOTION_CHARS = 300;
 
@@ -107,6 +110,7 @@ export class TagFilter {
         this.buf = '';
         this.tag = null;
         this.emBuf = '';
+        this.toolBuf = '';
         this.trimNextText = true; // supprime les sauts de ligne en tête de réponse / après une balise
     }
 
@@ -150,6 +154,7 @@ export class TagFilter {
 
     inside(s) {
         if (!s) return;
+        if (this.tag.kind === 'tool') { this.toolBuf += s; return; }
         if (this.tag.kind !== 'emotion') { this.emit('thinking', s); return; }
         this.emBuf += s;
         // <EM> jamais refermé : ce n'était pas une balise, on rend le texte
@@ -162,6 +167,10 @@ export class TagFilter {
     }
 
     closeTag() {
+        if (this.tag?.kind === 'tool') {
+            this.emit('tool', this.toolBuf);
+            this.toolBuf = '';
+        }
         if (this.tag?.kind === 'emotion') {
             try { this.emit('emotion', JSON.parse(this.emBuf.trim())); } catch (_) { /* signal illisible : ignoré */ }
             this.emBuf = '';
@@ -202,10 +211,20 @@ export async function consumeStream(response, { onText, onThinking, onEmotion })
             if (!curText) { curText = { text: '' }; parts.push(curText); }
             curText.text += v;
             onText(v);
+        } else if (kind === 'tool') {
+            const call = parseTextToolCall(v);
+            if (call) {
+                curText = null;
+                parts.push({ functionCall: call });
+                calls.push(call);
+            } else {
+                malformedText = true;
+            }
         } else if (kind === 'thinking') { tagThinking += v; onThinking(v); }
         else if (kind === 'emotion') onEmotion(v);
     });
     let tagThinking = ''; // texte placé par le modèle dans <think>…</think> (et non dans les "thought" natifs)
+    let malformedText = false; // <tool_call> illisible (protocole texte)
 
     const handlePart = (p) => {
         if (p.thought) {
@@ -265,7 +284,7 @@ export async function consumeStream(response, { onText, onThinking, onEmotion })
             parts: parts.filter(p => p.functionCall || p.thoughtSignature || (p.text && p.text.trim())),
         },
         calls,
-        finishReason,
+        finishReason: malformedText && !calls.length ? 'MALFORMED_FUNCTION_CALL' : finishReason,
         blockReason,
         usage,
     };
@@ -280,8 +299,13 @@ export function toPlainContents(contents, systemInstruction) {
     const out = contents.map(c => ({
         role: c.role,
         parts: c.parts.map(p => {
-            if (p.functionCall) return { text: `[Outil appelé : ${p.functionCall.name}(${JSON.stringify(p.functionCall.args || {}).slice(0, 2000)})]` };
-            if (p.functionResponse) return { text: `[Résultat ${p.functionResponse.name} : ${JSON.stringify(p.functionResponse.response || {}).slice(0, 6000)}]` };
+            // Même format que le protocole texte : le modèle relit ses propres appels tels qu'il les écrit
+            if (p.functionCall) return { text: `<tool_call>
+${JSON.stringify({ name: p.functionCall.name, args: p.functionCall.args || {} }).slice(0, 4000)}
+</tool_call>` };
+            if (p.functionResponse) return { text: `<tool_result name="${p.functionResponse.name}">
+${JSON.stringify(p.functionResponse.response || {}).slice(0, 12000)}
+</tool_result>` };
             if (p.text !== undefined) return { text: p.text };
             return p.inlineData ? { inlineData: p.inlineData } : p.fileData ? { fileData: p.fileData } : { text: '' };
         }).filter(p => p.inlineData || p.fileData || p.text),

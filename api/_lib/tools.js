@@ -320,6 +320,99 @@ export function functionDeclarations() {
     }));
 }
 
+// ── Protocole texte (modèles sans function calling natif : Gemma) ──
+// Arguments longs (code, contenu de fichier, HTML) écrits en texte brut dans <arg> :
+// un petit modèle échoue souvent à échapper correctement du code dans du JSON.
+const RAW_ARGS = {
+    write_file: ['content'], run_python: ['code'], edit_file: ['old_string', 'new_string'], generate_pdf: ['html'],
+};
+
+function describeSchema(schema, depth = 0) {
+    if (!schema) return 'valeur';
+    if (schema.enum) return schema.enum.map(v => JSON.stringify(v)).join(' | ');
+    switch (schema.type) {
+        case 'STRING': return 'texte';
+        case 'INTEGER': return 'entier';
+        case 'NUMBER': return 'nombre';
+        case 'BOOLEAN': return 'true | false';
+        case 'ARRAY': return `[${describeSchema(schema.items, depth + 1)}, …]`;
+        case 'OBJECT': {
+            if (depth > 2) return '{…}';
+            const props = Object.entries(schema.properties || {}).map(([k, v]) => `${k}: ${describeSchema(v, depth + 1)}`);
+            return `{ ${props.join(', ')} }`;
+        }
+        default: return 'valeur';
+    }
+}
+
+export function textToolProtocol() {
+    const lines = Object.entries(TOOLS).map(([name, t]) => {
+        const req = new Set(t.parameters?.required || []);
+        const raw = RAW_ARGS[name] || [];
+        const params = Object.entries(t.parameters?.properties || {}).map(([k, v]) => {
+            const how = raw.includes(k) ? 'texte brut dans <arg name="' + k + '">' : describeSchema(v);
+            return `    - ${k}${req.has(k) ? ' (obligatoire)' : ''} : ${how}${v.description ? ' — ' + v.description : ''}`;
+        });
+        return `• ${name} : ${t.description}\n${params.join('\n') || '    (aucun paramètre)'}`;
+    });
+
+    return `
+
+━━━ APPEL DES OUTILS (FORMAT OBLIGATOIRE) ━━━
+Pour utiliser un outil, écris EXACTEMENT ce bloc (rien d'autre ne déclenche un outil) :
+<tool_call>
+{"name": "NOM_OUTIL", "args": {"param": "valeur"}}
+</tool_call>
+
+Pour le code, le contenu de fichier ou du HTML, ne le mets PAS dans le JSON : ajoute-le en texte brut, sans échappement, dans un bloc <arg> à l'intérieur du <tool_call> :
+<tool_call>
+{"name": "write_file", "args": {"path": "src/app.js"}}
+<arg name="content">
+const total = items.reduce((s, i) => s + i.prix, 0);
+console.log("Total :", total);
+</arg>
+</tool_call>
+
+Exemples :
+<tool_call>
+{"name": "bash", "args": {"command": "cd app && npm test"}}
+</tool_call>
+<tool_call>
+{"name": "web_search", "args": {"query": "prix du cacao Côte d'Ivoire 2026"}}
+</tool_call>
+
+RÈGLES :
+- Tu peux appeler plusieurs outils à la suite. Après tes <tool_call>, ARRÊTE-TOI : les résultats arrivent dans le message suivant, sous la forme <tool_result name="…">…</tool_result>.
+- N'invente jamais un résultat d'outil. Ne parle pas du format <tool_call> à l'utilisateur.
+- JSON valide : guillemets doubles, pas de virgule finale.
+
+OUTILS DISPONIBLES :
+${lines.join('\n')}`;
+}
+
+/** Analyse le contenu d'un bloc <tool_call> écrit en texte. @returns {{name, args}|null} */
+export function parseTextToolCall(body) {
+    const text = String(body || '');
+    // Objet JSON principal : de la première accolade à l'accolade fermante correspondante
+    const start = text.indexOf('{');
+    if (start === -1) return null;
+    let depth = 0, inStr = false, esc = false, end = -1;
+    for (let i = start; i < text.length; i++) {
+        const c = text[i];
+        if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+        if (c === '"') inStr = true;
+        else if (c === '{') depth++;
+        else if (c === '}' && --depth === 0) { end = i; break; }
+    }
+    if (end === -1) return null;
+    let call;
+    try { call = JSON.parse(text.slice(start, end + 1)); } catch { return null; }
+    if (!call || typeof call.name !== 'string' || !TOOLS[call.name]) return null;
+    const args = call.args && typeof call.args === 'object' ? { ...call.args } : {};
+    for (const m of text.slice(end + 1).matchAll(/<arg name="([\w-]+)">\r?\n?([\s\S]*?)\r?\n?<\/arg>/g)) args[m[1]] = m[2];
+    return { name: call.name, args };
+}
+
 export function toolWhere(name) {
     return TOOLS[name]?.where || 'client';
 }

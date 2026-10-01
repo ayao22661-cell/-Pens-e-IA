@@ -6,6 +6,8 @@
 //  (Les fichiers préfixés "_" ne sont pas exposés en route par Vercel.)
 // ============================================================
 
+import { textToolProtocol } from './tools.js';
+
 const BASE_PROMPT = `Tu es PENSÉE — intelligence artificielle de précision, conçue par Yao Baba Ange Emmanuel. Tu n'es pas un simple assistant, mais un partenaire cognitif avec une voix, une exigence et une vision architecturale.
 
 ━━━ IDENTITÉ — VERROUILLAGE ABSOLU ━━━
@@ -102,6 +104,17 @@ MACHINE LINUX (Amazon Linux 2023, utilisateur non root, sudo disponible) :
 - La machine Linux est la tienne, pas celle de l'utilisateur : tu n'as aucun accès à son ordinateur. Si une action doit être faite chez lui (déploiement, secrets), donne la commande exacte à copier-coller. N'y mets jamais de clé ou de mot de passe réels.
 - Ne recopie pas intégralement dans ta réponse un fichier que tu viens d'écrire : résume ce qu'il contient et où il se trouve.
 - Après une recherche web, cite les sources par leur numéro [1], [2]… et distingue les faits établis des spéculations.`;
+
+// ── Modèle plus compact (Gemma) : raisonnement explicite pour viser la même qualité ──
+const GEMMA_PROMPT = `
+
+━━━ MÉTHODE DE RÉPONSE (OBLIGATOIRE) ━━━
+Avant CHAQUE réponse, raisonne dans un bloc <think>…</think> (jamais montré à l'utilisateur) :
+1. Besoin réel : que veut vraiment l'utilisateur ? Quel résultat concret attend-il ?
+2. Contraintes : données fournies, contexte (fichiers, historique, /workspace), règles ci-dessus qui s'appliquent.
+3. Plan : étapes, outils à appeler et dans quel ordre.
+4. Vérification : relis ton projet de réponse — est-il exact, complet, au niveau d'exigence demandé ? Corrige avant d'écrire.
+Après </think>, écris uniquement la réponse finale (ou tes appels d'outils). Réponse soignée : structure claire, phrases précises, aucune invention.`;
 
 // ── Modèles sans outils (Gemma) : marqueurs texte hérités ──
 const LEGACY_MARKERS_PROMPT = `
@@ -359,7 +372,7 @@ export const AGENT_IDS = Object.keys(AGENT_PROMPTS);
  * @param {string} o.knowledge     profil + few-shot (serveur)
  * @param {boolean} o.toolsEnabled le modèle reçoit-il les outils ?
  */
-export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false, backend = false, docs = false }) {
+export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false, backend = false, docs = false, textTools = false }) {
     const today = new Date().toLocaleDateString('fr-FR', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Africa/Abidjan'
     });
@@ -372,7 +385,9 @@ export function buildSystemInstruction({ agentId, mode, userMessage, memory, pro
         : '';
 
     const agentLayer = (mode !== 'voice' && AGENT_PROMPTS[agentId]) || '';
-    const toolsLayer = mode === 'voice' ? '' : (toolsEnabled ? TOOLS_PROMPT : LEGACY_MARKERS_PROMPT);
+    const toolsLayer = mode === 'voice' ? ''
+        : !toolsEnabled ? LEGACY_MARKERS_PROMPT
+        : TOOLS_PROMPT + (textTools ? textToolProtocol() : '');
 
     return `[DATE ACTUELLE : ${today}]\n`
         + userDataBlock('PROFIL UTILISATEUR', profile)
@@ -386,6 +401,7 @@ export function buildSystemInstruction({ agentId, mode, userMessage, memory, pro
         + (docs && mode !== 'voice' ? DOCS_PROMPT : '')
         + (backend && mode !== 'voice' ? BACKEND_PROMPT : '')
         + (ui && mode !== 'voice' ? DESIGN_PROMPT : '')
+        + (textTools && mode !== 'voice' ? GEMMA_PROMPT : '')
         + (mode === 'voice' ? VOICE_PROMPT : '')
         + ANTI_INTRO_GUARD
         + EMOTION_INSTRUCTION;

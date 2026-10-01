@@ -31,6 +31,7 @@ const MAX_OUTPUT = {
     visionnaire: 6144, audit: 8192, default: 16384, voice: 1024,
 };
 const MAX_SERVER_ROUNDS = 5;      // relances successives après des outils serveur
+const GEMMA_MAX_OUTPUT = 8192;    // limite de sortie des modèles Gemma sur l'API
 const MAX_EMPTY_RETRIES = 3;      // relances automatiques d'une réponse vide / appel mal formé
 const MAX_CONTENTS = 120;         // messages max acceptés dans l'historique
 const MAX_TOOL_RESPONSE_CHARS = 30000;
@@ -84,7 +85,8 @@ export default async function handler(req) {
     const docs = mode === 'chat' && DOC_WORK.test(taskText);
     const knowledge = mode === 'chat' ? await getKnowledgeContext(userId, agentId, lastUserText) : '';
     const context = body.context || {};
-    const systemFor = (toolsEnabled) => buildSystemInstruction({
+    const systemFor = (toolsEnabled, textTools = false) => buildSystemInstruction({
+        textTools,
         heavy,
         ui,
         backend,
@@ -247,15 +249,24 @@ function functionResponsePart(call, response) {
     return { functionResponse: fr };
 }
 
+// Modèles qui viennent de renvoyer 429 (quota) : évités quelques minutes par cette instance,
+// pour ne pas perdre une requête à chaque appel quand le quota Flash du jour est épuisé.
+const COOLDOWN_MS = 3 * 60 * 1000;
+const saturated = new Map(); // modèle → timestamp de fin
+const isSaturated = (m) => (saturated.get(m) || 0) > Date.now();
+
 // ============================================================
 //  CASCADE DE MODÈLES
 // ============================================================
 async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, sigModel, thinkingShift = 0, onModel, handlers }) {
     const hasToolParts = contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
 
-    for (const model of cascade) {
+    // Les modèles saturés passent en fin de liste (jamais exclus : le quota peut être revenu)
+    const ordered = [...cascade.filter(m => !isSaturated(m)), ...cascade.filter(isSaturated)];
+    for (const model of ordered) {
         const gemma = isGemma(model);
-        let useTools = mode === 'chat' && !gemma;
+        // Gemma : outils via le protocole texte (<tool_call>), pas de function calling natif
+        let useTools = mode === 'chat';
         const variants = gemma ? ['off'] : THINKING_VARIANTS[heavy ? 'heavy' : 'normal'];
         let variant = Math.min(thinkingShift, variants.length - 1); // après une réponse vide : réflexion moins gourmande
         const modelContents = sigModel && model !== sigModel && hasToolParts ? neutralizeSignatures(contents) : contents;
@@ -265,7 +276,7 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
             const body = await buildBody({
                 model, contents: modelContents, agentId, mode, systemFor, useTools, heavy,
                 thinking: thinkingConfig(variants[variant]),
-                forceTools: useTools ? forceTools : null,
+                forceTools: useTools && !gemma ? forceTools : null,
                 preSearchQuery: allowPreSearch && !useTools && mode === 'chat' ? preSearchQuery(agentId, lastUserText) : null,
             });
 
@@ -283,7 +294,8 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
                 return { ...out, model };
             }
 
-            if (response.status === 429 || response.status >= 500) break;
+            if (response.status === 429) { saturated.set(model, Date.now() + COOLDOWN_MS); break; }
+            if (response.status >= 500) break;
 
             const errMsg = (await response.json().catch(() => ({})))?.error?.message || '';
             if (response.status === 400 || response.status === 404) {
@@ -304,7 +316,8 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
 }
 
 async function buildBody({ model, contents, agentId, mode, systemFor, useTools, heavy, thinking, forceTools, preSearchQuery: query }) {
-    const systemInstruction = systemFor(useTools);
+    const gemma = isGemma(model);
+    const systemInstruction = systemFor(useTools, gemma && useTools);
     let finalContents = contents;
 
     // Modèles sans outils : recherche web injectée en amont (heuristique)
@@ -318,12 +331,13 @@ async function buildBody({ model, contents, agentId, mode, systemFor, useTools, 
         generationConfig: {
             // La réflexion est décomptée de cette limite : en mode lourd, la réflexion "high"
             // peut consommer 16k+ tokens et ne rien laisser pour la réponse.
-            maxOutputTokens: mode === 'voice' ? MAX_OUTPUT.voice : heavy ? 65536 : (MAX_OUTPUT[agentId] || MAX_OUTPUT.default),
+            maxOutputTokens: Math.min(gemma ? GEMMA_MAX_OUTPUT : Infinity,
+                mode === 'voice' ? MAX_OUTPUT.voice : heavy ? 65536 : (MAX_OUTPUT[agentId] || MAX_OUTPUT.default)),
         },
     };
     if (!isGemma(model)) body.systemInstruction = { parts: [{ text: systemInstruction }] };
     if (thinking) body.generationConfig.thinkingConfig = thinking;
-    if (useTools) {
+    if (useTools && !gemma) {
         body.tools = [{ functionDeclarations: functionDeclarations() }];
         if (forceTools) {
             body.toolConfig = { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: forceTools } };
