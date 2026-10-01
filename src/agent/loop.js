@@ -12,7 +12,7 @@
 
 import { CONFIG } from '../config.js';
 import { state, workspaceId } from '../state.js';
-import { setCredits } from '../credits.js';
+import { setCredits, setQuota } from '../credits.js';
 import { copyToWorkspace } from '../files.js';
 import { generateOfficeFile, generatePdf } from '../generators.js';
 import { terminal } from '../ui/terminal.js';
@@ -67,6 +67,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
                     case 'meta':
                         if (ev.turnToken) token = ev.turnToken;
                         if (typeof ev.credits === 'number') setCredits(ev.credits);
+                        if (ev.quota) setQuota(ev.quota);
                         if (ev.heavy) heavy = true;
                         break;
                     case 'model': model = ev.v; break;

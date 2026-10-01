@@ -5,7 +5,7 @@
 
 import { state } from './state.js';
 import { initAuth } from './auth.js';
-import { loadCredits, renderCredits, setCredits } from './credits.js';
+import { loadCredits, renderCredits, setCredits, setQuota, isBlocked } from './credits.js';
 import { initTabs, initSidebar, saveMessage, updateTabTitle } from './conversations.js';
 import { initMemoryPanel, searchMemory, memorizeText } from './memory.js';
 import { initFileInputs, clearAttachments, uploadAttachments } from './files.js';
@@ -24,7 +24,7 @@ import { ICONS } from './ui/icons.js';
 function refreshSendButton() {
     const hasContent = els.userInput.value.trim().length > 0 || state.attachedFiles.length > 0;
     els.sendBtn.classList.toggle('hidden-action', !state.busy && !hasContent);
-    els.sendBtn.disabled = !state.busy && state.creditsLeft <= 0;
+    els.sendBtn.disabled = !state.busy && isBlocked();
 }
 
 function setBusy(busy) {
@@ -145,7 +145,7 @@ async function runTurn({ text, dbText = text, files = [], agentId }) {
 
         await persistAssistant(tabId, storedUserText, result);
         saveKnowledge(text, result.text, agentId);
-        setStatus(state.creditsLeft > 0 ? 'ok' : 'warn');
+        setStatus(isBlocked() ? 'warn' : 'ok');
     } catch (e) {
         if (e.name === 'AbortError') {
             view.note('Génération arrêtée.', 'warn');
@@ -155,7 +155,8 @@ async function runTurn({ text, dbText = text, files = [], agentId }) {
             }
         } else {
             view.fail(e.message || 'Erreur réseau.');
-            if (e.status === 403) setCredits(0);
+            if (e.status === 429 && e.data?.quota) setQuota(e.data.quota);
+            else if (e.status === 403) setCredits(0);
             setStatus('err');
         }
     } finally {
@@ -209,8 +210,8 @@ async function sendMessage() {
         clearInput();
         if (await handleCommand(text)) return;
     }
-    if (state.creditsLeft <= 0) {
-        addMessage('bot', '· Crédits épuisés. Reviens demain !');
+    if (isBlocked()) {
+        addMessage('bot', state.quota ? '· Limite de ta fenêtre atteinte : regarde le bandeau pour l’heure de réinitialisation.' : '· Crédits épuisés. Reviens demain !');
         return;
     }
 

@@ -6,7 +6,7 @@
 import { getAccessToken } from '../supabase.js';
 
 export class ApiError extends Error {
-    constructor(status, message) { super(message); this.status = status; }
+    constructor(status, message, data) { super(message); this.status = status; this.data = data; }
 }
 
 /**
@@ -26,7 +26,7 @@ export async function streamChat(body, { signal, onEvent }) {
 
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new ApiError(res.status, err.error || `Erreur HTTP ${res.status}`);
+        throw new ApiError(res.status, err.error || `Erreur HTTP ${res.status}`, err);
     }
 
     const reader = res.body.getReader();

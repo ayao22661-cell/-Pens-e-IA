@@ -19,7 +19,9 @@
 // ============================================================
 
 import { Sandbox } from '@vercel/sandbox';
-import { authenticate, isAuthEnabled, consumeCredit, refundCredit, HttpError } from './_lib/auth.js';
+import { authenticate, isAuthEnabled, refundCredit, HttpError, quotaGate, quotaCharge } from './_lib/auth.js';
+
+const MACHINE_COST = 1; // démarrer une machine = 1 message de quota (l'utiliser ensuite est gratuit)
 
 const ROOT = '/vercel/sandbox';                 // miroir de /workspace
 export const PORTS = [3000, 5173, 8000, 8080];  // ports exposables (serveurs de dev)
@@ -102,7 +104,8 @@ async function openSandbox(name, userId, onStatus) {
         if (e instanceof HttpError) throw e; // 404 attendu si le sandbox n'existe pas encore
     }
 
-    await consumeCredit(userId); // créer une machine coûte un crédit ; l'utiliser ensuite est gratuit
+    // Démarrer une machine consomme du quota (ou 1 crédit dans l'ancien système)
+    const gate = await quotaGate(userId);
     onStatus('Démarrage de la machine Linux…');
     const base = {
         name,
@@ -120,10 +123,11 @@ async function openSandbox(name, userId, onStatus) {
         try {
             sb = await Sandbox.create(base);
         } catch (e) {
-            await refundCredit(userId);
+            if (gate.mode === 'legacy') await refundCredit(userId);
             throw e;
         }
     }
+    if (gate.mode === 'quota') await quotaCharge(userId, MACHINE_COST).catch(() => {});
     return { sb, created: true };
 }
 

@@ -17,7 +17,7 @@
 export const config = { runtime: 'edge' };
 
 import { buildSystemInstruction, AGENT_IDS } from './_lib/prompts.js';
-import { authenticate, consumeCredit, refundCredit, signTurnToken, verifyTurnToken, HttpError } from './_lib/auth.js';
+import { authenticate, refundCredit, signTurnToken, verifyTurnToken, HttpError, quotaGate, quotaCharge, unitCost, messagesFor } from './_lib/auth.js';
 import { getKnowledgeContext } from './_lib/knowledge-context.js';
 import { functionDeclarations, toolWhere, runServerTool } from './_lib/tools.js';
 import {
@@ -36,8 +36,8 @@ const MAX_EMPTY_RETRIES = 3;      // relances automatiques d'une réponse vide /
 const MAX_CONTENTS = 120;         // messages max acceptés dans l'historique
 const MAX_TOOL_RESPONSE_CHARS = 30000;
 
-const jsonError = (status, error) =>
-    new Response(JSON.stringify({ error }), { status, headers: { 'Content-Type': 'application/json' } });
+const jsonError = (status, error, data) =>
+    new Response(JSON.stringify({ error, ...(data || {}) }), { status, headers: { 'Content-Type': 'application/json' } });
 
 export default async function handler(req) {
     if (req.method !== 'POST') return jsonError(405, 'Méthode non autorisée');
@@ -60,7 +60,7 @@ export default async function handler(req) {
     const isContinuation = Boolean(body.continuation?.token);
 
     // ── 2. Auth + quota ──────────────────────────────────────
-    let userId, credits = null, turnToken;
+    let userId, credits = null, quota = null, gateMode = 'dev', turnToken;
     try {
         ({ userId } = await authenticate(req));
         if (isContinuation) {
@@ -69,11 +69,15 @@ export default async function handler(req) {
             }
             turnToken = body.continuation.token;
         } else {
-            credits = await consumeCredit(userId);
+            // Quota par fenêtre de 5 h (ou ancien système de crédits si la migration n'est pas appliquée)
+            const gate = await quotaGate(userId);
+            gateMode = gate.mode;
+            credits = gate.credits ?? null;
+            quota = gate.quota || null;
             turnToken = await signTurnToken(userId);
         }
     } catch (e) {
-        return jsonError(e.status || 500, e.message);
+        return jsonError(e.status || 500, e.message, e.data);
     }
 
     // ── 3. Contexte ─────────────────────────────────────────
@@ -104,18 +108,22 @@ export default async function handler(req) {
     const stream = new ReadableStream({
         async start(controller) {
             const send = (ev) => controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
-            send({ t: 'meta', turnToken, credits, heavy });
+            send({ t: 'meta', turnToken, credits, quota, heavy });
+            const usage = { units: 0 }; // requêtes modèle réellement servies (pondérées)
 
             try {
                 const ok = await runAgent({
-                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy,
+                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, usage,
                     preferredModel: body.continuation?.model, apiKey: GEMINI_API_KEY, signal: req.signal,
                 });
-                if (!ok && !isContinuation) await refundCredit(userId);
+                if (!ok && !isContinuation && gateMode === 'legacy') await refundCredit(userId);
             } catch (e) {
-                if (!isContinuation) await refundCredit(userId);
+                if (!isContinuation && gateMode === 'legacy') await refundCredit(userId);
                 send({ t: 'error', v: e.message || 'Erreur interne.' });
             } finally {
+                // On ne compte que ce qui a réellement été produit
+                const after = await quotaCharge(userId, messagesFor(usage.units, !isContinuation)).catch(() => null);
+                if (after) send({ t: 'meta', quota: after });
                 controller.close();
             }
         },
@@ -134,7 +142,7 @@ export default async function handler(req) {
 //  BOUCLE SERVEUR
 //  @returns {Promise<boolean>} false si aucun modèle n'a répondu
 // ============================================================
-async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, preferredModel, apiKey, signal }) {
+async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, usage = { units: 0 }, preferredModel, apiKey, signal }) {
     const cascade = modelCascade(agentId, preferredModel, heavy);
     let sigModel = isContinuation ? preferredModel : null; // modèle auteur des thoughtSignature présentes
     let emotionSent = false;
@@ -148,7 +156,7 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
             thinkingShift: emptyRetries,
             forceTools: firstRound ? forcedTools(agentId, lastUserText) : null,
             allowPreSearch: firstRound,
-            onModel: (model) => send({ t: 'model', v: model }),
+            onModel: (model) => { usage.units += unitCost(model); send({ t: 'model', v: model }); },
             handlers: {
                 onText: (v) => send({ t: 'text', v }),
                 onThinking: (v) => send({ t: 'thinking', v }),

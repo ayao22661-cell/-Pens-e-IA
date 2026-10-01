@@ -156,8 +156,80 @@ export async function verifyTurnToken(token, userId) {
 }
 
 export class HttpError extends Error {
-    constructor(status, message) {
+    constructor(status, message, data) {
         super(message);
         this.status = status;
+        this.data = data; // informations complémentaires renvoyées au client (ex. état du quota)
     }
+}
+
+// ============================================================
+//  QUOTA PAR FENÊTRE GLISSANTE (5 h par défaut)
+//  Unité = « message » : 1 message = jusqu'à 4 requêtes modèle (une grosse
+//  tâche de code de 20 requêtes vaut ~5 messages ; Gemma compte moitié).
+//  Calibrage : 40 à 100 utilisateurs actifs par jour sur la clé Gemini gratuite.
+//  Si la migration SQL n'est pas appliquée (fonction absente → 404),
+//  on retombe sur l'ancien système de crédits journaliers.
+// ============================================================
+
+export const QUOTA = {
+    limit: Number(process.env.QUOTA_MESSAGES) || 45,
+    hours: Number(process.env.QUOTA_WINDOW_HOURS) || 5,
+    requestsPerMessage: 4,
+};
+
+/** Requêtes pondérées d'un appel → messages consommés (au moins 1 pour un nouveau message). */
+export function messagesFor(weightedRequests, isNewMessage) {
+    if (!(weightedRequests > 0)) return 0;
+    const m = weightedRequests / QUOTA.requestsPerMessage;
+    return Math.round((isNewMessage ? Math.max(1, m) : m) * 100) / 100;
+}
+
+// Poids d'une requête selon le modèle : Gemma, au quota bien plus large, compte moitié
+export const unitCost = (model) => (String(model).startsWith('gemma') ? 0.5 : 1);
+
+async function rpc(name, body) {
+    const { url, key } = sbEnv();
+    if (!url || !key) return { status: 0, data: null };
+    const res = await fetch(`${url}/rest/v1/rpc/${name}`, { method: 'POST', headers: sbHeaders(key), body: JSON.stringify(body) });
+    return { status: res.status, data: res.ok ? await res.json() : null };
+}
+
+const formatReset = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Abidjan' });
+};
+
+/**
+ * Contrôle au début d'un message.
+ * @returns {Promise<{mode: 'quota', quota: object} | {mode: 'legacy', credits: number} | {mode: 'dev'}>}
+ * @throws {HttpError} 429 si la limite de la fenêtre est atteinte
+ */
+export async function quotaGate(userId) {
+    if (!isAuthEnabled() || !userId) return { mode: 'dev' };
+    const r = await rpc('quota_consume', { p_user_id: userId, p_units: 0, p_limit: QUOTA.limit, p_hours: QUOTA.hours, p_gate: true });
+    if (r.status === 404) return { mode: 'legacy', credits: await consumeCredit(userId) };
+    if (!r.data) return { mode: 'dev' }; // erreur passagère : on ne bloque pas l'utilisateur
+    const quota = { used: Number(r.data.used), limit: Number(r.data.limit), resetAt: r.data.reset_at, hours: QUOTA.hours };
+    if (!r.data.allowed) {
+        throw new HttpError(429, `Limite de ta fenêtre de ${QUOTA.hours} h atteinte. Elle se réinitialise à ${formatReset(quota.resetAt)}.`, { quota });
+    }
+    return { mode: 'quota', quota };
+}
+
+/** Comptabilise les unités consommées. @returns {Promise<object|null>} état du quota */
+export async function quotaCharge(userId, units) {
+    if (!isAuthEnabled() || !userId || !(units > 0)) return null;
+    const r = await rpc('quota_consume', { p_user_id: userId, p_units: units, p_limit: QUOTA.limit, p_hours: QUOTA.hours, p_gate: false });
+    if (!r.data) return null;
+    return { used: Number(r.data.used), limit: Number(r.data.limit), resetAt: r.data.reset_at, hours: QUOTA.hours };
+}
+
+/** État courant sans consommer. @returns {Promise<object|null>} null si le quota n'est pas en place */
+export async function quotaStatus(userId) {
+    if (!isAuthEnabled() || !userId) return null;
+    const r = await rpc('quota_status', { p_user_id: userId, p_limit: QUOTA.limit, p_hours: QUOTA.hours });
+    if (!r.data) return null;
+    return { used: Number(r.data.used), limit: Number(r.data.limit), resetAt: r.data.reset_at, hours: QUOTA.hours };
 }

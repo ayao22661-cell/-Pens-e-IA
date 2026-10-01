@@ -13,6 +13,7 @@ export const state = {
     history: [],          // [{ role: 'user'|'assistant', content: string }]
     attachedFiles: [],
     creditsLeft: CONFIG.maxCredits,
+    quota: null,          // { used, limit, hours, resetAt } quand le quota 5 h est actif
     activeAgentId: null,  // null = auto-détection
     abortController: null,
     busy: false,
