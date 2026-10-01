@@ -19,7 +19,9 @@ import { terminal } from '../ui/terminal.js';
 import { streamChat, ApiError } from './stream.js';
 import { buildContents } from './history.js';
 import { executeClientTool, FINAL_TOOLS } from './tools.js';
+import { workspaceBrief, compactOldResults } from './context.js';
 
+const CODE_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'run_python']);
 /**
  * @param {object} o
  * @param {string} o.userText
@@ -30,23 +32,12 @@ import { executeClientTool, FINAL_TOOLS } from './tools.js';
  * @param {AbortSignal} o.signal
  * @returns {Promise<{text: string, sources: object[], trace: object[]}>}
  */
-const CODE_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'run_python']);
-
-// Message technique envoyé au modèle (jamais affiché ni sauvegardé comme message utilisateur)
-const REVIEW_PROMPT = `[AUTO-REVUE — consigne interne, pas un message de l'utilisateur]
-Avant de conclure, relis et corrige le code comme un relecteur exigeant :
-1. Relis réellement les fichiers créés ou modifiés (read_file, ou bash : cat / git diff).
-2. Confronte-les à la demande initiale : tout est-il implémenté, complet, sans TODO, placeholder ni donnée factice ?
-3. Le code a-t-il été exécuté ou testé avec succès ? Sinon, teste-le maintenant, cas limites compris.
-4. S'il y a une interface : applique la grille d'autocontrôle visuel (système de design cohérent, aucun style navigateur par défaut, états vide/chargement/erreur, sombre et clair, mobile, données réalistes). Tout ce qui fait « basique » ou « prototype » doit être amélioré.
-5. S'il y a un backend : les données passent-elles par une vraie API et une vraie base (pas de localStorage ni de données codées en dur dans le front) ? Validation des entrées, codes HTTP, format d'erreur, requêtes paramétrées ? Lance les tests et un curl par route (y compris une requête invalide) et vérifie les réponses réelles.
-6. Corrige chaque problème trouvé puis revérifie.
-Si tout est conforme : réponds uniquement « ✓ Vérifié — » suivi d'une phrase. Sinon : corrige, puis résume précisément ce qui a changé. Si des livrables ont été modifiés, relivre-les avec present_files.`;
-
 export async function runAgentTurn({ userText, files = [], agentId, memory = '', view, signal }) {
     const ws = workspaceId();
     const workspacePaths = files.length ? await copyToWorkspace(files, ws) : [];
     const contents = buildContents(state.history, userText, files, workspacePaths);
+    const brief = await workspaceBrief(ws);
+    if (brief) contents[contents.length - 1].parts.unshift({ text: brief });
     const context = { memory, profile: localStorage.getItem('pensee_user_profile') || '' };
 
     let token = null;
@@ -59,6 +50,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
     for (let step = 0; step < CONFIG.maxAgentSteps; step++) {
         const clientCalls = [];
         let done = null;
+        compactOldResults(contents);
 
         await streamChat({
             agentId: agentId || 'default',

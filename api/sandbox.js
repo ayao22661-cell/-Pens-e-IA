@@ -131,6 +131,26 @@ async function openSandbox(name, userId, onStatus) {
 //  - npm install -g sans sudo (préfixe dans le HOME)
 //  - pip / pip3 installables en --user, binaires dans ~/.local/bin
 //  - pip, zip, unzip, git installés en arrière-plan via dnf (sudo)
+// Point de sauvegarde git après chaque commande : l'agent peut voir ce qui a changé
+// (git diff HEAD~1) et revenir en arrière (git checkout <commit> -- fichier).
+const CHECKPOINT = `
+cd ${ROOT} 2>/dev/null && command -v git >/dev/null 2>&1 || exit 0
+if [ ! -d .git ]; then
+  git init -q && printf 'node_modules/\\n.venv/\\nvenv/\\n__pycache__/\\n.cache/\\n.next/\\n*.log\\n.env\\n' > .git/info/exclude
+fi
+git add -A >/dev/null 2>&1
+git -c user.name='Pensée' -c user.email='pensee@local' commit -qm "$PZ_MSG" >/dev/null 2>&1
+true
+`;
+
+async function checkpoint(sb, command) {
+    await sb.runCommand({
+        cmd: 'bash',
+        args: ['-c', CHECKPOINT],
+        env: { PZ_MSG: `pz: ${String(command).replace(/\s+/g, ' ').slice(0, 72)}` },
+    }).catch(() => {});
+}
+
 const BOOTSTRAP = `
 mkdir -p "$HOME/.npm-global" "$HOME/.local/bin"
 npm config set prefix "$HOME/.npm-global" >/dev/null 2>&1
@@ -241,6 +261,7 @@ async function execStream({ userId, body, send }) {
         code = (await cmd.wait().catch(() => null))?.exitCode ?? null;
     }
     send({ t: 'exit', code, timedOut: timedOut && !background, background, ms: Date.now() - started });
+    if (!background) await checkpoint(sb, body.command);
     send({ t: 'files', ...(await pullChanged(sb)) });
 }
 
