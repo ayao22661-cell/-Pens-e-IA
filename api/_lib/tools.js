@@ -158,10 +158,103 @@ export const TOOLS = {
     },
 
     // ── Client : livrables ──────────────────────────────────
+    create_presentation: {
+        where: 'client',
+        final: true,
+        description: "Crée une présentation PowerPoint (.pptx) professionnelle : thème cohérent, mises en page variées, graphiques et tableaux natifs modifiables, notes d'orateur, aperçu des slides dans la conversation. À utiliser pour TOUTE présentation, pitch, deck ou support de réunion.",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                filename: S('Nom du fichier .pptx.'),
+                theme: { type: 'STRING', enum: ['moderne', 'corporate', 'sombre', 'terracotta', 'pensee'], description: 'Thème visuel.' },
+                title: S('Titre de la présentation (pied de page).'),
+                author: S('Auteur ou entité.'),
+                date: S('Date affichée sur la couverture.'),
+                slides: arrayOf({
+                    type: 'OBJECT',
+                    properties: {
+                        layout: { type: 'STRING', enum: ['title', 'section', 'bullets', 'two_columns', 'stats', 'chart', 'table', 'timeline', 'comparison', 'quote', 'closing'] },
+                        title: S("Titre-message de la slide (une affirmation, pas un thème)."),
+                        subtitle: S('Sous-titre (title, section, closing).'),
+                        kicker: S('Surtitre court (title).'),
+                        bullets: arrayOf({ type: 'STRING' }, 'bullets : 3 à 6 puces courtes.'),
+                        takeaway: S('Message clé affiché en encadré (bullets, stats, chart).'),
+                        left: { type: 'OBJECT', properties: { heading: S('Titre colonne gauche.'), bullets: arrayOf({ type: 'STRING' }) }, description: 'two_columns' },
+                        right: { type: 'OBJECT', properties: { heading: S('Titre colonne droite.'), bullets: arrayOf({ type: 'STRING' }) }, description: 'two_columns' },
+                        stats: arrayOf({ type: 'OBJECT', properties: { value: S('Chiffre court : "412 M", "38 %".'), label: S('Libellé.'), detail: S('Précision ou évolution.') } }, 'stats : 2 à 4 chiffres clés.'),
+                        chart: {
+                            type: 'OBJECT',
+                            description: 'chart',
+                            properties: {
+                                type: { type: 'STRING', enum: ['bar', 'line', 'pie', 'doughnut'] },
+                                labels: arrayOf({ type: 'STRING' }),
+                                series: arrayOf({ type: 'OBJECT', properties: { name: S('Nom de la série.'), values: arrayOf({ type: 'NUMBER' }) } }),
+                            },
+                        },
+                        headers: arrayOf({ type: 'STRING' }, 'table : en-têtes.'),
+                        rows: arrayOf(arrayOf({ type: 'STRING' }), 'table : lignes (12 max).'),
+                        steps: arrayOf({ type: 'OBJECT', properties: { label: S('Date ou étape.'), title: S('Titre.'), text: S('Description courte.') } }, 'timeline : 3 à 6 étapes.'),
+                        columns: arrayOf({ type: 'OBJECT', properties: { heading: S('Titre.'), items: arrayOf({ type: 'STRING' }), highlight: { type: 'BOOLEAN' } } }, 'comparison : 2 ou 3 options.'),
+                        quote: S('quote : citation.'),
+                        author: S('quote : auteur.'),
+                        role: S('quote : fonction.'),
+                        contact: S('closing : contact.'),
+                        notes: S("Notes d'orateur : ce qu'il faut dire sur cette slide."),
+                    },
+                    required: ['layout'],
+                }),
+            },
+            required: ['title', 'slides'],
+        },
+    },
+    create_document: {
+        where: 'client',
+        final: true,
+        description: "Crée un document PDF mis en page (rapport, étude, proposition, plan, guide, compte rendu) : couverture, sommaire automatique, titres numérotés, encadrés, tableaux, chiffres clés, graphiques, en-têtes et pieds de page. À utiliser pour TOUT PDF ; aperçu dans la conversation.",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                filename: S('Nom du fichier .pdf.'),
+                theme: { type: 'STRING', enum: ['moderne', 'corporate', 'terracotta', 'pensee'], description: 'Thème visuel.' },
+                title: S('Titre du document.'),
+                subtitle: S('Sous-titre de couverture.'),
+                author: S('Auteur.'),
+                organization: S('Organisation (en-tête).'),
+                date: S('Date.'),
+                cover: { type: 'BOOLEAN', description: 'Page de couverture (oui par défaut).' },
+                blocks: arrayOf({
+                    type: 'OBJECT',
+                    properties: {
+                        type: { type: 'STRING', enum: ['heading', 'paragraph', 'bullets', 'numbered', 'callout', 'table', 'stats', 'quote', 'chart', 'divider', 'page_break'] },
+                        level: { type: 'INTEGER', description: 'heading : 1, 2 ou 3.' },
+                        text: S('heading / paragraph / callout / quote. **gras** autorisé.'),
+                        items: arrayOf({ type: 'STRING' }, 'bullets / numbered.'),
+                        variant: { type: 'STRING', enum: ['info', 'success', 'warning', 'danger', 'key'], description: 'callout.' },
+                        title: S('callout : titre facultatif.'),
+                        headers: arrayOf({ type: 'STRING' }, 'table.'),
+                        rows: arrayOf(arrayOf({ type: 'STRING' }), 'table.'),
+                        caption: S('table / chart : légende avec la source.'),
+                        stats: arrayOf({ type: 'OBJECT', properties: { value: S('Chiffre court.'), label: S('Libellé.') } }, 'stats : 2 à 4.'),
+                        chart: {
+                            type: 'OBJECT',
+                            properties: {
+                                type: { type: 'STRING', enum: ['bar', 'line', 'pie', 'doughnut'] },
+                                labels: arrayOf({ type: 'STRING' }),
+                                series: arrayOf({ type: 'OBJECT', properties: { name: S('Série.'), values: arrayOf({ type: 'NUMBER' }) } }),
+                            },
+                        },
+                        author: S('quote : auteur.'),
+                    },
+                    required: ['type'],
+                }),
+            },
+            required: ['title', 'blocks'],
+        },
+    },
     generate_file: {
         where: 'client',
         final: true,
-        description: "Génère un fichier téléchargeable .xlsx, .pptx, .docx ou .csv. Mets TOUTES les données réelles demandées, jamais des exemples.",
+        description: "Génère un fichier .xlsx, .docx ou .csv (données brutes). Pour une PRÉSENTATION utilise create_presentation, pour un PDF create_document. Mets TOUTES les données réelles demandées, jamais des exemples.",
         parameters: {
             type: 'OBJECT',
             properties: {
@@ -196,7 +289,7 @@ export const TOOLS = {
     generate_pdf: {
         where: 'client',
         final: true,
-        description: 'Génère un PDF téléchargeable à partir de HTML sémantique (h2, h3, p, ul, table, pre/code, blockquote ; sans html/head/body).',
+        description: 'Ancien générateur PDF texte brut (HTML simple). Préfère TOUJOURS create_document, bien plus abouti ; generate_pdf uniquement pour convertir un HTML existant.',
         parameters: {
             type: 'OBJECT',
             properties: {

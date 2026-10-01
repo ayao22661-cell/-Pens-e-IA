@@ -25,7 +25,7 @@ export function argsSummary(name, args = {}) {
         }
         case 'write_file': case 'read_file': case 'edit_file': case 'render_preview': return args.path || '';
         case 'generate_file': return args.filename || args.type || '';
-        case 'generate_pdf': return args.title || '';
+        case 'generate_pdf': case 'create_presentation': case 'create_document': return args.title || args.filename || '';
         case 'generate_image': return String(args.prompt || '').slice(0, 50);
         default: return '';
     }

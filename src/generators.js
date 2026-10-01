@@ -153,6 +153,34 @@ export async function presentStoredFile({ url, filename, storagePath, size, path
     return { filename, size, persisted: true, element: el };
 }
 
+// ── Présentations et documents mis en page (src/docs/) ───────
+const DOC_LIBS = {
+    pdfmake: 'https://cdn.jsdelivr.net/npm/pdfmake@0.2.20/build/pdfmake.min.js',
+    pdfFonts: 'https://cdn.jsdelivr.net/npm/pdfmake@0.2.20/build/vfs_fonts.js',
+};
+
+/** Présentation .pptx (graphiques et tableaux natifs) + aperçu HTML des slides. */
+export async function createPresentation(spec) {
+    const [{ buildPptx }, { slidesHtml }, { lintDeck }] = await Promise.all([
+        import('./docs/slides-pptx.js'), import('./docs/slides-html.js'), import('./docs/lint.js'),
+    ]);
+    await loadScript(LIBS.pptx);
+    const raw = await buildPptx(window.PptxGenJS, spec, 'blob');
+    const blob = new Blob([raw], { type: MIME.pptx }); // PptxGenJS renvoie application/zip
+    const res = await deliver(blob, safeFilename(spec.filename || spec.title || 'presentation', 'pptx'), 'fichiers');
+    return { ...res, previews: slidesHtml(spec), warnings: lintDeck(spec), slides: (spec.slides || []).length };
+}
+
+/** Document PDF mis en page (pdfmake) + URL locale pour l'aperçu. */
+export async function createDocument(spec) {
+    const [{ buildPdfDefinition }, { lintDocument }] = await Promise.all([import('./docs/pdf-doc.js'), import('./docs/lint.js')]);
+    await loadScript(DOC_LIBS.pdfmake);
+    await loadScript(DOC_LIBS.pdfFonts);
+    const blob = await new Promise((resolve) => window.pdfMake.createPdf(buildPdfDefinition(spec)).getBlob(resolve));
+    const res = await deliver(blob, safeFilename(spec.filename || spec.title || 'document', 'pdf'), 'generated_pdfs');
+    return { ...res, previewUrl: URL.createObjectURL(blob), warnings: lintDocument(spec) };
+}
+
 export async function generateOfficeFile(spec) {
     const type = String(spec.type || '').toLowerCase();
     const blob = await buildOffice(spec);

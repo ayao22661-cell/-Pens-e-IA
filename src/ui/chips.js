@@ -30,6 +30,8 @@ export const TOOL_LABELS = {
     open_port: { icon: ICONS.globe, label: 'Serveur' },
     present_files: { icon: ICONS.download, label: 'Livraison' },
     use_template: { icon: ICONS.folder, label: 'Modèle de projet' },
+    create_presentation: { icon: ICONS.doc, label: 'Présentation' },
+    create_document: { icon: ICONS.doc, label: 'Document PDF' },
     run_python: { icon: ICONS.terminal, label: 'Python' },
     write_file: { icon: ICONS.pencil, label: 'Écriture' },
     edit_file: { icon: ICONS.pencil, label: 'Modification' },

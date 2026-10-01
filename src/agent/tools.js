@@ -11,7 +11,10 @@
 import { vfs, isTextPath, extOf, downloadRecord } from '../sandbox/vfs.js';
 import { runPython } from '../sandbox/python.js';
 import { buildPreviewDocument, mountPreview, bytesToBase64, probePreview, PreviewError } from '../sandbox/preview.js';
-import { generateOfficeFile, generatePdf, generateImage, deliverWorkspaceFile, presentStoredFile } from '../generators.js';
+import {
+    generateOfficeFile, generatePdf, generateImage, deliverWorkspaceFile, presentStoredFile,
+    createPresentation, createDocument,
+} from '../generators.js';
 import { execCommand, portUrl, publishFromMachine } from '../sandbox/machine.js';
 import { escapeHtml } from '../ui/dom.js';
 
@@ -321,6 +324,50 @@ export const CLIENT_TOOLS = {
         return { ok: true, summary: 'affiché', response: { ok: true, shown: path, stats, note: "L'aperçu est affiché à l'utilisateur, sans erreur détectée." } };
     },
 
+    async create_presentation(spec, { card, terminal }) {
+        const res = await createPresentation(spec);
+        const grid = document.createElement('div');
+        grid.className = 'pz-deck-grid';
+        grid.innerHTML = res.previews.map((html, i) => `<figure class="pz-deck-slide">${html}<figcaption>${i + 1}</figcaption></figure>`).join('');
+        card.addOutput(grid);
+        card.addOutput(res.element);
+        terminal.log(`présentation générée ${res.filename} (${res.slides} slides)`, 'ok');
+        return {
+            ok: true,
+            // Remarques de qualité → le modèle corrige et régénère au lieu de conclure
+            continue: res.warnings.length > 0,
+            summary: `${res.slides} slides${res.warnings.length ? ` · ${res.warnings.length} remarque(s)` : ''}`,
+            response: {
+                ok: true, filename: res.filename, slides: res.slides,
+                ...(res.warnings.length
+                    ? { quality_warnings: res.warnings, instruction: 'Corrige ces points et rappelle create_presentation avec la version améliorée (même filename).' }
+                    : { note: "Présentation livrée avec un aperçu des slides dans la conversation." }),
+            },
+        };
+    },
+
+    async create_document(spec, { card, terminal }) {
+        const res = await createDocument(spec);
+        const frame = document.createElement('iframe');
+        frame.className = 'pz-pdf-frame';
+        frame.title = res.filename;
+        frame.src = res.previewUrl;
+        card.addOutput(frame);
+        card.addOutput(res.element);
+        terminal.log(`PDF généré ${res.filename}`, 'ok');
+        return {
+            ok: true,
+            continue: res.warnings.length > 0,
+            summary: `${res.filename}${res.warnings.length ? ` · ${res.warnings.length} remarque(s)` : ''}`,
+            response: {
+                ok: true, filename: res.filename,
+                ...(res.warnings.length
+                    ? { quality_warnings: res.warnings, instruction: 'Corrige ces points et rappelle create_document avec la version améliorée (même filename).' }
+                    : { note: 'Document livré avec un aperçu dans la conversation.' }),
+            },
+        };
+    },
+
     async generate_file(args, { card, terminal }) {
         const res = await generateOfficeFile(args);
         card.addOutput(res.element);
@@ -343,7 +390,7 @@ export const CLIENT_TOOLS = {
 };
 
 /** Outils dont le résultat n'a pas besoin d'être relu par le modèle (économise un appel). */
-export const FINAL_TOOLS = new Set(['render_preview', 'open_port', 'present_files', 'generate_file', 'generate_pdf', 'generate_image']);
+export const FINAL_TOOLS = new Set(['render_preview', 'open_port', 'present_files', 'create_presentation', 'create_document', 'generate_file', 'generate_pdf', 'generate_image']);
 
 export async function executeClientTool(name, args, ctx) {
     const tool = CLIENT_TOOLS[name];

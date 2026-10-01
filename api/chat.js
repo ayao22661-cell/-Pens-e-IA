@@ -81,12 +81,14 @@ export default async function handler(req) {
     const heavy = mode === 'chat' && isHeavyTask(agentId, taskText);
     const ui = heavy && UI_TASK.test(taskText);
     const backend = heavy && BACKEND_TASK.test(taskText);
+    const docs = mode === 'chat' && DOC_WORK.test(taskText);
     const knowledge = mode === 'chat' ? await getKnowledgeContext(userId, agentId, lastUserText) : '';
     const context = body.context || {};
     const systemFor = (toolsEnabled) => buildSystemInstruction({
         heavy,
         ui,
         backend,
+        docs,
         agentId: agentId === 'default' ? null : agentId,
         mode,
         userMessage: lastUserText,
@@ -356,9 +358,13 @@ function findTaskText(contents) {
     return '';
 }
 
+// Présentations / documents à produire → modèles complets + règles de conception
+const DOC_WORK = /\b(cr[ée]e[rz]?|fai[st]|faire|g[ée]n[èe]re[rz]?|pr[ée]pare[rz]?|r[ée]dige[rz]?|r[ée]alise[rz]?|produi[st]|con[çc]oi[st]|monte[rz]?|transforme[rz]?)\b[^.?!]{0,80}\b(pr[ée]sentation|powerpoint|pptx|slides?|diapo\w*|deck|pitch|keynote|pdf|rapport|[ée]tude|livre blanc|proposition|business plan|plan d'affaires|compte[- ]rendu|cahier des charges|brochure|plaquette|dossier|guide|document|support)\b/i;
+
 function isHeavyTask(agentId, text) {
     const t = text || '';
     if (agentId === 'audit') return true;
+    if (DOC_WORK.test(t)) return true;
     if (CODE_WORK.test(t) || SHELL_TASK.test(t)) return true;
     if (agentId === 'code' && (t.length > 250 || /```/.test(t))) return true;
     return t.length > 1500; // longue demande détaillée, quel que soit l'agent

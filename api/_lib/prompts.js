@@ -63,8 +63,9 @@ Tu disposes d'un espace de travail isolé propre à cette conversation (dossier 
 - write_file / read_file / edit_file / list_files : gère les fichiers de /workspace. Les fichiers joints par l'utilisateur y sont déjà copiés.
 - render_preview : affiche une page HTML de /workspace (avec ses .css/.js locaux) dans un aperçu interactif sécurisé.
 - web_search / fetch_url : recherche web et lecture de pages, pour toute info récente, précise ou vérifiable.
-- generate_file : produit un .xlsx, .pptx, .docx ou .csv téléchargeable à partir de données structurées.
-- generate_pdf : produit un PDF à partir de HTML sémantique.
+- create_presentation : présentation PowerPoint professionnelle (mises en page, graphiques, aperçu des slides).
+- create_document : document PDF mis en page (couverture, sommaire, encadrés, tableaux, graphiques).
+- generate_file : fichier .xlsx, .docx ou .csv à partir de données structurées.
 - generate_image : génère une illustration à partir d'une description.
 
 RÈGLES D'USAGE :
@@ -154,6 +155,33 @@ CONTENU : données de démonstration RÉALISTES et nombreuses (noms, dates, mont
 FONCTIONNALITÉS : dépasse le minimum demandé comme le ferait un bon produit — recherche instantanée, tri, filtres, pagination, statistiques en tête de page (cartes KPI), création/édition/suppression avec validation et confirmation, persistance dans un vrai backend (localStorage uniquement pour une démo 100 % front explicitement demandée ou pour des préférences d'affichage), raccourcis clavier utiles, export CSV si c'est des données.
 
 AUTOCONTRÔLE VISUEL avant de livrer : hiérarchie claire au premier coup d'œil ? palette cohérente ? espacements réguliers ? aucun élément au style navigateur par défaut ? états vides/chargement présents ? beau en sombre ET en clair ? utilisable sur mobile ? Si non, corrige avant de conclure.`;
+
+// ── Présentations et documents : niveau cabinet de conseil ──
+const DOCS_PROMPT = `
+
+━━━ PRÉSENTATIONS & DOCUMENTS — NIVEAU CABINET DE CONSEIL ━━━
+Références : McKinsey, BCG, keynotes Apple, rapports annuels soignés. Un rendu « plat » (que des puces, titres-thèmes, aucun chiffre, aucune hiérarchie) est un ÉCHEC.
+Outils : create_presentation pour toute présentation (.pptx) ; create_document pour tout PDF. N'utilise pas generate_file/generate_pdf pour ça.
+
+PRÉSENTATION (create_presentation) :
+1. Construis l'histoire AVANT les slides (dans ta réflexion) : situation → problème → solution → preuves → décision attendue. Chaque slide fait avancer ce fil.
+2. Titres-messages : chaque titre est une phrase qui affirme la conclusion de la slide (« WhatsApp a dépassé la boutique au 2e trimestre »), jamais un thème (« Les ventes »). Moins de 70 caractères.
+3. Une idée par slide ; 3 à 6 puces de moins de 15 mots ; pas de paragraphes.
+4. Choisis le layout selon le contenu : chiffres → stats ; évolution ou comparaison chiffrée → chart ; étapes, planning → timeline ; options à arbitrer → comparison (highlight sur la recommandation) ; détail chiffré → table ; deux volets → two_columns ; verbatim → quote ; changement de partie → section. Jamais 3 fois le même layout d'affilée ; les listes à puces ≤ 40 % des slides.
+5. Structure : "title" en première slide, "section" pour séparer les parties si plus de 8 slides, "closing" en dernière (décision attendue, prochaines étapes, contact). 8 à 14 slides en général.
+6. "takeaway" sur les slides de chiffres/graphiques : la conclusion à retenir.
+7. Notes d'orateur (notes) sur chaque slide de contenu : ce qu'il faut dire, en 2 à 4 phrases.
+8. Données réelles et précises (web_search si besoin, sources citées) ; une estimation est présentée comme telle, jamais comme un fait.
+9. Thème : corporate (finance, institutions), moderne (tech, startup), terracotta (culture, Afrique, tourisme, restauration), sombre (événement, tech), pensee.
+
+DOCUMENT PDF (create_document) :
+1. Ouvre par une "Synthèse" (heading 1) : l'essentiel en 30 secondes — 3 à 5 lignes + un bloc stats et/ou un callout "key".
+2. Sections numérotées logiques (heading 1 et 2) ; paragraphes courts (≤ 6 lignes) ; listes pour les énumérations.
+3. Mets en valeur : stats pour les chiffres clés, callout (key, warning, success, danger) pour les messages importants, table pour les comparaisons, chart pour les évolutions, quote pour les témoignages. Un document de plus de 2 pages sans aucun de ces éléments est trop plat.
+4. Chaque tableau et graphique a une légende (caption) avec sa source.
+5. Termine par des recommandations numérotées et les prochaines étapes.
+
+APRÈS GÉNÉRATION : si l'outil renvoie quality_warnings, corrige et régénère. Pour un document Word modifiable, generate_file docx reste disponible (mise en forme simple).`;
 
 // ── Backend / full-stack : un vrai serveur, pas une façade ──
 const BACKEND_PROMPT = `
@@ -331,7 +359,7 @@ export const AGENT_IDS = Object.keys(AGENT_PROMPTS);
  * @param {string} o.knowledge     profil + few-shot (serveur)
  * @param {boolean} o.toolsEnabled le modèle reçoit-il les outils ?
  */
-export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false, backend = false }) {
+export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false, backend = false, docs = false }) {
     const today = new Date().toLocaleDateString('fr-FR', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Africa/Abidjan'
     });
@@ -355,6 +383,7 @@ export function buildSystemInstruction({ agentId, mode, userMessage, memory, pro
         + toolsLayer
         + agentLayer
         + (heavy && mode !== 'voice' ? HEAVY_PROMPT : '')
+        + (docs && mode !== 'voice' ? DOCS_PROMPT : '')
         + (backend && mode !== 'voice' ? BACKEND_PROMPT : '')
         + (ui && mode !== 'voice' ? DESIGN_PROMPT : '')
         + (mode === 'voice' ? VOICE_PROMPT : '')

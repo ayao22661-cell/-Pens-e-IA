@@ -21,6 +21,7 @@ import { buildContents } from './history.js';
 import { executeClientTool, FINAL_TOOLS } from './tools.js';
 import { workspaceBrief, compactOldResults } from './context.js';
 
+const MAX_QUALITY_RETRIES = 2; // corrections demandées par le contrôle qualité des documents
 const CODE_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'run_python']);
 /**
  * @param {object} o
@@ -44,6 +45,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
     let model = null;
     let heavy = false;
     let reviewed = false;
+    let qualityRetries = 0;
     const sources = [];
     const trace = [];
 
@@ -117,7 +119,9 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
             responses[call.id] = {
                 functionResponse: { name: call.name, response: res.response, ...(meta.modelId ? { id: meta.modelId } : {}) },
             };
-            if (!FINAL_TOOLS.has(call.name) || !res.ok) allFinal = false;
+            const qualityRetry = res.continue && qualityRetries < MAX_QUALITY_RETRIES;
+            if (qualityRetry) qualityRetries++;
+            if (!FINAL_TOOLS.has(call.name) || !res.ok || qualityRetry) allFinal = false;
         }
         contents.push({ role: 'user', parts: done.order.map(id => responses[id]).filter(Boolean) });
 
