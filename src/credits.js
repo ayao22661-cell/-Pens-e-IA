@@ -12,7 +12,7 @@ import { CONFIG } from './config.js';
 import { state } from './state.js';
 import { supabase, getAccessToken } from './supabase.js';
 import { els, setStatus } from './ui/dom.js';
-import { starGauge } from './ui/brand.js';
+import { ringGauge } from './ui/brand.js';
 
 const WARN_RATIO = 0.8;
 let tickTimer = null;
@@ -92,7 +92,7 @@ function ensureSubline() {
     return sub;
 }
 
-/** Rayons allumés = part restante (remplace la barre de progression). */
+/** Anneau autour du point = part restante (remplace la barre de progression). */
 function renderGauge(remainingRatio) {
     let g = document.getElementById('pzGauge');
     if (!g) {
@@ -100,7 +100,7 @@ function renderGauge(remainingRatio) {
         g.id = 'pzGauge';
         els.creditCount?.before(g);
     }
-    g.innerHTML = starGauge(remainingRatio, 24);
+    g.innerHTML = ringGauge(remainingRatio, 24);
 }
 
 function setBanner(kind, html) {

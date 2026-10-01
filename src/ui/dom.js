@@ -4,7 +4,7 @@
 // ============================================================
 
 import { ICONS } from './icons.js';
-import { starSvg } from './brand.js';
+import { dotMark } from './brand.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -38,7 +38,7 @@ function messageShell(role, labelText) {
     const label = document.createElement('span');
     label.className = 'msg-label';
     if (role === 'user') label.textContent = labelText ?? 'Toi';
-    else label.innerHTML = `<span class="pz-avatar">${starSvg({ size: 20 })}</span><span class="pz-name"></span>`;
+    else label.innerHTML = `<span class="pz-avatar">${dotMark({ size: 20 })}</span><span class="pz-name"></span>`;
     if (role !== 'user') label.querySelector('.pz-name').textContent = labelText ?? 'Pensée';
     const bubble = document.createElement('div');
     bubble.className = 'bubble';

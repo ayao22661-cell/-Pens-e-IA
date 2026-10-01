@@ -1,47 +1,48 @@
 // ============================================================
 //  PENSÉE IA — src/ui/brand.js
-//  L'Étoile de Pensée : le logo (4 capsules croisées = 8 rayons)
-//  devient un élément vivant de l'interface.
-//   - avatar animé (repos / réflexion / écriture)
-//   - jauge d'usage : rayons allumés = part restante
-//   - étoile d'accueil, de connexion et de barre latérale
+//  Le Point de Pensée : le logo (un rond) devient un élément vivant.
+//   - avatar : point lumineux ; en réflexion, des ondes s'en propagent ;
+//     en écriture, il bat doucement
+//   - jauge d'usage : anneau de progression autour du point
+//   - grand point d'accueil qui respire
 // ============================================================
 
-const RAYS = 8;
+/**
+ * Point + deux ondes (animées en CSS selon l'état du message).
+ * @param {object} o
+ * @param {number} [o.size]
+ * @param {string} [o.className]  is-breathing (accueil)
+ */
+export function dotMark({ size = 20, className = '', label = '' } = {}) {
+    const a11y = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
+    return `<svg class="pz-dot ${className}" width="${size}" height="${size}" viewBox="-50 -50 100 100" ${a11y}>`
+        + '<circle class="pz-wave" r="22" style="--d:0s"/>'
+        + '<circle class="pz-wave" r="22" style="--d:0.9s"/>'
+        + '<circle class="pz-core" r="22"/>'
+        + '</svg>';
+}
 
 /**
- * Étoile à 8 rayons indépendants, géométrie identique au logo
- * (capsules de 12 × 84 dans un repère 100 × 100, arrondi 6).
- * @param {object} o
- * @param {number} [o.size]      taille en px
- * @param {string} [o.className] classes CSS (états : is-thinking, is-writing)
- * @param {number} [o.lit]       nombre de rayons allumés (jauge) ; tous par défaut
+ * Anneau d'usage : l'arc représente la part restante, le point reste au centre.
+ * @param {number} remainingRatio  entre 0 et 1
  */
-export function starSvg({ size = 20, className = '', lit = RAYS, label = '' } = {}) {
-    const rays = Array.from({ length: RAYS }, (_, i) =>
-        `<rect class="pz-ray${i < lit ? '' : ' is-off'}" style="--i:${i}" x="-6" y="-42" width="12" height="48" rx="6" transform="rotate(${i * 45})"/>`).join('');
-    const a11y = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
-    return `<svg class="pz-star ${className}" width="${size}" height="${size}" viewBox="-50 -50 100 100" ${a11y}>${rays}</svg>`;
+export function ringGauge(remainingRatio, size = 26) {
+    const r = Math.max(0, Math.min(1, remainingRatio));
+    const level = r > 0.5 ? 'is-ok' : r > 0.2 ? 'is-low' : 'is-empty';
+    const C = 2 * Math.PI * 40;
+    return `<svg class="pz-ring ${level}" width="${size}" height="${size}" viewBox="-50 -50 100 100" role="img" aria-label="${Math.round(r * 100)} % restant">`
+        + '<circle class="pz-ring-track" r="40"/>'
+        + `<circle class="pz-ring-arc" r="40" stroke-dasharray="${(C * r).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90)"/>`
+        + '<circle class="pz-ring-core" r="15"/>'
+        + '</svg>';
 }
 
-/** Jauge étoile : la part restante allume les rayons dans le sens horaire. */
-export function starGauge(remainingRatio, size = 26) {
-    const lit = Math.max(0, Math.min(RAYS, Math.ceil(remainingRatio * RAYS - 1e-9)));
-    const level = remainingRatio > 0.5 ? 'is-ok' : remainingRatio > 0.2 ? 'is-low' : 'is-empty';
-    return starSvg({ size, lit, className: `pz-gauge ${level}`, label: `${Math.round(remainingRatio * 100)} % restant` });
-}
-
-/** Remplace les marques génériques de la page (points, logos) par l'étoile. */
+/** Remplace les visuels hérités (étoile à rayons) par le point du logo. */
 export function mountBrand() {
-    // Accueil : grande étoile qui respire
     const welcome = document.querySelector('.welcome-logo');
-    if (welcome) welcome.innerHTML = starSvg({ size: 64, className: 'is-breathing', label: 'Pensée' });
+    if (welcome) welcome.innerHTML = dotMark({ size: 64, className: 'is-breathing', label: 'Pensée' });
 
-    // Barre latérale et écran de connexion : le point vert devient une petite étoile
-    for (const dot of document.querySelectorAll('.logo-dot, .login-logo-dot')) {
-        const span = document.createElement('span');
-        span.className = 'pz-brand-mark';
-        span.innerHTML = starSvg({ size: dot.classList.contains('login-logo-dot') ? 22 : 18 });
-        dot.replaceWith(span);
-    }
+    // Fenêtre « À propos » : même logo
+    const about = document.querySelector('#aboutModal svg[viewBox="0 0 100 100"]');
+    if (about) about.outerHTML = dotMark({ size: 22 });
 }

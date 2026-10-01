@@ -10,7 +10,7 @@ import { els, escapeHtml, highlightIn, fileChipHtml } from './ui/dom.js';
 import { formatResponse } from './ui/format.js';
 import { renderSources, renderToolTrace } from './ui/chips.js';
 import { ICONS } from './ui/icons.js';
-import { starSvg } from './ui/brand.js';
+import { dotMark } from './ui/brand.js';
 
 const NEW_TITLE = 'Nouvelle conv.';
 const ACTIVE_KEY = 'pensee_ia_active_tab';
@@ -221,7 +221,7 @@ async function renderStoredMessage(msg) {
         const lbl = document.createElement('span');
         lbl.className = 'msg-label';
         if (msg.role === 'assistant') {
-            lbl.innerHTML = `<span class="pz-avatar">${starSvg({ size: 20 })}</span><span class="pz-name"></span>`;
+            lbl.innerHTML = `<span class="pz-avatar">${dotMark({ size: 20 })}</span><span class="pz-name"></span>`;
             lbl.querySelector('.pz-name').textContent = labelText;
         } else {
             lbl.textContent = labelText;

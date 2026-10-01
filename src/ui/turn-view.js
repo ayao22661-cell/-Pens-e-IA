@@ -25,7 +25,7 @@ export class TurnView {
     constructor(agentId) {
         const agent = agentId && AGENTS_CONFIG[agentId];
         const { msgDiv, label, bubble } = createBotMessage('Pensée');
-        // L'étoile reste l'avatar ; l'agent actif s'affiche en pastille à côté du nom
+        // Le point reste l'avatar ; l'agent actif s'affiche en pastille à côté du nom
         if (agent) label.insertAdjacentHTML('beforeend', `<span class="pz-agent-tag">${agent.icon}${escapeHtml(agent.label)}</span>`);
         bubble.remove();
 
@@ -49,7 +49,7 @@ export class TurnView {
         this.setState('thinking');
     }
 
-    /** État visuel de l'étoile : 'thinking' | 'writing' | null (repos) */
+    /** État visuel du point : 'thinking' | 'writing' | null (repos) */
     setState(state) {
         this.msgDiv.classList.toggle('is-thinking', state === 'thinking');
         this.msgDiv.classList.toggle('is-writing', state === 'writing');
