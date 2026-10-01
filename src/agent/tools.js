@@ -100,6 +100,47 @@ export const CLIENT_TOOLS = {
         };
     },
 
+    async use_template({ name = 'fullstack', dir = 'app' }, { ws, card, terminal }) {
+        if (!/^[a-z0-9-]+$/.test(name)) return { ok: false, summary: 'nom invalide', response: { error: 'Nom de modèle invalide.' } };
+        const target = String(dir || 'app').replace(/^\/+|\/+$/g, '').replace(/^workspace\//, '') || 'app';
+        const res = await fetch(`/templates/${name}/manifest.json`);
+        if (!res.ok) return { ok: false, summary: 'introuvable', response: { error: `Modèle introuvable : ${name}. Disponible : fullstack.` } };
+        const manifest = await res.json();
+
+        const existing = new Set((await vfs.list(ws)).map(f => f.path));
+        const written = [];
+        const skipped = [];
+        await Promise.all(manifest.files.map(async ({ src, dest }) => {
+            const path = `${target}/${dest}`;
+            if (existing.has(path)) { skipped.push(path); return; } // ne jamais écraser le travail existant
+            const file = await fetch(`/templates/${name}/${src}`);
+            if (!file.ok) throw new Error(`Fichier du modèle manquant : ${src}`);
+            await vfs.write(ws, path, await file.text(), { silent: true });
+            written.push(path);
+        }));
+        vfs.notify(ws);
+        written.sort();
+        card.setCode(written.join('\n'));
+        terminal.log(`modèle « ${name} » installé dans ${target}/ (${written.length} fichiers)`, 'ok');
+
+        return {
+            ok: true,
+            summary: `${written.length} fichiers → ${target}/`,
+            response: {
+                installed: target,
+                description: manifest.description,
+                files: written,
+                ...(skipped.length ? { kept_existing: skipped } : {}),
+                next_steps: [
+                    `bash "cd ${target} && npm run setup" (installe tout + données de démo ; fichiers synchronisés automatiquement)`,
+                    `bash "cd ${target} && npm test" : les 9 tests du modèle doivent passer AVANT toute modification`,
+                    "Adapte le domaine : renomme la ressource 'items' (schema.sql, services/, routes/, tests/, api.js, App.jsx), ajoute tes champs et règles, mets à jour les tests et NOTES.md",
+                    `Lance : bash background "cd ${target} && npm run dev", puis open_port(5173)`,
+                ],
+            },
+        };
+    },
+
     async present_files({ paths = [] }, { ws, card, terminal }) {
         const delivered = [];
         const errors = [];

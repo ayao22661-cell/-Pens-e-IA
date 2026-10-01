@@ -1,0 +1,118 @@
+{
+  "name": "fullstack",
+  "description": "Application full-stack : Vite + React 19 + Tailwind v4 + lucide (client/) · Express 5 + SQLite + zod + tests Vitest/Supertest (server/). CRUD complet, pagination, filtres, statistiques, mode sombre.",
+  "files": [
+    {
+      "src": "gitignore",
+      "dest": ".gitignore"
+    },
+    {
+      "src": "client/index.html",
+      "dest": "client/index.html"
+    },
+    {
+      "src": "client/package.json",
+      "dest": "client/package.json"
+    },
+    {
+      "src": "client/src/api.js",
+      "dest": "client/src/api.js"
+    },
+    {
+      "src": "client/src/App.jsx",
+      "dest": "client/src/App.jsx"
+    },
+    {
+      "src": "client/src/components/ItemModal.jsx",
+      "dest": "client/src/components/ItemModal.jsx"
+    },
+    {
+      "src": "client/src/components/Toasts.jsx",
+      "dest": "client/src/components/Toasts.jsx"
+    },
+    {
+      "src": "client/src/components/ui.jsx",
+      "dest": "client/src/components/ui.jsx"
+    },
+    {
+      "src": "client/src/index.css",
+      "dest": "client/src/index.css"
+    },
+    {
+      "src": "client/src/main.jsx",
+      "dest": "client/src/main.jsx"
+    },
+    {
+      "src": "client/vite.config.js",
+      "dest": "client/vite.config.js"
+    },
+    {
+      "src": "NOTES.md",
+      "dest": "NOTES.md"
+    },
+    {
+      "src": "package.json",
+      "dest": "package.json"
+    },
+    {
+      "src": "README.md",
+      "dest": "README.md"
+    },
+    {
+      "src": "server/env.example",
+      "dest": "server/.env.example"
+    },
+    {
+      "src": "server/package.json",
+      "dest": "server/package.json"
+    },
+    {
+      "src": "server/src/app.js",
+      "dest": "server/src/app.js"
+    },
+    {
+      "src": "server/src/config.js",
+      "dest": "server/src/config.js"
+    },
+    {
+      "src": "server/src/db/index.js",
+      "dest": "server/src/db/index.js"
+    },
+    {
+      "src": "server/src/db/schema.sql",
+      "dest": "server/src/db/schema.sql"
+    },
+    {
+      "src": "server/src/db/seed.js",
+      "dest": "server/src/db/seed.js"
+    },
+    {
+      "src": "server/src/index.js",
+      "dest": "server/src/index.js"
+    },
+    {
+      "src": "server/src/lib/errors.js",
+      "dest": "server/src/lib/errors.js"
+    },
+    {
+      "src": "server/src/middlewares/error.js",
+      "dest": "server/src/middlewares/error.js"
+    },
+    {
+      "src": "server/src/middlewares/validate.js",
+      "dest": "server/src/middlewares/validate.js"
+    },
+    {
+      "src": "server/src/routes/items.js",
+      "dest": "server/src/routes/items.js"
+    },
+    {
+      "src": "server/src/services/items.js",
+      "dest": "server/src/services/items.js"
+    },
+    {
+      "src": "server/tests/items.test.js",
+      "dest": "server/tests/items.test.js"
+    }
+  ]
+}

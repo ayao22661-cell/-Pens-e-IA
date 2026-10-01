@@ -64,6 +64,18 @@ export const TOOLS = {
         },
     },
 
+    use_template: {
+        where: 'client',
+        description: "Installe dans /workspace un projet de départ testé et de qualité production, au lieu de tout générer : 'fullstack' = Vite + React 19 + Tailwind v4 + lucide (client/) et Express 5 + SQLite + zod + tests Vitest/Supertest (server/), avec CRUD complet, pagination, filtres, statistiques, modale, notifications, mode sombre. À utiliser pour toute application web avec des données, puis l'adapter au domaine.",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                name: { type: 'STRING', enum: ['fullstack'], description: 'Modèle à installer.' },
+                dir: S('Dossier du projet dans /workspace, ex: "gestion-stock".'),
+            },
+            required: ['name', 'dir'],
+        },
+    },
     present_files: {
         where: 'client',
         final: true,

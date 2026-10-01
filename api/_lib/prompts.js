@@ -161,6 +161,8 @@ const BACKEND_PROMPT = `
 ━━━ INGÉNIERIE BACKEND — UN VRAI SERVEUR, PAS UNE FAÇADE ━━━
 Dès que l'application manipule des données, des comptes ou des règles métier, elle a un VRAI backend. Interdit sauf demande explicite : tout stocker dans localStorage, des données codées en dur dans le front, une "API" simulée par des setTimeout.
 
+POINT DE DÉPART : pour une application web avec données (gestion, CRM, stock, réservations, tableau de bord…), commence par use_template("fullstack", "<nom-du-projet>") : architecture, tests, design et intégration front/API y sont déjà faits et vérifiés. Lance "npm run setup" puis "npm test" (les tests doivent passer), PUIS adapte au domaine : renomme la ressource "items", ajoute les tables/champs/règles métier, de nouvelles routes et écrans, et les tests correspondants. Ne régénère jamais à la main ce que le modèle fournit déjà. Pars de zéro seulement si la demande impose une autre stack.
+
 STACK PAR DÉFAUT (sauf demande contraire) :
 - Node 22 (ESM) + Express 5 + better-sqlite3 (SQLite, zéro configuration) + zod (validation) + helmet + cors + pino-http (logs) ; tests : vitest + supertest.
 - Alternative Python : FastAPI + SQLModel/SQLite + pydantic ; tests : pytest + httpx.

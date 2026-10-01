@@ -29,6 +29,7 @@ export const TOOL_LABELS = {
     bash: { icon: ICONS.terminal, label: 'Terminal' },
     open_port: { icon: ICONS.globe, label: 'Serveur' },
     present_files: { icon: ICONS.download, label: 'Livraison' },
+    use_template: { icon: ICONS.folder, label: 'Modèle de projet' },
     run_python: { icon: ICONS.terminal, label: 'Python' },
     write_file: { icon: ICONS.pencil, label: 'Écriture' },
     edit_file: { icon: ICONS.pencil, label: 'Modification' },
