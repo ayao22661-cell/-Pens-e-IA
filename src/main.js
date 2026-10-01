@@ -5,7 +5,7 @@
 
 import { state } from './state.js';
 import { initAuth } from './auth.js';
-import { loadCredits, renderCredits, setCredits, setQuota, isBlocked } from './credits.js';
+import { loadCredits, renderCredits, setCredits, setQuota, isBlocked, initUsageMenu } from './credits.js';
 import { initTabs, initSidebar, saveMessage, updateTabTitle } from './conversations.js';
 import { initMemoryPanel, searchMemory, memorizeText } from './memory.js';
 import { initFileInputs, clearAttachments, uploadAttachments } from './files.js';
@@ -241,6 +241,7 @@ function init() {
     initCodeRunner();
     initTerminal();
     initMemoryPanel();
+    initUsageMenu();
     renderCredits();
     setStatus('ok');
 

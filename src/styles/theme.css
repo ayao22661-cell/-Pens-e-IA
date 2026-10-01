@@ -108,7 +108,6 @@ body::before { display: none; }
 .pz-ring.is-ok { color: var(--accent); }
 .pz-ring.is-low { color: var(--yellow); }
 .pz-ring.is-empty { color: var(--red); }
-#pzGauge { display: inline-grid; place-items: center; }
 
 /* ── En-tête ────────────────────────────────────────────────── */
 header, body[data-theme="light"] header {
@@ -154,12 +153,6 @@ body.pz-term-open #terminalBtn {
 }
 .conv-item.active .conv-item-title { padding-left: 24px; }
 
-/* Usage : anneau + compteur */
-#creditBar { display: flex; align-items: center; gap: 9px; }
-#creditBar .credit-track { display: none; }
-#creditBar .credit-label { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; font-size: 9.5px; flex: 1; }
-#creditCount { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
-.pz-quota-sub { font-family: var(--font-read); font-size: 11px; color: var(--text3); padding: 2px 0 6px 33px; }
 #logoutBtn { border-radius: 999px; font-family: var(--font-brand); font-weight: 600; }
 
 /* ── Fil de conversation ────────────────────────────────────── */
@@ -312,7 +305,37 @@ body[data-theme="light"] .input-card { background: #FFFFFF; box-shadow: 0 10px 4
 .attached-chip { border-radius: 999px !important; font-family: var(--font-brand) !important; }
 footer { border-top: none; background: transparent; font-family: var(--font-mono); letter-spacing: 0.04em; font-size: 10px; padding: 0 16px 10px; color: var(--text3); }
 footer em { color: var(--text2); font-style: normal; font-weight: 600; }
-#alertBanner.pz-quota-banner { border-radius: 999px; font-family: var(--font-brand); font-weight: 600; }
+
+/* ── Usage (comme Claude : discret, seulement quand il faut prévenir) ── */
+#alertBanner.pz-usage-line {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    max-width: var(--column, 768px); width: 100%; margin: 0 auto 6px; padding: 6px 8px 6px 14px;
+    background: transparent; border: none; border-radius: 999px;
+    font-family: var(--font-read); font-size: 12.5px; letter-spacing: 0; text-align: left; color: var(--text2);
+}
+#alertBanner.pz-usage-line::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--yellow); }
+#alertBanner.pz-usage-line.empty::before { background: var(--red); }
+#alertBanner.pz-usage-line > span { flex: 1; min-width: 0; }
+#alertBanner.pz-usage-line strong { color: var(--text); font-weight: 600; }
+.pz-usage-more {
+    background: none; border: 1px solid var(--border2); border-radius: 999px; color: var(--text2);
+    font-family: var(--font-brand); font-size: 11.5px; font-weight: 600; padding: 3px 10px; cursor: pointer; flex-shrink: 0;
+}
+.pz-usage-more:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+.pz-usage-panel {
+    position: absolute; top: 52px; right: 8px; width: 300px; max-width: calc(100vw - 32px); z-index: 310;
+    background: var(--bg2); border: 1px solid var(--border2); border-radius: 18px; box-shadow: var(--shadow); padding: 16px;
+}
+.pz-usage-panel[hidden] { display: none; }
+.pz-usage-title { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text3); margin-bottom: 12px; }
+.pz-usage-head { display: flex; align-items: center; gap: 14px; }
+.pz-usage-big { font-family: var(--font-brand); font-size: 28px; font-weight: 700; line-height: 1; color: var(--text); }
+.pz-usage-of { font-family: var(--font-read); font-size: 12.5px; color: var(--text2); margin-top: 4px; }
+.pz-usage-row { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-family: var(--font-read); font-size: 12.5px; color: var(--text2); }
+.pz-usage-row strong { color: var(--text); font-weight: 600; }
+.pz-usage-help { margin: 10px 0 0; font-family: var(--font-read); font-size: 11.5px; line-height: 1.5; color: var(--text3); }
+#usageBtn .pz-ring { flex-shrink: 0; }
 
 /* ── Connexion ──────────────────────────────────────────────── */
 .login-card { border-radius: 28px; }

@@ -13,8 +13,6 @@ export const els = {
     userInput:     $('userInput'),
     sendBtn:       $('sendBtn'),
     statusBadge:   $('statusBadge'),
-    creditFill:    $('creditFill'),
-    creditCount:   $('creditCount'),
     alertBanner:   $('alertBanner'),
     fileInput:     $('fileInput'),
     uploadBtn:     $('uploadBtn'),

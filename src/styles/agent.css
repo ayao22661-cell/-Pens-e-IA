@@ -238,7 +238,3 @@ body.pz-noscroll { overflow: hidden; }
 
 /* ── Quota par fenêtre de 5 h ───────────────────────────── */
 .pz-quota-sub { font-family: var(--font-ui, 'Inter', sans-serif); font-size: 10.5px; color: var(--text3); padding: 2px 2px 6px; }
-#alertBanner.pz-quota-banner { max-width: var(--column, 768px); margin: 0 auto 6px; width: calc(100% - 32px); border-radius: 12px; padding: 9px 14px; font-size: 13px; text-align: center; font-family: var(--font-ui, 'Inter', sans-serif); }
-#alertBanner.pz-quota-banner.low { background: color-mix(in srgb, var(--yellow) 12%, transparent); color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 30%, transparent); }
-#alertBanner.pz-quota-banner.empty { background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 30%, transparent); }
-#alertBanner.pz-quota-banner strong { font-weight: 650; }
