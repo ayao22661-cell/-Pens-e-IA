@@ -25,7 +25,8 @@ export class TurnView {
     constructor(agentId) {
         const agent = agentId && AGENTS_CONFIG[agentId];
         const { msgDiv, label, bubble } = createBotMessage('Pensée');
-        if (agent) label.innerHTML = `Pensée · ${agent.icon} ${escapeHtml(agent.label)}`;
+        // L'étoile reste l'avatar ; l'agent actif s'affiche en pastille à côté du nom
+        if (agent) label.insertAdjacentHTML('beforeend', `<span class="pz-agent-tag">${agent.icon}${escapeHtml(agent.label)}</span>`);
         bubble.remove();
 
         this.agentId = agentId;
@@ -42,9 +43,16 @@ export class TurnView {
         this.renderQueued = false;
 
         this.waiting = document.createElement('div');
-        this.waiting.className = 'typing-bubble';
-        this.waiting.innerHTML = '<span></span><span></span><span></span>';
+        this.waiting.className = 'pz-pending';
+        this.waiting.textContent = 'Pensée réfléchit…';
         this.flow.appendChild(this.waiting);
+        this.setState('thinking');
+    }
+
+    /** État visuel de l'étoile : 'thinking' | 'writing' | null (repos) */
+    setState(state) {
+        this.msgDiv.classList.toggle('is-thinking', state === 'thinking');
+        this.msgDiv.classList.toggle('is-writing', state === 'writing');
     }
 
     _stopWaiting() {
@@ -61,6 +69,7 @@ export class TurnView {
     // ── Réflexion ────────────────────────────────────────────
     thinking(s) {
         this._stopWaiting();
+        this.setState('thinking');
         if (!this.think) {
             this._endSegment();
             const el = document.createElement('div');
@@ -96,6 +105,7 @@ export class TurnView {
     // ── Texte ────────────────────────────────────────────────
     text(s) {
         this._stopWaiting();
+        this.setState('writing');
         this._closeThinking();
         if (!this.cur) {
             const el = document.createElement('div');
@@ -130,6 +140,7 @@ export class TurnView {
     // ── Outils ───────────────────────────────────────────────
     toolStart(ev) {
         this._stopWaiting();
+        this.setState('thinking');
         this._closeThinking();
         this._endSegment();
         const card = createToolCard(ev);
@@ -173,6 +184,7 @@ export class TurnView {
     // ── Fin de tour ──────────────────────────────────────────
     finalize({ sources = [], onAudit, onSuggestion } = {}) {
         this._stopWaiting();
+        this.setState(null);
         this._closeThinking();
         this._endSegment();
         this.segments.forEach(s => { if (!s.text.trim()) s.el.remove(); });
@@ -215,6 +227,7 @@ export class TurnView {
 
     fail(message) {
         this._stopWaiting();
+        this.setState(null);
         this._closeThinking();
         this._endSegment();
         this.note('· ' + message, 'error');

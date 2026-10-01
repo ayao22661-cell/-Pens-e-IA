@@ -17,6 +17,7 @@ import { initCodeRunner } from './sandbox/code-runner.js';
 import { initTerminal, terminal } from './ui/terminal.js';
 import { initVoiceInput } from './ui/voice-input.js';
 import { TurnView } from './ui/turn-view.js';
+import { mountBrand } from './ui/brand.js';
 import { els, escapeHtml, addMessage, addUserMessageWithFiles, showTyping, removeTyping, setStatus } from './ui/dom.js';
 import { ICONS } from './ui/icons.js';
 
@@ -232,6 +233,7 @@ async function sendMessage() {
 
 // ── Initialisation ───────────────────────────────────────────
 function init() {
+    mountBrand();
     initAgentSelector();
     initSidebar();
     initFileInputs();

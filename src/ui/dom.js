@@ -4,6 +4,7 @@
 // ============================================================
 
 import { ICONS } from './icons.js';
+import { starSvg } from './brand.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -36,7 +37,9 @@ function messageShell(role, labelText) {
     msgDiv.className = 'msg ' + role;
     const label = document.createElement('span');
     label.className = 'msg-label';
-    label.textContent = labelText ?? (role === 'user' ? 'Toi' : 'Pensée');
+    if (role === 'user') label.textContent = labelText ?? 'Toi';
+    else label.innerHTML = `<span class="pz-avatar">${starSvg({ size: 20 })}</span><span class="pz-name"></span>`;
+    if (role !== 'user') label.querySelector('.pz-name').textContent = labelText ?? 'Pensée';
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     msgDiv.append(label, bubble);
@@ -92,8 +95,9 @@ export function showTyping() {
     removeTyping();
     const { msgDiv, bubble } = messageShell('bot');
     msgDiv.id = 'typing-indicator';
-    bubble.className = 'typing-bubble';
-    bubble.innerHTML = '<span></span><span></span><span></span>';
+    msgDiv.classList.add('is-thinking');
+    bubble.className = 'pz-pending';
+    bubble.textContent = 'Pensée réfléchit…';
     els.messages.appendChild(msgDiv);
     scrollToBottom(true);
 }

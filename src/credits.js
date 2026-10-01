@@ -12,6 +12,7 @@ import { CONFIG } from './config.js';
 import { state } from './state.js';
 import { supabase, getAccessToken } from './supabase.js';
 import { els, setStatus } from './ui/dom.js';
+import { starGauge } from './ui/brand.js';
 
 const WARN_RATIO = 0.8;
 let tickTimer = null;
@@ -91,6 +92,17 @@ function ensureSubline() {
     return sub;
 }
 
+/** Rayons allumés = part restante (remplace la barre de progression). */
+function renderGauge(remainingRatio) {
+    let g = document.getElementById('pzGauge');
+    if (!g) {
+        g = document.createElement('span');
+        g.id = 'pzGauge';
+        els.creditCount?.before(g);
+    }
+    g.innerHTML = starGauge(remainingRatio, 24);
+}
+
 function setBanner(kind, html) {
     const banner = els.alertBanner;
     banner.className = kind ? `pz-quota-banner ${kind}` : '';
@@ -117,6 +129,7 @@ export function renderCredits() {
         els.creditFill.style.width = pct + '%';
         els.creditFill.style.background = pct > 50 ? '#00e5a0' : pct > 20 ? '#f5c542' : '#ff6b6b';
         els.creditCount.textContent = `${left} / ${CONFIG.maxCredits}`;
+        renderGauge(left / CONFIG.maxCredits);
         setInputLocked(left === 0);
         if (left === 0) { setBanner('empty', "Crédits épuisés pour aujourd'hui. Reviens demain !"); setStatus('warn'); }
         else if (left <= 5) setBanner('low', `Plus que ${left} message(s) aujourd'hui.`);
@@ -131,6 +144,7 @@ export function renderCredits() {
     els.creditFill.style.width = `${Math.max(0, 100 - ratio * 100)}%`;
     els.creditFill.style.background = ratio < 0.6 ? 'var(--accent)' : ratio < WARN_RATIO ? '#f5c542' : '#ff6b6b';
     els.creditCount.textContent = `${left} / ${q.limit}`;
+    renderGauge(Math.max(0, 1 - ratio));
     els.creditCount.title = `${left} message(s) restant(s) sur ${q.limit} dans cette fenêtre de ${q.hours} h`;
 
     const sub = ensureSubline();
