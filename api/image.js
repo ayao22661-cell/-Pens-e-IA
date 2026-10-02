@@ -1,194 +1,122 @@
 // ============================================================
 //  PENSÉE IA — api/image.js
-//  Qualité proche DALL-E 3 · Pollinations gratuit & illimité
-//  Stratégie : prompt engineering avancé + modèle optimal fixe
+//  Génération d'images réalistes.
+//
+//  1. La demande est réécrite en une description visuelle claire, en anglais
+//     (Gemma, quota large ; repli Flash Lite ; sinon la demande telle quelle).
+//  2. L'image est produite par Cloudflare Workers AI (FLUX.1 schnell par défaut,
+//     offre gratuite quotidienne). Variables : CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
+//     (optionnel : CLOUDFLARE_IMAGE_MODEL).
+//  3. L'image revient en base64 ; le client l'enregistre dans le stockage Supabase.
+//
+//  Coût : 1 message du quota, débité seulement si l'image est livrée.
 // ============================================================
 
-export const config = { runtime: 'edge' };
+import { authenticate, HttpError, quotaGate, quotaCharge, refundCredit } from './_lib/auth.js';
 
-// ── MODÈLES DISPONIBLES POLLINATIONS ─────────────────────────
-// flux-realism  → photoréalisme, portraits, scènes urbaines   ← meilleur pour tout
-// flux          → illustration, fantasy, créatif
-// turbo         → preview rapide uniquement (qualité réduite)
-// ─────────────────────────────────────────────────────────────
+const IMAGE_COST = 1;
+const CF_MODEL = process.env.CLOUDFLARE_IMAGE_MODEL || '@cf/black-forest-labs/flux-1-schnell';
+const REWRITE_MODELS = ['gemma-4-26b-a4b-it', 'gemini-3.1-flash-lite'];
 
-// Catégories de prompt pour orienter le style
-const CATEGORIES = {
-    PORTRAIT:      'portrait',
-    SCENE_URBAINE: 'scene_urbaine',
-    HORROR:        'horror',
-    NATURE:        'nature',
-    ILLUSTRATION:  'illustration',
-    DEFAUT:        'defaut',
-};
+const json = (data, status = 200) =>
+    new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
-function detectCategory(prompt) {
-    const p = prompt.toLowerCase();
-    if (/visage|portrait|personne|homme|femme|fille|garçon|face|person|human|skin|peau|model|acteur|actrice/.test(p))
-        return CATEGORIES.PORTRAIT;
-    if (/horreur|horror|dark|ghost|spirit|génie|lagune|shadow|demon|fantôme|monstre|effrayant|sinistre|nuit noire/.test(p))
-        return CATEGORIES.HORROR;
-    if (/rue|ville|abidjan|marché|market|street|city|outdoor|architecture|quartier|bâtiment|immeuble|plateau|cocody|yopougon/.test(p))
-        return CATEGORIES.SCENE_URBAINE;
-    if (/nature|forêt|ocean|mer|plage|montagne|jungle|arbre|fleur|paysage|landscape|sunset|coucher|lever/.test(p))
-        return CATEGORIES.NATURE;
-    if (/dessin|illustration|cartoon|anime|manga|art|peinture|painting|digital|fantasy|imaginaire|concept/.test(p))
-        return CATEGORIES.ILLUSTRATION;
-    return CATEGORIES.DEFAUT;
-}
+const cfEnv = () => ({
+    account: process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CF_ACCOUNT_ID,
+    token: process.env.CLOUDFLARE_API_TOKEN || process.env.CF_API_TOKEN,
+});
 
-// ── PROMPT ENGINEERING NIVEAU DALL-E 3 ───────────────────────
-// Principe : sujet → contexte → lumière → style technique → qualité
-// DALL-E 3 excelle parce qu'OpenAI réécrit le prompt en interne.
-// On reproduit ça manuellement avec des blocs structurés.
-// ─────────────────────────────────────────────────────────────
-function enrichPrompt(prompt, category) {
+// ── 1. Réécriture de la demande ──────────────────────────────
+// Les modèles récents (FLUX) rendent mieux une phrase naturelle et précise
+// qu'une liste de mots-clés (« 8K, masterpiece, Canon EOS… »).
+const REWRITE_INSTRUCTIONS = `You turn a user's image request (often in French) into ONE prompt for a text-to-image model (FLUX).
+Rules:
+- Write in English, 40 to 90 words, plain descriptive sentences. No lists, no quotes, no preamble.
+- Stay faithful to the request: same subject, same number of people, same place, same mood. Never add a celebrity or a brand.
+- Keep every explicit detail (ethnicity, age, clothing, colors, text to write in the image — keep that text in its original language, in double quotes).
+- Unless the user asks for a drawing, painting, 3D, anime, logo or another style, make it a realistic photograph: describe the framing (close-up, wide shot…), the light (time of day, direction, softness), the setting and textures, and one plausible camera/lens detail.
+- If the user asks for a style, describe that style precisely instead of a photo.
+- Places in Côte d'Ivoire / West Africa must look authentic (architecture, vegetation, light), not generic.
+Return only the prompt.`;
 
-    // Bloc qualité universel — injecté sur toutes les catégories
-    const QUALITY = 'masterpiece, best quality, ultra-detailed, sharp focus, professional color grading, no blur, no noise, no watermark, no text';
-
-    // Bloc négatif simulé via le prompt (Pollinations n'a pas de negative prompt natif,
-    // on injecte "avoid:" qui est compris par les modèles Flux)
-    const AVOID = 'avoid: blur, soft focus, noise, pixelation, low quality, watermark, text, signature, oversaturated, distorted anatomy, extra limbs';
-
-    switch (category) {
-
-        case CATEGORIES.PORTRAIT:
-            return [
-                `Hyper-realistic portrait photograph of ${prompt}.`,
-                'Canon EOS R5, 85mm f/1.4 lens, shallow depth of field.',
-                'Studio three-point lighting, visible skin pores and texture, catchlights in eyes.',
-                'Natural skin tones, photorealistic, 8K UHD resolution.',
-                QUALITY,
-                AVOID,
-            ].join(' ');
-
-        case CATEGORIES.HORROR:
-            return [
-                `Cinematic horror scene: ${prompt}.`,
-                'Shot on ARRI Alexa, anamorphic lens, 2.39:1 aspect ratio.',
-                'Chiaroscuro lighting, deep shadows, mist atmosphere.',
-                'Film grain texture, desaturated palette with cold blue and crimson accents.',
-                'Hyper-detailed, photorealistic, terrifying atmosphere.',
-                QUALITY,
-                AVOID,
-            ].join(' ');
-
-        case CATEGORIES.SCENE_URBAINE:
-            return [
-                `Street photography of ${prompt}.`,
-                'Leica Q2, 28mm lens, f/5.6, golden hour natural light.',
-                'Vivid colors, deep shadows, crisp edges, motion frozen.',
-                'Documentary style, authentic atmosphere, 4K resolution.',
-                QUALITY,
-                AVOID,
-            ].join(' ');
-
-        case CATEGORIES.NATURE:
-            return [
-                `Nature photography of ${prompt}.`,
-                'Sony A7R IV, 24-70mm f/2.8, polarizing filter.',
-                'Dramatic natural lighting, rich saturated colors, high dynamic range.',
-                'National Geographic style, ultra-sharp foreground and background.',
-                QUALITY,
-                AVOID,
-            ].join(' ');
-
-        case CATEGORIES.ILLUSTRATION:
-            return [
-                `Digital art illustration of ${prompt}.`,
-                'Concept art style, detailed brush strokes, rich color palette.',
-                'Cinematic composition, dramatic lighting, highly detailed.',
-                'ArtStation trending, professional digital painting.',
-                QUALITY,
-                AVOID,
-            ].join(' ');
-
-        default:
-            return [
-                `Photorealistic image of ${prompt}.`,
-                'Professional photography, Canon EOS R5.',
-                'Perfect exposure, natural lighting, high dynamic range.',
-                '8K resolution, ultra-detailed.',
-                QUALITY,
-                AVOID,
-            ].join(' ');
+async function rewritePrompt(request) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return request;
+    for (const model of REWRITE_MODELS) {
+        try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(9000),
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: `${REWRITE_INSTRUCTIONS}\n\nUser request:\n${request}` }] }],
+                    generationConfig: { temperature: 0.6, maxOutputTokens: 400 },
+                }),
+            });
+            if (!res.ok) continue;
+            const data = await res.json();
+            const text = (data.candidates?.[0]?.content?.parts || [])
+                .filter(p => !p.thought).map(p => p.text || '').join('')
+                .replace(/<think>[\s\S]*?<\/think>/g, '').replace(/^["'\s]+|["'\s]+$/g, '').trim();
+            if (text.length >= 20) return text.slice(0, 1800);
+        } catch (_) { /* modèle suivant */ }
     }
+    return request;
 }
 
-// ── SÉLECTION DU MODÈLE PAR CATÉGORIE ────────────────────────
-// ── SÉLECTION DU MODÈLE PAR CATÉGORIE ────────────────────────
-function selectModel(category) {
-    // On utilise flux-pro pour forcer l'IA à "prendre son temps" et générer 
-    // des détails de qualité maximale. La génération prendra plus de secondes.
-    if (category === CATEGORIES.PORTRAIT) return 'flux-pro';
-    if (category === CATEGORIES.SCENE_URBAINE) return 'flux-pro';
-    if (category === CATEGORIES.NATURE) return 'flux-pro';
-    
-    // On garde flux standard pour les dessins/illustrations
-    if (category === CATEGORIES.ILLUSTRATION) return 'flux';
-    
-    return 'flux-realism';
-}
-
-// ── CONSTRUCTION URL POLLINATIONS ────────────────────────────
-function pollinationsUrl(prompt, model, w, h, seed) {
-    // VERSION SAFE : Retrait de nologo=true (anti-timeout) et safe=false (anti-rejet API)
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&model=${model}&seed=${seed}&enhance=false`;
-}
-
-// ── HANDLER PRINCIPAL ─────────────────────────────────────────
-export default async function handler(req) {
-    if (req.method !== 'POST') {
-        return new Response(
-            JSON.stringify({ error: 'Méthode non autorisée' }),
-            { status: 405, headers: { 'Content-Type': 'application/json' } }
-        );
-    }
-
-    let body = {};
-    try { body = await req.json(); } catch {}
-
-    const { prompt, width, height } = body;
-
-    if (!prompt || !prompt.trim()) {
-        return new Response(
-            JSON.stringify({ error: 'Prompt manquant.' }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } }
-        );
-    }
-
-    const category = detectCategory(prompt.trim());
-    const model    = selectModel(category);
-    const enriched = enrichPrompt(prompt.trim(), category);
-    const seed     = Math.floor(Math.random() * 999999) + 1;
-
-    // Résolution 1024×1024 — standard DALL-E 3
-    // Pas de fetch serveur → pas de timeout serveur, le browser charge directement
-    const finalW = Math.min(width  || 1024, 1024);
-    const finalH = Math.min(height || 1024, 1024);
-
-    const previewUrl  = pollinationsUrl(enriched, 'turbo', 512, 512, seed);
-    const standardUrl = pollinationsUrl(enriched, model,   768, 768, seed);
-    const hdUrl       = pollinationsUrl(enriched, model,   finalW, finalH, seed);
-
-    return new Response(JSON.stringify({
-        source:         'pollinations',
-        model,
-        category,
-        seed,
-        image:          hdUrl,
-        width:          finalW,
-        height:         finalH,
-        layers: [
-            { layer: 'preview',  width: 512,    height: 512,    url: previewUrl  },
-            { layer: 'standard', width: 768,    height: 768,    url: standardUrl },
-            { layer: 'hd',       width: finalW, height: finalH, url: hdUrl       },
-        ],
-        promptOriginal: prompt,
-        promptUsed:     enriched,
-    }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
+// ── 2. Génération ────────────────────────────────────────────
+async function generateCloudflare(prompt) {
+    const { account, token } = cfEnv();
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${CF_MODEL}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(50000),
+        body: JSON.stringify({ prompt, steps: 8, seed: Math.floor(Math.random() * 2 ** 31) }),
     });
+    const data = await res.json().catch(() => null);
+    const image = data?.result?.image;
+    if (!res.ok || !image) {
+        const msg = data?.errors?.[0]?.message || `HTTP ${res.status}`;
+        if (res.status === 429 || /neuron|limit|quota/i.test(msg)) {
+            throw new HttpError(503, "Quota d'images du jour atteint. Réessaie demain.");
+        }
+        if (res.status === 401 || res.status === 403) {
+            throw new HttpError(503, 'Génération d’images mal configurée (clé Cloudflare refusée).');
+        }
+        if (/nsfw|safety|flagged/i.test(msg)) {
+            throw new HttpError(422, 'Cette image a été refusée par le filtre de sécurité. Reformule ta demande.');
+        }
+        throw new HttpError(502, `Le générateur d'images n'a pas répondu (${msg}).`);
+    }
+    return { data: image, mimeType: 'image/jpeg' };
+}
+
+// ── Point d'entrée ───────────────────────────────────────────
+export async function POST(req) {
+    let userId = null;
+    let gate = null;
+    try {
+        ({ userId } = await authenticate(req));
+        const body = await req.json().catch(() => ({}));
+        const request = String(body.prompt || '').trim().slice(0, 2000);
+        if (!request) throw new HttpError(400, 'Décris l’image à générer.');
+
+        const { account, token } = cfEnv();
+        if (!account || !token) {
+            throw new HttpError(503, 'Génération d’images pas encore configurée (variables CLOUDFLARE_ACCOUNT_ID et CLOUDFLARE_API_TOKEN).');
+        }
+
+        gate = await quotaGate(userId);
+        const prompt = await rewritePrompt(request);
+        const image = await generateCloudflare(prompt);
+
+        const quota = gate.mode === 'quota' ? await quotaCharge(userId, IMAGE_COST).catch(() => null) : null;
+        gate = null; // livré : plus rien à rembourser
+        return json({ type: 'base64', ...image, model: CF_MODEL, promptUsed: prompt, quota });
+    } catch (e) {
+        // Ancien système : le crédit pris à l'entrée est rendu si l'image n'a pas été livrée
+        if (gate?.mode === 'legacy') await refundCredit(userId).catch(() => {});
+        const status = e instanceof HttpError ? e.status : 500;
+        return json({ error: e instanceof HttpError ? e.message : `Erreur image : ${e?.message || e}`, ...(e?.data || {}) }, status);
+    }
 }

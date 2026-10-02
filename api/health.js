@@ -28,6 +28,8 @@ export function GET() {
         SUPABASE_SERVICE_KEY: has('SUPABASE_SERVICE_KEY'),
         GEMINI_API_KEY: has('GEMINI_API_KEY'),
         TURN_SECRET: has('TURN_SECRET'),
+        CLOUDFLARE_ACCOUNT_ID: has('CLOUDFLARE_ACCOUNT_ID'),
+        CLOUDFLARE_API_TOKEN: has('CLOUDFLARE_API_TOKEN'),
     };
     return new Response(JSON.stringify({
         env,

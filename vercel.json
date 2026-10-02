@@ -1,5 +1,6 @@
 {
   "functions": {
-    "api/sandbox.js": { "maxDuration": 300 }
+    "api/sandbox.js": { "maxDuration": 300 },
+    "api/image.js": { "maxDuration": 60 }
   }
 }

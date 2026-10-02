@@ -302,7 +302,7 @@ export const TOOLS = {
     generate_image: {
         where: 'client',
         final: true,
-        description: "Génère une image (illustration, photo, visuel) à partir d'une description détaillée.",
+        description: "Génère une image réaliste (photo, illustration, visuel) avec un vrai modèle d'image. Décris le sujet, le cadrage, la lumière, le lieu et le style ; précise « dessin », « 3D », etc. si ce n'est pas une photo. Pour un logo, un schéma ou un graphique, préfère du SVG/HTML codé.",
         parameters: {
             type: 'OBJECT',
             properties: { prompt: S("Description visuelle détaillée de l'image.") },

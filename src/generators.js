@@ -11,6 +11,7 @@ import { saveMessage } from './conversations.js';
 import { vfs, MIME } from './sandbox/vfs.js';
 import { escapeHtml } from './ui/dom.js';
 import { ICONS } from './ui/icons.js';
+import { setQuota } from './credits.js';
 
 const LIBS = {
     xlsx: 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
@@ -217,14 +218,12 @@ export async function generateImage(prompt) {
     const tabId = state.activeTabId;
     const res = await fetch('/api/image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getAccessToken()}` },
         body: JSON.stringify({ prompt }),
     });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Génération échouée');
-    }
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (data.quota) setQuota(data.quota);
+    if (!res.ok) throw new Error(data.error || 'Génération échouée');
 
     let url = data.image || data.layers?.[2]?.url || data.url;
     let storagePath = '';
