@@ -260,7 +260,7 @@
             const opt = document.createElement('div');
             opt.innerText = '📁 ' + f.name;
             opt.style.cssText = 'padding:8px; font-size:11px; cursor:pointer; border-radius:4px; transition:background 0.2s;';
-            opt.onmouseover = () => opt.style.background = 'rgba(0,229,160,0.1)';
+            opt.onmouseover = () => opt.style.background = 'rgba(61,123,255,0.1)';
             opt.onmouseout = () => opt.style.background = 'transparent';
             opt.onclick = async (e) => {
                 e.stopPropagation();
@@ -513,7 +513,7 @@
                 padding: 5px 6px;
                 border-radius: 7px;
                 border: 1px solid transparent;
-                font-family: 'Syne', sans-serif;
+                font-family: 'Montserrat', sans-serif;
                 font-size: 11px;
                 color: var(--text2);
                 transition: all 0.15s;
@@ -560,7 +560,7 @@
             .enrich-folder-row.folder-active svg { color: var(--accent); stroke: var(--accent); }
 
             /* Artefact hover */
-            .enrich-artifact-row:hover { border-color: rgba(0,229,160,0.2); }
+            .enrich-artifact-row:hover { border-color: rgba(61,123,255,0.2); }
 
             /* User identity */
             #userIdentity { cursor: default; }

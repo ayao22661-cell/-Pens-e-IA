@@ -1171,7 +1171,7 @@ function injectStyles() {
     const style = document.createElement('style');
     style.id = 'pensee-audio-styles';
     style.textContent = `
-        #liveAudioBtn { background:none; border:1px solid var(--border2); color:var(--text2); border-radius:8px; padding:5px 10px; font-size:12px; cursor:pointer; font-family:'Syne',sans-serif; transition:all 0.2s; display:flex; align-items:center; gap:6px; }
+        #liveAudioBtn { background:none; border:1px solid var(--border2); color:var(--text2); border-radius:8px; padding:5px 10px; font-size:12px; cursor:pointer; font-family:'Montserrat',sans-serif; transition:all 0.2s; display:flex; align-items:center; gap:6px; }
         #liveAudioBtn:hover { border-color:var(--accent); color:var(--accent); }
         #liveAudioBtn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
         #liveAudioBtn .live-dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
@@ -1187,7 +1187,7 @@ function injectStyles() {
         .audio-close { position:absolute; top:14px; right:14px; width:28px; height:28px; background:none; border:1px solid var(--border); border-radius:7px; color:var(--text3); font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
         .audio-close:hover { border-color:var(--text2); color:var(--text2); }
 
-        .audio-title { font-family:'Fraunces',serif; font-size:22px; font-weight:300; color:var(--text); margin-bottom:4px; }
+        .audio-title { font-family:'Montserrat',serif; font-size:22px; font-weight:300; color:var(--text); margin-bottom:4px; }
         .audio-title em { color:var(--accent); font-style:italic; }
         .audio-subtitle { font-size:11px; color:var(--text3); font-family:'JetBrains Mono',monospace; letter-spacing:0.1em; margin-bottom:24px; text-transform:uppercase; }
 
@@ -1218,8 +1218,8 @@ function injectStyles() {
         .audio-status.error { color:var(--red); }
 
         .audio-transcript-area { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
-        .audio-transcript-box { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12px; line-height:1.65; color:var(--text2); text-align:left; min-height:72px; max-height:120px; overflow-y:auto; transition:border-color 0.3s; font-family:'Syne',sans-serif; }
-        .audio-transcript-box.active-in { border-color:rgba(0,229,160,0.3); }
+        .audio-transcript-box { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12px; line-height:1.65; color:var(--text2); text-align:left; min-height:72px; max-height:120px; overflow-y:auto; transition:border-color 0.3s; font-family:'Montserrat',sans-serif; }
+        .audio-transcript-box.active-in { border-color:rgba(61,123,255,0.3); }
         .audio-transcript-box.active-out { border-color:rgba(126,184,247,0.3); }
         .audio-box-label { font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--text3); font-family:'JetBrains Mono',monospace; margin-bottom:6px; display:block; }
         .audio-transcript-text { color:var(--text2); }
@@ -1227,7 +1227,7 @@ function injectStyles() {
         .audio-transcript-text.interim { color:var(--text3); font-style:italic; }
 
         .audio-controls { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; }
-        .audio-ctrl { background:var(--bg3); border:1px solid var(--border2); color:var(--text2); border-radius:9px; padding:7px 12px; font-size:11px; font-family:'Syne',sans-serif; cursor:pointer; transition:all 0.2s; }
+        .audio-ctrl { background:var(--bg3); border:1px solid var(--border2); color:var(--text2); border-radius:9px; padding:7px 12px; font-size:11px; font-family:'Montserrat',sans-serif; cursor:pointer; transition:all 0.2s; }
         .audio-ctrl:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
         .audio-ctrl.danger:hover { border-color:var(--red); color:var(--red); background:rgba(255,95,95,0.07); }
 

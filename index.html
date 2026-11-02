@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pensée — IA Personnelle</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='white' stroke='%230e8fa3' stroke-width='1.2'/%3E%3Ccircle cx='17' cy='17' r='9' fill='%230e8fa3'/%3E%3C/svg%3E">    
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B1020'/%3E%3Cg fill='%233D7BFF'%3E%3Crect x='8' y='8' width='7' height='7'/%3E%3Crect x='17' y='8' width='7' height='7'/%3E%3Crect x='8' y='17' width='7' height='7'/%3E%3Crect x='17' y='17' width='7' height='7'/%3E%3C/g%3E%3C/svg%3E">
+    <meta name="theme-color" content="#0B1020">    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -31,13 +32,13 @@
             --border2:     rgba(255,255,255,0.11);
             --accent:      #00e5a0;
             --accent2:     #00b87d;
-            --accent-dim:  rgba(0,229,160,0.10);
-            --accent-glow: rgba(0,229,160,0.18);
+            --accent-dim:  rgba(61,123,255,0.10);
+            --accent-glow: rgba(61,123,255,0.18);
             --text:        #dde2ee;
             --text2:       #7a8099;
             --text3:       #44495a;
             --user-bg:     #0f2019;
-            --user-border: rgba(0,229,160,0.20);
+            --user-border: rgba(61,123,255,0.20);
             --code-bg:     #060810;
             --red:         #ff5f5f;
             --yellow:      #f0c040;
@@ -47,7 +48,7 @@
         }
 
         body {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             background: var(--bg);
             color: var(--text);
             height: 100dvh;
@@ -87,7 +88,7 @@
             content: '';
             position: absolute;
             width: 600px; height: 600px;
-            background: radial-gradient(circle, rgba(0,229,160,0.06) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(61,123,255,0.06) 0%, transparent 70%);
             border-radius: 50%;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
@@ -108,7 +109,7 @@
             width: 100%;
             max-width: 380px;
             text-align: center;
-            box-shadow: var(--shadow), 0 0 0 1px rgba(0,229,160,0.04) inset;
+            box-shadow: var(--shadow), 0 0 0 1px rgba(61,123,255,0.04) inset;
             animation: slideUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
             position: relative;
             z-index: 1;
@@ -144,7 +145,7 @@
         }
 
         .login-logo-name {
-            font-family: 'Fraunces', serif;
+            font-family: 'Montserrat', serif;
             font-size: 26px;
             font-weight: 300;
             letter-spacing: 0.02em;
@@ -157,7 +158,7 @@
             font-size: 13px;
             line-height: 1.6;
             margin-bottom: 32px;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
         }
 
         .login-group {
@@ -191,9 +192,9 @@
         }
         .login-input::placeholder { color: var(--text3); letter-spacing: 0.08em; }
         .login-input:focus {
-            border-color: rgba(0,229,160,0.5);
-            background: rgba(0,229,160,0.03);
-            box-shadow: 0 0 0 3px rgba(0,229,160,0.07);
+            border-color: rgba(61,123,255,0.5);
+            background: rgba(61,123,255,0.03);
+            box-shadow: 0 0 0 3px rgba(61,123,255,0.07);
         }
 
         #loginBtn {
@@ -204,7 +205,7 @@
             padding: 16px;
             border-radius: var(--radius-sm);
             font-weight: 700;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: 14px;
             cursor: pointer;
             transition: all 0.25s ease;
@@ -215,7 +216,7 @@
         #loginBtn:hover {
             background: #1dffc0;
             transform: translateY(-2px);
-            box-shadow: 0 12px 28px rgba(0,229,160,0.25);
+            box-shadow: 0 12px 28px rgba(61,123,255,0.25);
         }
         #loginBtn:active { transform: translateY(0); box-shadow: none; }
 
@@ -275,7 +276,7 @@
         }
         .logo-text { display: flex; flex-direction: column; }
         .logo-text h1 {
-            font-family: 'Fraunces', serif;
+            font-family: 'Montserrat', serif;
             font-size: 17px;
             font-weight: 300;
             letter-spacing: 0.01em;
@@ -298,7 +299,7 @@
             margin: 12px 12px 8px;
             padding: 9px 14px;
             background: var(--accent-dim);
-            border: 1px solid rgba(0,229,160,0.2);
+            border: 1px solid rgba(61,123,255,0.2);
             border-radius: 10px;
             color: var(--accent);
             font-family: 'JetBrains Mono', monospace;
@@ -311,8 +312,8 @@
             flex-shrink: 0;
         }
         #newConvSideBtn:hover {
-            background: rgba(0,229,160,0.18);
-            border-color: rgba(0,229,160,0.4);
+            background: rgba(61,123,255,0.18);
+            border-color: rgba(61,123,255,0.4);
             transform: translateY(-1px);
         }
         #newConvSideBtn .btn-icon { font-size: 14px; }
@@ -363,7 +364,7 @@
 
         .conv-item-title {
             flex: 1;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: 12.5px;
             color: var(--text2);
             white-space: nowrap;
@@ -487,7 +488,7 @@
 
         /* Titre centré dans la colonne du milieu */
         #activeConvTitle {
-            font-family: 'Fraunces', serif;
+            font-family: 'Montserrat', serif;
             font-size: 16px;
             font-weight: 400;
             color: var(--text);
@@ -517,7 +518,7 @@
             border-radius: 20px;
             display: none;
         }
-        #statusBadge.ok   { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(0,229,160,0.15); }
+        #statusBadge.ok   { display:inline; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(61,123,255,0.15); }
         #statusBadge.err  { display:inline; color:var(--red); background:rgba(255,95,95,0.1); border:1px solid rgba(255,95,95,0.2); }
         #statusBadge.warn { display:inline; color:var(--yellow); background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.2); }
 
@@ -538,7 +539,7 @@
             cursor: pointer;
             transition: border-color 0.2s, background 0.2s;
         }
-        .agent-badge:hover { border-color: rgba(0,229,160,0.4); }
+        .agent-badge:hover { border-color: rgba(61,123,255,0.4); }
 
         .agent-selector-menu {
             display: none; position: absolute; top: 50px; right: 0;
@@ -624,7 +625,7 @@
             height: 100%;
             fill: var(--accent);
             animation: spinSlow 12s linear infinite;
-            filter: drop-shadow(0 0 14px rgba(0,229,160,0.4));
+            filter: drop-shadow(0 0 14px rgba(61,123,255,0.4));
         }
         @keyframes spinSlow {
             from { transform: rotate(0deg); }
@@ -632,7 +633,7 @@
         }
 
         .welcome-question {
-            font-family: 'Fraunces', serif;
+            font-family: 'Montserrat', serif;
             font-size: clamp(22px, 5vw, 30px);
             font-weight: 300;
             color: var(--text);
@@ -718,7 +719,7 @@
         .bubble code {
             font-family: 'JetBrains Mono', monospace;
             font-size: 12px;
-            background: rgba(0,229,160,0.08);
+            background: rgba(61,123,255,0.08);
             color: var(--accent);
             padding: 2px 7px;
             border-radius: 5px;
@@ -772,7 +773,7 @@
             flex-shrink: 0;
         }
         .suggestion:hover {
-            border-color: rgba(0,229,160,0.45);
+            border-color: rgba(61,123,255,0.45);
             color: var(--accent);
             background: var(--accent-dim);
         }
@@ -797,7 +798,7 @@
             align-items: center;
             gap: 8px;
             background: var(--bg3);
-            border: 1px solid rgba(0,229,160,0.2);
+            border: 1px solid rgba(61,123,255,0.2);
             border-radius: 8px;
             padding: 5px 12px;
             font-family: 'JetBrains Mono', monospace;
@@ -819,8 +820,8 @@
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            background: rgba(0,229,160,0.07);
-            border: 1px solid rgba(0,229,160,0.18);
+            background: rgba(61,123,255,0.07);
+            border: 1px solid rgba(61,123,255,0.18);
             border-radius: 7px;
             padding: 5px 11px;
             font-family: 'JetBrains Mono', monospace;
@@ -830,10 +831,10 @@
             transition: all 0.2s ease;
         }
         a.file-chip:hover {
-            background: rgba(0,229,160,0.15);
-            border-color: rgba(0,229,160,0.3);
+            background: rgba(61,123,255,0.15);
+            border-color: rgba(61,123,255,0.3);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,229,160,0.1);
+            box-shadow: 0 4px 12px rgba(61,123,255,0.1);
         }
 
         /* ============================================================
@@ -852,13 +853,13 @@
             background: var(--bg2);
             border: 1px solid var(--border2);
             border-radius: 22px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,229,160,0.04) inset;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(61,123,255,0.04) inset;
             overflow: hidden;
             transition: border-color 0.25s, box-shadow 0.25s;
         }
         .input-card:focus-within {
-            border-color: rgba(0,229,160,0.3);
-            box-shadow: 0 4px 32px rgba(0,0,0,0.6), 0 0 0 3px rgba(0,229,160,0.06);
+            border-color: rgba(61,123,255,0.3);
+            box-shadow: 0 4px 32px rgba(0,0,0,0.6), 0 0 0 3px rgba(61,123,255,0.06);
         }
 
         /* Ligne textarea */
@@ -873,7 +874,7 @@
             background: transparent;
             border: none;
             padding: 0;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: 15px;
             color: var(--text);
             outline: none;
@@ -914,11 +915,11 @@
             color: var(--text2);
             transition: all 0.2s ease;
             flex-shrink: 0;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-weight: 300;
         }
         #uploadBtn:hover {
-            border-color: rgba(0,229,160,0.5);
+            border-color: rgba(61,123,255,0.5);
             color: var(--accent);
             background: var(--accent-dim);
         }
@@ -929,7 +930,7 @@
             width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
             cursor: pointer; color: var(--text2); transition: all 0.2s ease; flex-shrink: 0;
         }
-        #micBtn:hover { border-color: rgba(0,229,160,0.5); color: var(--accent); background: var(--accent-dim); }
+        #micBtn:hover { border-color: rgba(61,123,255,0.5); color: var(--accent); background: var(--accent-dim); }
         #micBtn.recording {
             color: #ff5f5f; border-color: rgba(255,95,95,0.5); background: rgba(255,95,95,0.1);
             animation: pulseRecord 1.5s infinite;
@@ -967,7 +968,7 @@
         #sendBtn:hover {
             background: var(--accent);
             transform: scale(1.08);
-            box-shadow: 0 4px 16px rgba(0,229,160,0.3);
+            box-shadow: 0 4px 16px rgba(61,123,255,0.3);
         }
         #sendBtn:hover svg { fill: #060810; }
         #sendBtn:active { transform: scale(0.96); box-shadow: none; }
@@ -981,8 +982,8 @@
             display: none;
             position: absolute;
             inset: 0;
-            background: rgba(0,229,160,0.05);
-            border: 2px dashed rgba(0,229,160,0.4);
+            background: rgba(61,123,255,0.05);
+            border: 2px dashed rgba(61,123,255,0.4);
             z-index: 1000;
             flex-direction: column;
             align-items: center;
@@ -1052,7 +1053,7 @@
             line-height: 1;
             transition: 0.2s;
         }
-        #sidebarToggle:hover { color: var(--accent); border-color: rgba(0,229,160,0.3); }
+        #sidebarToggle:hover { color: var(--accent); border-color: rgba(61,123,255,0.3); }
 
 @media (max-width: 680px) {
     #sidebar {
@@ -1143,9 +1144,9 @@
             letter-spacing: 0.1em;
         }
         .run-btn {
-            background: rgba(0, 229, 160, 0.1);
+            background: rgba(61, 123, 255, 0.1);
             color: var(--accent);
-            border: 1px solid rgba(0, 229, 160, 0.2);
+            border: 1px solid rgba(61, 123, 255, 0.2);
             padding: 4px 10px;
             border-radius: 5px;
             cursor: pointer;
@@ -1154,7 +1155,7 @@
             transition: 0.2s;
             text-transform: uppercase;
         }
-        .run-btn:hover { background: rgba(0, 229, 160, 0.2); }
+        .run-btn:hover { background: rgba(61, 123, 255, 0.2); }
         .run-btn.running { 
             background: rgba(255, 95, 95, 0.1); 
             color: var(--red); 
@@ -1171,8 +1172,8 @@
         .bubble a[href*="supabase.co/storage"] {
             display: inline-flex;
             align-items: center;
-            background: rgba(0,229,160,0.07);
-            border: 1px solid rgba(0,229,160,0.18);
+            background: rgba(61,123,255,0.07);
+            border: 1px solid rgba(61,123,255,0.18);
             border-radius: 7px;
             padding: 5px 11px;
             font-family: 'JetBrains Mono', monospace;
@@ -1186,10 +1187,10 @@
         }
 
         .bubble a[href*="supabase.co/storage"]:hover {
-            background: rgba(0,229,160,0.15);
-            border-color: rgba(0,229,160,0.3);
+            background: rgba(61,123,255,0.15);
+            border-color: rgba(61,123,255,0.3);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,229,160,0.1);
+            box-shadow: 0 4px 12px rgba(61,123,255,0.1);
         }
 
         /* ============================================================
@@ -1285,7 +1286,7 @@
             flex-shrink: 0;
         }
         #themeToggle:hover {
-            border-color: rgba(0,229,160,0.4);
+            border-color: rgba(61,123,255,0.4);
             background: var(--accent-dim);
             transform: rotate(20deg);
         }
@@ -1402,7 +1403,7 @@
                 <div class="logo-dot"></div>
                 <div class="logo-text">
                     <h1><em>Pensée</em> IA</h1>
-                    <div class="creator-tag">by Yao Baba Ange Emmanuel</div>
+                    <div class="creator-tag">par KWENI LABS</div>
                 </div>
             </div>
         </div>
@@ -1417,9 +1418,9 @@
 
         <div id="sidebar-footer">
             <div id="userIdentity" style="display:flex;align-items:center;gap:8px;padding:6px 2px;">
-                <div id="userAvatar" style="width:24px;height:24px;border-radius:7px;background:var(--accent-dim);border:1px solid rgba(0,229,160,0.25);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;">?</div>
+                <div id="userAvatar" style="width:24px;height:24px;border-radius:7px;background:var(--accent-dim);border:1px solid rgba(61,123,255,0.25);display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;">?</div>
                 <div style="overflow:hidden;">
-                    <div id="userName" style="font-family:'Syne',sans-serif;font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">...</div>
+                    <div id="userName" style="font-family:'Montserrat',sans-serif;font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">...</div>
                     <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:0.07em;">ft. Max Steve Tanoh</div>
                 </div>
             </div>
@@ -1458,10 +1459,10 @@
         <button id="moreBtn" title="Plus d'options" onclick="document.getElementById('morePanel').style.display = document.getElementById('morePanel').style.display === 'none' ? 'block' : 'none'" style="font-size:14px;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 9px;cursor:pointer;transition:all 0.2s;line-height:1;" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">···</button>
 
         <div id="morePanel" style="display:none;position:absolute;top:52px;right:8px;min-width:180px;background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:8px;z-index:300;box-shadow:var(--shadow);">
-            <button id="exportBtn" onclick="document.getElementById('morePanel').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg> Exporter</button>
-            <button id="memoryBtn" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="10" cy="7" rx="7" ry="4.5"/><path d="M3 7v3c0 2.5 3.1 4.5 7 4.5s7-2 7-4.5V7"/><path d="M3 10v3c0 2.5 3.1 4.5 7 4.5s7-2 7-4.5v-3"/></svg> Mémoire</button>
+            <button id="exportBtn" onclick="document.getElementById('morePanel').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Montserrat',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M5 9l5 5 5-5"/><path d="M3 17h14"/></svg> Exporter</button>
+            <button id="memoryBtn" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Montserrat',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="10" cy="7" rx="7" ry="4.5"/><path d="M3 7v3c0 2.5 3.1 4.5 7 4.5s7-2 7-4.5V7"/><path d="M3 10v3c0 2.5 3.1 4.5 7 4.5s7-2 7-4.5v-3"/></svg> Mémoire</button>
             <div style="height:1px;background:var(--border);margin:4px 0;"></div>
-            <button id="aboutBtn" onclick="document.getElementById('morePanel').style.display='none';document.getElementById('aboutModal').style.display='flex';" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Syne',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="9" x2="10" y2="14"/><circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none"/></svg> À propos de la beta</button>
+            <button id="aboutBtn" onclick="document.getElementById('morePanel').style.display='none';document.getElementById('aboutModal').style.display='flex';" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text2);padding:10px 12px;cursor:pointer;font-size:12px;font-family:'Montserrat',sans-serif;border-radius:8px;transition:background 0.2s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="9" x2="10" y2="14"/><circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none"/></svg> À propos de la beta</button>
         </div>
 
         <!-- Panneau mémoire -->
@@ -1526,7 +1527,7 @@
 
         <!-- FOOTER -->
         <footer>
-            <small><em>Pensée IA</em> · Codage & Intelligence · Créé par <em>Yao Baba Ange Emmanuel</em></small>
+            <small><em>Pensée IA</em> · Codage & Intelligence · <span class="pz-endorse" id="footerEndorse">KWENI LABS</span></small>
         </footer>
 
     </div><!-- /mainArea -->
@@ -1616,20 +1617,20 @@
         </button>
         <!-- Logo -->
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
-            <div style="width:40px;height:40px;background:var(--accent-dim);border:1px solid rgba(0,229,160,0.25);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+            <div style="width:40px;height:40px;background:var(--accent-dim);border:1px solid rgba(61,123,255,0.25);border-radius:12px;display:flex;align-items:center;justify-content:center;">
                 <svg viewBox="0 0 100 100" width="22" height="22" fill="var(--accent)">
                     <circle cx="50" cy="50" r="26"/>
                 </svg>
             </div>
             <div>
-                <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text);">Pensée <em style="color:var(--accent);font-style:italic;">IA</em></div>
+                <div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:700;color:var(--text);">Pensée <em style="color:var(--accent);font-style:normal;font-weight:400;">IA</em></div>
                 <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:0.08em;">VERSION BÊTA · 2026</div>
             </div>
         </div>
         <!-- Description -->
-        <p style="font-family:'Syne',sans-serif;font-size:13px;color:var(--text2);line-height:1.65;margin-bottom:20px;">
+        <p style="font-family:'Montserrat',sans-serif;font-size:13px;color:var(--text2);line-height:1.65;margin-bottom:20px;">
             Pensée est ton assistant IA personnel — conçu pour penser avec toi, pas à ta place. Il s'adapte à ton contexte, retient ce que tu lui confies et génère des livrables réels.
-        </p>
+        <br><span style="font-size:11.5px;color:var(--text3);">Conçu par Yao Baba Ange Emmanuel.</span></p>
         <!-- Capacités -->
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Capacités disponibles</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px;">
@@ -1644,8 +1645,8 @@
         <div style="height:1px;background:var(--border);margin-bottom:16px;"></div>
         <!-- Footer -->
         <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);">by Yao Baba Ange Emmanuel</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(0,229,160,0.2);padding:3px 10px;border-radius:20px;">bêta publique</span>
+            <div id="aboutCredit"><span style="font-size:10px;color:var(--text3);">par KWENI LABS</span></div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(61,123,255,0.2);padding:3px 10px;border-radius:20px;">bêta publique</span>
         </div>
     </div>
 </div>
@@ -1655,7 +1656,7 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    font-family: 'Syne', sans-serif;
+    font-family: 'Montserrat', sans-serif;
     font-size: 11.5px;
     color: var(--text2);
     background: var(--bg3);
