@@ -84,6 +84,7 @@ export default async function handler(req) {
     const lastUserText = findLastUserText(contents);
     const taskText = findTaskText(contents) || lastUserText;
     const heavy = mode === 'chat' && isHeavyTask(agentId, taskText);
+    const light = mode === 'chat' && !heavy && !isContinuation && isLightChat(agentId, contents, lastUserText);
     const ui = heavy && UI_TASK.test(taskText);
     const backend = heavy && BACKEND_TASK.test(taskText);
     const docs = mode === 'chat' && DOC_WORK.test(taskText);
@@ -113,7 +114,7 @@ export default async function handler(req) {
 
             try {
                 const ok = await runAgent({
-                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, usage,
+                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, light, usage,
                     preferredModel: body.continuation?.model, apiKey: GEMINI_API_KEY, signal: req.signal,
                 });
                 if (!ok && !isContinuation && gateMode === 'legacy') await refundCredit(userId);
@@ -142,8 +143,8 @@ export default async function handler(req) {
 //  BOUCLE SERVEUR
 //  @returns {Promise<boolean>} false si aucun modèle n'a répondu
 // ============================================================
-async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, usage = { units: 0 }, preferredModel, apiKey, signal }) {
-    const cascade = modelCascade(agentId, preferredModel, heavy);
+async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, light = false, usage = { units: 0 }, preferredModel, apiKey, signal }) {
+    const cascade = modelCascade(agentId, preferredModel, heavy, light);
     let sigModel = isContinuation ? preferredModel : null; // modèle auteur des thoughtSignature présentes
     let emotionSent = false;
     let callSeq = 0;
@@ -391,9 +392,21 @@ function isHeavyTask(agentId, text) {
     if (agentId === 'code' && (t.length > 250 || /```/.test(t))) return true;
     return t.length > 1500; // longue demande détaillée, quel que soit l'agent
 }
+// Échange simple (salutation, petite question) : aucune pièce jointe, aucun outil à prévoir
+const NEEDS_TOOLS = /\b(recherch|cherch|actu|news|r[ée]cent|aujourd|maintenant|moment|actuel|derni[eè]r|tendance|prix|tarif|m[ée]t[ée]o|score|cours|code|python|script|programme|fonction|bug|erreur|fichier|pdf|word|excel|pptx?|image|photo|dessin|g[ée]n[èe]r|cr[ée]e|fais|fait|calcul|combien|analys|r[ée]sum|tradu|lien|site|url|http|www|20[2-9]\d)/i;
+function isLightChat(agentId, contents, text) {
+    if (agentId && !['default', 'creatif'].includes(agentId)) return false;
+    const t = (text || '').trim();
+    if (!t || t.length > 160 || NEEDS_TOOLS.test(t) || /\d\s*[-+*/x×÷^]\s*\d/.test(t)) return false;
+    const last = contents[contents.length - 1];
+    if (!last || last.role !== 'user' || last.parts.some(p => p.inlineData || (typeof p.text === 'string' && p.text.startsWith('DOCUMENT JOINT')))) return false;
+    // Une conversation déjà engagée dans un travail d'outils reste sur les modèles outillés
+    return !contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
+}
+
 function forcedTools(agentId, text) {
     if (agentId === 'recherche') return ['web_search'];
-    if (agentId === 'audit') return ['run_python', 'bash', 'read_file', 'list_files'];
+    if (agentId === 'audit') return ['run_python', 'bash', 'read_file', 'list_files', 'search_files'];
     // Tâches de code lourdes : pas d'appel imposé (le mode ANY interdit de rédiger le plan
     // avant d'agir) ; les modèles Flash complets choisissent leurs outils eux-mêmes.
     if (EXPLICIT_RUN.test(text || '') && !CODE_WORK.test(text || '')) return ['run_python', 'bash'];

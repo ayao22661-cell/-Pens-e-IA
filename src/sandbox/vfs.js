@@ -29,7 +29,8 @@ function tx(mode, fn) {
     return db().then(d => new Promise((resolve, reject) => {
         const t = d.transaction(STORE, mode);
         const result = fn(t.objectStore(STORE));
-        t.oncomplete = () => resolve(result?.result ?? result);
+        // Une IDBRequest sur une clé absente a result === undefined : ne pas renvoyer la requête elle-même
+        t.oncomplete = () => resolve(result instanceof IDBRequest ? result.result : result);
         t.onerror = () => reject(t.error);
         t.onabort = () => reject(t.error);
     }));

@@ -37,6 +37,7 @@ export const TOOL_LABELS = {
     edit_file: { icon: ICONS.pencil, label: 'Modification' },
     read_file: { icon: ICONS.file, label: 'Lecture' },
     list_files: { icon: ICONS.folder, label: 'Fichiers' },
+    search_files: { icon: ICONS.search, label: 'Recherche dans le code' },
     render_preview: { icon: ICONS.eye, label: 'Aperçu' },
     web_search: { icon: ICONS.search, label: 'Recherche web' },
     fetch_url: { icon: ICONS.globe, label: 'Lecture web' },

@@ -272,6 +272,21 @@ body[data-theme="light"] .bubble pre { color: var(--text); }
 .pz-preview { border-radius: 16px; }
 .pz-note { font-family: var(--font-read); }
 
+/* Plan vivant (outil update_plan) : cases carrées, comme le point Labs */
+.pz-plan { border: 1px solid var(--border2); border-radius: 16px; background: var(--bg2); padding: 12px 16px 10px; margin: 6px 0 14px; }
+.pz-plan-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+    font-family: var(--font-brand); font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text3); }
+.pz-plan-count { color: var(--accent); letter-spacing: 0.05em; }
+.pz-plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.pz-plan-list li { display: flex; align-items: baseline; gap: 10px; font-family: var(--font-read); font-size: 13.5px; line-height: 1.45; color: var(--text2); }
+.pz-plan-list li::before { content: ''; flex-shrink: 0; width: 9px; height: 9px; transform: translateY(1px); border: 1.5px solid var(--border2); }
+.pz-plan-list li[data-status="done"] { color: var(--text3); text-decoration: line-through; text-decoration-color: var(--border2); }
+.pz-plan-list li[data-status="done"]::before { background: var(--accent); border-color: var(--accent); }
+.pz-plan-list li[data-status="in_progress"] { color: var(--text); font-weight: 600; }
+.pz-plan-list li[data-status="in_progress"]::before { border-color: var(--accent); background: var(--accent-dim); animation: pz-caret 1.2s ease-in-out infinite; }
+.pz-retry { margin-top: 8px; align-self: flex-start; width: auto; display: inline-flex; border: 1px solid var(--border2) !important; color: var(--accent) !important; }
+.pz-retry:disabled { opacity: 0.5; cursor: default; }
+
 /* ── Accueil ────────────────────────────────────────────────── */
 #welcomeScreen { gap: 8px; padding-bottom: 8px; }
 .welcome-logo { width: 64px; height: 64px; margin-bottom: 18px; }

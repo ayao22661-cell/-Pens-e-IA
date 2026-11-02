@@ -119,10 +119,11 @@ async function runTurn({ text, dbText = text, files = [], agentId }) {
 
     const view = new TurnView(agentId);
     let result = null;
+    let storedUserText = dbText;
 
     try {
         const links = files.length ? await uploadAttachments(files) : [];
-        const storedUserText = links.length ? `**Fichiers joints :** ${links.join(' | ')}\n\n${dbText}` : dbText;
+        if (links.length) storedUserText = `**Fichiers joints :** ${links.join(' | ')}\n\n${dbText}`;
         const [, memory] = await Promise.all([saveMessage('user', storedUserText, tabId), searchMemory(text)]);
 
         result = await runAgentTurn({ userText: text, files, agentId, memory, view, signal: controller.signal });
@@ -144,6 +145,15 @@ async function runTurn({ text, dbText = text, files = [], agentId }) {
             onSuggestion: (s) => { els.userInput.value = s; els.userInput.focus(); refreshSendButton(); },
         });
 
+        if (result.limitReached) {
+            view.action('Continuer', () => {
+                if (state.busy || state.activeTabId !== tabId) return;
+                addMessage('user', 'Continue');
+                runTurn({ text: 'Continue exactement là où tu t’es arrêté, sans répéter ce qui est fait.', dbText: 'Continue', agentId })
+                    .finally(() => updateAgentBadge(state.activeAgentId));
+            });
+        }
+
         await persistAssistant(tabId, storedUserText, result);
         saveKnowledge(text, result.text, agentId);
         setStatus(isBlocked() ? 'warn' : 'ok');
@@ -155,10 +165,21 @@ async function runTurn({ text, dbText = text, files = [], agentId }) {
                 await persistAssistant(tabId, dbText, { text: partial + '\n\n*[Génération interrompue]*', sources: [], trace: [] });
             }
         } else {
-            view.fail(e.message || 'Erreur réseau.');
+            const reason = e.message || 'Erreur réseau.';
+            const quotaHit = e.status === 429 || e.status === 403;
+            // Les quotas épuisés ne se règlent pas en réessayant tout de suite
+            view.fail(reason, quotaHit ? null : () => {
+                if (state.busy || state.activeTabId !== tabId) return;
+                runTurn({ text, dbText, files, agentId }).finally(() => updateAgentBadge(state.activeAgentId));
+            });
             if (e.status === 429 && e.data?.quota) setQuota(e.data.quota);
             else if (e.status === 403) setCredits(0);
             setStatus('err');
+            // Trace l'échec dans la conversation : sans ça, la question reste seule au rechargement
+            const partial = view.fullText();
+            await persistAssistant(tabId, storedUserText, {
+                text: (partial ? partial + '\n\n' : '') + `*[Pensée n'a pas pu terminer sa réponse : ${reason}]*`,
+            }).catch(() => {});
         }
     } finally {
         if (state.abortController === controller) state.abortController = null;

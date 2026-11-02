@@ -280,6 +280,52 @@ export const CLIENT_TOOLS = {
         };
     },
 
+    // Le plan est affiché par la vue du tour (src/agent/loop.js) ; ici on accuse réception
+    async update_plan({ steps = [] }) {
+        const list = Array.isArray(steps) ? steps : [];
+        const done = list.filter(s => s?.status === 'done').length;
+        return { ok: true, summary: `${done}/${list.length}`, response: { ok: true, steps: list.length, done } };
+    },
+
+    async search_files({ pattern = '', path, max_results = 40 }, { ws, terminal }) {
+        let re;
+        try { re = new RegExp(String(pattern), 'gi'); } catch (e) {
+            return { ok: false, summary: 'regex invalide', response: { error: `Expression invalide : ${e.message}` } };
+        }
+        const limit = Math.min(150, Math.max(1, Number(max_results) || 40));
+        const targets = path ? [{ path: String(path) }] : (await vfs.list(ws)).filter(f => !f.binary || isTextPath(f.path));
+        if (path && !(await vfs.read(ws, path))) return { ok: false, summary: 'introuvable', response: { error: `Fichier introuvable : ${path}. Utilise list_files.` } };
+
+        const matches = [];
+        let total = 0;
+        for (const f of targets) {
+            const text = await vfs.readText(ws, f.path);
+            if (text === null) continue;
+            // Index des débuts de ligne : numéro de ligne d'une position en O(log n)
+            const starts = [0];
+            for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) starts.push(i + 1);
+            re.lastIndex = 0;
+            for (let m = re.exec(text); m; m = re.exec(text)) {
+                if (m[0] === '') { re.lastIndex++; continue; }
+                total++;
+                if (matches.length < limit) {
+                    let lo = 0, hi = starts.length - 1;
+                    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (starts[mid] <= m.index) lo = mid; else hi = mid - 1; }
+                    const from = Math.max(starts[lo], m.index - 120);
+                    const lineEnd = text.indexOf('\n', m.index);
+                    const to = Math.min(lineEnd === -1 ? text.length : lineEnd, m.index + m[0].length + 120);
+                    matches.push({ file: f.path, line: lo + 1, column: m.index - starts[lo] + 1, excerpt: text.slice(from, to).trim() });
+                }
+            }
+        }
+        terminal.log(`recherche /${pattern}/ : ${total} occurrence(s)`, 'info');
+        return {
+            ok: true,
+            summary: `${total} occurrence(s)`,
+            response: { pattern, total, shown: matches.length, matches, ...(total > matches.length ? { note: 'Résultats tronqués : affine l\'expression ou précise path.' } : {}) },
+        };
+    },
+
     async render_preview({ path, title }, { ws, card, terminal }) {
         let doc;
         const probeId = 'pz' + Math.random().toString(36).slice(2);

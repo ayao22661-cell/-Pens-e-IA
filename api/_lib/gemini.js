@@ -33,8 +33,11 @@ const HEAVY_CASCADE = [
     'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemma-4-31b-it', 'gemma-4-26b-a4b-it',
 ];
 
-export function modelCascade(agentId, preferred, heavy = false) {
+export function modelCascade(agentId, preferred, heavy = false, light = false) {
     const list = [...(heavy ? HEAVY_CASCADE : (CASCADES[agentId] || CASCADES.default))];
+    // Échange simple : Gemma d'abord (≈ 14 400 req/jour, ½ message de quota) pour garder
+    // le quota Flash (Lite ≈ 500/jour, Flash ≈ 20/jour) aux vraies tâches.
+    if (light && !heavy) list.sort((a, b) => isGemma(b) - isGemma(a));
     // Le client ne peut que RÉORDONNER la cascade (continuité d'un tour d'outils),
     // jamais y introduire un modèle arbitraire.
     if (preferred && list.includes(preferred)) {

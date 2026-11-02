@@ -1,9 +1,10 @@
 // ============================================================
 //  PENSÉE IA — sw.js (Service Worker PWA)
-//  Stratégie : Cache-First pour assets statiques, Network-First pour l'API
+//  Stratégie : Network-First pour tout (le cache ne sert que hors ligne),
+//  pour qu'un déploiement atteigne immédiatement tous les utilisateurs.
 // ============================================================
 
-const CACHE_NAME = 'pensee-ia-v2';
+const CACHE_NAME = 'pensee-ia-v3'; // changer de nom purge les anciens caches
 
 // Assets statiques à pré-mettre en cache au premier chargement
 const PRECACHE_ASSETS = [
@@ -55,22 +56,16 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // ③ Assets statiques propres → Cache-First avec fallback réseau
+    // ③ Assets statiques propres → Network-First, cache en secours hors ligne.
+    //    (Cache-First servait l'ancien code indéfiniment après chaque déploiement.)
+    if (event.request.method !== 'GET') return;
     event.respondWith(
-        caches.match(event.request).then((cached) => {
-            if (cached) return cached;
-
-            return fetch(event.request).then((response) => {
-                // On ne cache que les réponses valides
-                if (!response || response.status !== 200 || response.type !== 'basic') {
-                    return response;
-                }
+        fetch(event.request).then((response) => {
+            if (response && response.status === 200 && response.type === 'basic') {
                 const toCache = response.clone();
-                caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(event.request, toCache);
-                });
-                return response;
-            });
-        })
+                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, toCache));
+            }
+            return response;
+        }).catch(() => caches.match(event.request))
     );
 });

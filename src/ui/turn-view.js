@@ -161,6 +161,33 @@ export class TurnView {
         scrollToBottom();
     }
 
+    /** Plan vivant (outil update_plan) : un seul bloc par tour, mis à jour en place. */
+    plan(steps) {
+        const list = (Array.isArray(steps) ? steps : []).filter(s => s && s.title);
+        if (!list.length) return;
+        if (!this.planEl) {
+            this._endSegment();
+            this.planEl = document.createElement('div');
+            this.planEl.className = 'pz-plan';
+            this.flow.appendChild(this.planEl);
+        }
+        const done = list.filter(s => s.status === 'done').length;
+        this.planEl.innerHTML = `<div class="pz-plan-head"><span>Plan</span><span class="pz-plan-count">${done}/${list.length}</span></div>`
+            + '<ol class="pz-plan-list">'
+            + list.map(s => `<li data-status="${['done', 'in_progress'].includes(s.status) ? s.status : 'pending'}">${escapeHtml(String(s.title))}</li>`).join('')
+            + '</ol>';
+        scrollToBottom();
+    }
+
+    /** Bouton d'action sous la réponse (ex. « Continuer »). */
+    action(label, onClick) {
+        const b = document.createElement('button');
+        b.className = 'copy-btn pz-retry';
+        b.textContent = label;
+        b.addEventListener('click', () => { b.disabled = true; onClick(); }, { once: true });
+        this.append(b);
+    }
+
     note(text, kind = 'info') {
         const div = document.createElement('div');
         div.className = `pz-note pz-note-${kind}`;
@@ -225,12 +252,14 @@ export class TurnView {
         scrollToBottom();
     }
 
-    fail(message) {
+    /** @param {string} message @param {() => void} [onRetry] affiche un bouton « Réessayer » */
+    fail(message, onRetry) {
         this._stopWaiting();
         this.setState(null);
         this._closeThinking();
         this._endSegment();
         this.note('· ' + message, 'error');
+        if (onRetry) this.action('Réessayer', onRetry);
     }
 
     _copyButton(text) {

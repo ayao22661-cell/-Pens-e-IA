@@ -46,6 +46,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
     let heavy = false;
     let reviewed = false;
     let qualityRetries = 0;
+    let limitReached = false;
     const sources = [];
     const trace = [];
 
@@ -76,6 +77,12 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
                     case 'thinking': view.thinking(ev.v); break;
                     case 'text': view.text(ev.v); break;
                     case 'tool_call': {
+                        if (ev.name === 'update_plan') {
+                            // Pas de carte : le plan vivant en tête de réponse est mis à jour
+                            view.plan(ev.args?.steps);
+                            clientCalls.push({ ...ev, card: null });
+                            break;
+                        }
                         const card = view.toolStart(ev);
                         if (ev.where === 'client') clientCalls.push({ ...ev, card });
                         else terminal.log(`${ev.name} ${JSON.stringify(ev.args)}`, 'cmd');
@@ -110,11 +117,12 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
         // ── Exécution locale des outils demandés ──────────────
         const responses = { ...done.serverResponses };
         let allFinal = true;
+        let anyFinal = false;
         for (const call of clientCalls) {
             if (signal.aborted) throw new DOMException('Annulé', 'AbortError');
             const res = await executeClientTool(call.name, call.args, { ws, card: call.card, terminal });
             view.toolEnd(call.id, res);
-            trace.push({ name: call.name, summary: traceSummary(call), ok: res.ok });
+            if (call.name !== 'update_plan') trace.push({ name: call.name, summary: traceSummary(call), ok: res.ok });
 
             const meta = done.callMeta?.[call.id] || {};
             responses[call.id] = {
@@ -122,12 +130,14 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
             };
             const qualityRetry = res.continue && qualityRetries < MAX_QUALITY_RETRIES;
             if (qualityRetry) qualityRetries++;
+            if (call.name === 'update_plan') continue; // neutre : ni livrable, ni raison de relancer
             if (!FINAL_TOOLS.has(call.name) || !res.ok || qualityRetry) allFinal = false;
+            else anyFinal = true;
         }
         contents.push({ role: 'user', parts: done.order.map(id => responses[id]).filter(Boolean) });
 
         // Livrables affichés sans erreur : inutile de relancer le modèle… sauf relecture due
-        if (allFinal) {
+        if (allFinal && anyFinal) {
             if (heavy && !reviewed && trace.some(t => CODE_TOOLS.has(t.name)) && step < CONFIG.maxAgentSteps - 2) {
                 reviewed = true;
                 view.note('Auto-vérification du travail…');
@@ -136,11 +146,14 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
             }
             break;
         }
-        if (step === CONFIG.maxAgentSteps - 1) view.note(`Limite de ${CONFIG.maxAgentSteps} étapes atteinte. Dis « continue » pour poursuivre.`, 'warn');
+        if (step === CONFIG.maxAgentSteps - 1) {
+            limitReached = true;
+            view.note(`Limite de ${CONFIG.maxAgentSteps} étapes atteinte pour ce message.`, 'warn');
+        }
     }
 
     await handleLegacyMarkers(view);
-    return { text: view.fullText(), sources, trace };
+    return { text: view.fullText(), sources, trace, limitReached };
 }
 
 function onServerResult(ev, { view, sources, trace }) {

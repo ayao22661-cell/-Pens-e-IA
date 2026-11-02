@@ -143,6 +143,41 @@ export const TOOLS = {
         description: 'Liste les fichiers de /workspace avec leur taille.',
         parameters: { type: 'OBJECT', properties: {} },
     },
+    update_plan: {
+        where: 'client',
+        description: "Affiche à l'utilisateur ton plan de travail sous forme de liste d'étapes cochées au fil de l'avancement. "
+            + "Pour toute tâche en plusieurs étapes : appelle-le au début avec toutes les étapes, puis à chaque étape terminée. "
+            + "Appelle-le TOUJOURS dans la même réponse qu'un autre outil (jamais seul), il ne coûte alors rien.",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                steps: arrayOf({
+                    type: 'OBJECT',
+                    properties: {
+                        title: S('Étape courte, à l\'infinitif (ex : "Lire le système de transferts").'),
+                        status: { type: 'STRING', enum: ['pending', 'in_progress', 'done'], description: 'État de l\'étape.' },
+                    },
+                    required: ['title', 'status'],
+                }, 'Toutes les étapes du plan, dans l\'ordre (3 à 8).'),
+            },
+            required: ['steps'],
+        },
+    },
+    search_files: {
+        where: 'client',
+        description: "Cherche une expression (regex JavaScript, insensible à la casse) dans les fichiers texte de /workspace. "
+            + "Renvoie chaque occurrence avec son numéro de ligne et l'extrait autour, même dans du code minifié sur une seule ligne. "
+            + "À utiliser AVANT read_file pour trouver où se trouve une fonction, une variable ou un système dans un gros fichier.",
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                pattern: S('Expression à chercher, ex: "transfert|transfer" ou "function\\\\s+calcBudget".'),
+                path: S('Fichier à fouiller (tous les fichiers texte si absent).'),
+                max_results: { type: 'INTEGER', description: 'Nombre maximum de résultats (40 par défaut, 150 max).' },
+            },
+            required: ['pattern'],
+        },
+    },
     render_preview: {
         where: 'client',
         final: true,
