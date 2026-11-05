@@ -13,6 +13,7 @@ import { AGENTS_CONFIG, detectAgent, initAgentSelector, setActiveAgent, handleAg
 import { generateImage } from './generators.js';
 import { getAccessToken } from './supabase.js';
 import { runAgentTurn } from './agent/loop.js';
+import { initTierPicker } from './tiers.js';
 import { initCodeRunner } from './sandbox/code-runner.js';
 import { initTerminal, terminal } from './ui/terminal.js';
 import { initVoiceInput } from './ui/voice-input.js';
@@ -256,6 +257,7 @@ async function sendMessage() {
 function init() {
     mountBrand();
     initAgentSelector();
+    initTierPicker();
     initSidebar();
     initFileInputs();
     initVoiceInput();

@@ -22,8 +22,9 @@ import { getKnowledgeContext } from './_lib/knowledge-context.js';
 import { functionDeclarations, toolWhere, runServerTool } from './_lib/tools.js';
 import {
     modelCascade, isGemma, streamGenerate, consumeStream, toPlainContents,
-    neutralizeSignatures, THINKING_VARIANTS, thinkingConfig,
+    neutralizeSignatures,
 } from './_lib/gemini.js';
+import { resolveTier, TIERS, THINKING_BY_EFFORT, thinkingParams, engineCode, engineFromCode, lowerEffort } from './_lib/tiers.js';
 import { performWebSearch } from './search.js';
 
 const MAX_OUTPUT = {
@@ -38,7 +39,7 @@ const MAX_TOOL_RESPONSE_CHARS = 30000;
 
 // Délai max avant le PREMIER octet d'un modèle : au-delà, il est considéré bloqué
 // et on passe au suivant (avant, un modèle muet gelait la réponse jusqu'à 5 min).
-const FIRST_CHUNK_MS = { light: 9000, normal: 20000, heavy: 45000 };
+const FIRST_CHUNK_MS = { aucune: 9000, faible: 20000, moyenne: 25000, elevee: 45000 };
 const IDLE_MS = 60000;            // silence max en plein flux
 const HEARTBEAT_MS = 8000;        // ping vers le client : les réseaux mobiles coupent les connexions muettes
 const SLOW_COOLDOWN_MS = 60 * 1000;
@@ -97,6 +98,8 @@ export default async function handler(req) {
     const ui = heavy && UI_TASK.test(taskText);
     const backend = heavy && BACKEND_TASK.test(taskText);
     const docs = mode === 'chat' && DOC_WORK.test(taskText);
+    // Type d'IA (choisi ou automatique) et niveau de réflexion adapté à la tâche
+    const { tier, effort } = resolveTier(body.tier, { mode, agentId, text: taskText, heavy, light });
     const knowledge = await knowledgeP;
     const context = body.context || {};
     const systemFor = (toolsEnabled, textTools = false) => buildSystemInstruction({
@@ -119,14 +122,14 @@ export default async function handler(req) {
         async start(controller) {
             let closed = false;
             const send = (ev) => { if (!closed) controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n')); };
-            send({ t: 'meta', turnToken, credits, quota, heavy });
+            send({ t: 'meta', turnToken, credits, quota, heavy, tier, tierLabel: TIERS[tier].label, effort });
             const heartbeat = setInterval(() => { try { send({ t: 'ping' }); } catch (_) { /* flux fermé */ } }, HEARTBEAT_MS);
             const usage = { units: 0 }; // requêtes modèle réellement servies (pondérées)
 
             try {
                 const ok = await runAgent({
-                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, light, usage,
-                    preferredModel: body.continuation?.model, apiKey: GEMINI_API_KEY, signal: req.signal,
+                    send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, light, tier, effort, usage,
+                    preferredModel: engineFromCode(body.continuation?.model), apiKey: GEMINI_API_KEY, signal: req.signal,
                 });
                 if (!ok && !isContinuation && gateMode === 'legacy') await refundCredit(userId);
             } catch (e) {
@@ -156,8 +159,8 @@ export default async function handler(req) {
 //  BOUCLE SERVEUR
 //  @returns {Promise<boolean>} false si aucun modèle n'a répondu
 // ============================================================
-async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, light = false, usage = { units: 0 }, preferredModel, apiKey, signal }) {
-    const cascade = modelCascade(agentId, preferredModel, heavy, light);
+async function runAgent({ send, contents, agentId, mode, isContinuation, systemFor, lastUserText, heavy, light = false, tier, effort = 'faible', usage = { units: 0 }, preferredModel, apiKey, signal }) {
+    const cascade = modelCascade(agentId, preferredModel, heavy, light, tier);
     let sigModel = isContinuation ? preferredModel : null; // modèle auteur des thoughtSignature présentes
     let emotionSent = false;
     let callSeq = 0;
@@ -166,11 +169,13 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
     for (let round = 0; round < MAX_SERVER_ROUNDS; round++) {
         const firstRound = round === 0 && !isContinuation;
         const result = await callWithCascade({
-            cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText, heavy, light, sigModel,
-            thinkingShift: emptyRetries,
+            cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText, heavy, sigModel,
+            // Après une réponse vide : réflexion d'un cran plus légère
+            effort: lowerEffort(effort, emptyRetries),
             forceTools: firstRound ? forcedTools(agentId, lastUserText) : null,
             allowPreSearch: firstRound,
-            onModel: (model) => { usage.units += unitCost(model); send({ t: 'model', v: model }); },
+            // Le client ne reçoit qu'un code opaque, jamais le nom du fournisseur
+            onModel: (model) => { usage.units += unitCost(model); send({ t: 'model', v: engineCode(model) }); },
             handlers: {
                 onText: (v) => send({ t: 'text', v }),
                 onThinking: (v) => send({ t: 'thinking', v }),
@@ -201,7 +206,7 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
             if (emptyRetries >= 2 && cascade.length > 1) cascade.push(cascade.shift());
             const why = [finishReason || 'sans raison', result.usage?.thoughtsTokenCount ? `réflexion ${result.usage.thoughtsTokenCount} tokens` : '']
                 .filter(Boolean).join(', ');
-            send({ t: 'notice', v: `${malformed ? "Appel d'outil mal formé" : 'Réponse vide'} (${result.model} · ${why}) — nouvelle tentative…` });
+            send({ t: 'notice', v: `${malformed ? "Appel d'outil mal formé" : 'Réponse vide'} (${why}) — nouvelle tentative…` });
             nudgeLastUser(contents, malformed
                 ? "[Consigne système] Ton dernier appel d'outil était mal formé (JSON invalide ou contenu trop long). Reprends exactement où tu en étais. Découpe les gros fichiers : write_file de moins de 250 lignes, puis complète avec d'autres write_file (fichiers séparés) ou edit_file. Échappe correctement les guillemets et retours à la ligne."
                 : "[Consigne système] Ta dernière réponse était vide. Reprends où tu en étais : annonce ton plan en une phrase puis appelle l'outil nécessaire, ou donne ta réponse finale.");
@@ -280,8 +285,8 @@ const isSaturated = (m) => (saturated.get(m) || 0) > Date.now();
 // ============================================================
 //  CASCADE DE MODÈLES
 // ============================================================
-async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, light = false, sigModel, thinkingShift = 0, onModel, handlers }) {
-    const firstChunkMs = heavy ? FIRST_CHUNK_MS.heavy : light ? FIRST_CHUNK_MS.light : FIRST_CHUNK_MS.normal;
+async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, effort = 'faible', sigModel, onModel, handlers }) {
+    const firstChunkMs = FIRST_CHUNK_MS[effort] || FIRST_CHUNK_MS.faible;
     const hasToolParts = contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
 
     // Les modèles saturés passent en fin de liste (jamais exclus : le quota peut être revenu)
@@ -290,16 +295,16 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
         const gemma = isGemma(model);
         // Gemma : outils via le protocole texte (<tool_call>), pas de function calling natif
         let useTools = mode === 'chat';
-        // Échange simple (salut, petite question) : pas de réflexion, réponse immédiate
-        const variants = gemma || light ? ['off'] : THINKING_VARIANTS[heavy ? 'heavy' : 'normal'];
-        let variant = Math.min(thinkingShift, variants.length - 1); // après une réponse vide : réflexion moins gourmande
+        // Réflexion selon la tâche (aucune pour un échange simple) ; Gemma n'a pas ce paramètre
+        const variants = gemma ? ['none'] : THINKING_BY_EFFORT[effort];
+        let variant = 0;
         const modelContents = sigModel && model !== sigModel && hasToolParts ? neutralizeSignatures(contents) : contents;
 
         // Plusieurs variantes par modèle si le 400 vient d'un paramètre non supporté
         for (let attempt = 0; attempt < 6; attempt++) {
             const body = await buildBody({
                 model, contents: modelContents, agentId, mode, systemFor, useTools, heavy,
-                thinking: thinkingConfig(variants[variant]),
+                thinking: thinkingParams(variants[variant]),
                 forceTools: useTools && !gemma ? forceTools : null,
                 preSearchQuery: allowPreSearch && !useTools && mode === 'chat' ? preSearchQuery(agentId, lastUserText) : null,
             });

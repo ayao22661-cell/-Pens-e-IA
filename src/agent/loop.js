@@ -20,6 +20,7 @@ import { streamChat, ApiError } from './stream.js';
 import { buildContents } from './history.js';
 import { executeClientTool, FINAL_TOOLS } from './tools.js';
 import { workspaceBrief, compactOldResults } from './context.js';
+import { showResolvedTier } from '../tiers.js';
 
 const MAX_QUALITY_RETRIES = 2; // corrections demandées par le contrôle qualité des documents
 const CODE_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'run_python']);
@@ -58,6 +59,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
         await streamChat({
             agentId: agentId || 'default',
             mode: 'chat',
+            tier: state.tier || 'auto',
             messages: contents,
             context,
             continuation: token ? { token, model } : undefined,
@@ -70,6 +72,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
                         if (typeof ev.credits === 'number') setCredits(ev.credits);
                         if (ev.quota) setQuota(ev.quota);
                         if (ev.heavy) heavy = true;
+                        if (ev.tierLabel) showResolvedTier(ev);
                         break;
                     case 'model': model = ev.v; break;
                     case 'emotion': view.emotion(ev.v); break;

@@ -33,13 +33,30 @@ const HEAVY_CASCADE = [
     'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemma-4-31b-it', 'gemma-4-26b-a4b-it',
 ];
 
-export function modelCascade(agentId, preferred, heavy = false, light = false) {
-    const list = [...(heavy ? HEAVY_CASCADE : (CASCADES[agentId] || CASCADES.default))];
+// Pensée Éclair : modèles Lite et Gemma d'abord (rapides, gros quota), Flash complet en secours
+const ECLAIR_CASCADE = [
+    'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemma-4-26b-a4b-it',
+    'gemini-3.6-flash', 'gemini-3.7-flash', 'gemma-4-31b-it',
+];
+
+/**
+ * @param {string} agentId
+ * @param {string|null} preferred  modèle à garder en tête (continuité d'un tour d'outils)
+ * @param {boolean} heavy
+ * @param {boolean} light
+ * @param {'eclair'|'equilibre'|'profonde'} [tier]
+ */
+export function modelCascade(agentId, preferred, heavy = false, light = false, tier = null) {
+    const base = tier === 'profonde' ? HEAVY_CASCADE
+        : tier === 'eclair' ? ECLAIR_CASCADE
+        : tier === 'equilibre' ? (CASCADES[agentId] || CASCADES.default)
+        : heavy ? HEAVY_CASCADE : (CASCADES[agentId] || CASCADES.default);
+    const list = [...base];
     // Échange simple : Gemma d'abord (≈ 14 400 req/jour, ½ message de quota) pour garder
     // le quota Flash (Lite ≈ 500/jour, Flash ≈ 20/jour) aux vraies tâches.
     // Le Gemma MoE (4B actifs) passe avant le 31B dense, nettement plus lent à répondre ;
     // le 31B reste en dernier secours pour ces échanges.
-    if (light && !heavy) {
+    if (light && !heavy && tier !== 'profonde') {
         const fast = list.filter(m => m === 'gemma-4-26b-a4b-it');
         const slow = list.filter(m => m === 'gemma-4-31b-it');
         list.splice(0, list.length, ...fast, ...list.filter(m => !isGemma(m)), ...slow);
@@ -65,21 +82,6 @@ export function neutralizeSignatures(contents) {
         role: c.role,
         parts: c.parts.map(p => (p.thoughtSignature ? { ...p, thoughtSignature: 'skip_thought_signature_validator' } : p)),
     }));
-}
-
-// Niveaux de réflexion essayés dans l'ordre ; on descend d'un cran si le modèle refuse le paramètre.
-export const THINKING_VARIANTS = {
-    heavy: ['high', 'dynamic', 'basic', 'off'],
-    normal: ['basic', 'off'],
-};
-
-export function thinkingConfig(variant) {
-    switch (variant) {
-        case 'high': return { includeThoughts: true, thinkingLevel: 'high' };
-        case 'dynamic': return { includeThoughts: true, thinkingBudget: -1 };
-        case 'basic': return { includeThoughts: true };
-        default: return null;
-    }
 }
 
 export function streamGenerate(model, body, apiKey, signal) {
