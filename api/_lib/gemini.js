@@ -37,7 +37,13 @@ export function modelCascade(agentId, preferred, heavy = false, light = false) {
     const list = [...(heavy ? HEAVY_CASCADE : (CASCADES[agentId] || CASCADES.default))];
     // Échange simple : Gemma d'abord (≈ 14 400 req/jour, ½ message de quota) pour garder
     // le quota Flash (Lite ≈ 500/jour, Flash ≈ 20/jour) aux vraies tâches.
-    if (light && !heavy) list.sort((a, b) => isGemma(b) - isGemma(a));
+    // Le Gemma MoE (4B actifs) passe avant le 31B dense, nettement plus lent à répondre ;
+    // le 31B reste en dernier secours pour ces échanges.
+    if (light && !heavy) {
+        const fast = list.filter(m => m === 'gemma-4-26b-a4b-it');
+        const slow = list.filter(m => m === 'gemma-4-31b-it');
+        list.splice(0, list.length, ...fast, ...list.filter(m => !isGemma(m)), ...slow);
+    }
     // Le client ne peut que RÉORDONNER la cascade (continuité d'un tour d'outils),
     // jamais y introduire un modèle arbitraire.
     if (preferred && list.includes(preferred)) {
@@ -198,8 +204,20 @@ export class TagFilter {
 //  Retourne le contenu "model" à réinjecter dans l'historique
 //  (texte nettoyé + functionCall avec leurs thoughtSignature).
 // ============================================================
-export async function consumeStream(response, { onText, onThinking, onEmotion }) {
-    const reader = response.body.getReader();
+export async function consumeStream(response, { onText, onThinking, onEmotion }, { reader: given, first, idleMs = 0 } = {}) {
+    const reader = given || response.body.getReader();
+    let pending = first || null; // premier morceau déjà lu (sonde de latence)
+    let idleTimedOut = false;
+    // Lecture avec délai d'inactivité : un flux bloqué ne doit pas geler la réponse indéfiniment
+    const readNext = () => {
+        if (pending) { const p = pending; pending = null; return Promise.resolve(p); }
+        if (!idleMs) return reader.read();
+        let timer;
+        return Promise.race([
+            reader.read(),
+            new Promise(resolve => { timer = setTimeout(() => { idleTimedOut = true; resolve({ done: true }); }, idleMs); }),
+        ]).finally(() => clearTimeout(timer));
+    };
     const decoder = new TextDecoder();
     const parts = [];
     const calls = [];
@@ -253,7 +271,7 @@ export async function consumeStream(response, { onText, onThinking, onEmotion })
     };
 
     while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readNext();
         if (done) break;
         sseBuf += decoder.decode(value, { stream: true });
         const lines = sseBuf.split('\n');
@@ -270,6 +288,11 @@ export async function consumeStream(response, { onText, onThinking, onEmotion })
             if (cand?.finishReason) finishReason = cand.finishReason;
             for (const p of cand?.content?.parts || []) handlePart(p);
         }
+    }
+    if (idleTimedOut) {
+        reader.cancel().catch(() => {});
+        console.warn('[PENSÉE] flux modèle inactif, coupé après', idleMs, 'ms');
+        if (!finishReason) finishReason = 'TIMEOUT';
     }
     filter.end();
 

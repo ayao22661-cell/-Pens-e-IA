@@ -4,7 +4,7 @@
 //  pour qu'un déploiement atteigne immédiatement tous les utilisateurs.
 // ============================================================
 
-const CACHE_NAME = 'pensee-ia-v3'; // changer de nom purge les anciens caches
+const CACHE_NAME = 'pensee-ia-v4'; // changer de nom purge les anciens caches
 
 // Assets statiques à pré-mettre en cache au premier chargement
 const PRECACHE_ASSETS = [
@@ -41,18 +41,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // ① Requêtes API → toujours réseau (pas de cache pour les réponses IA)
-    if (url.pathname.startsWith('/api/')) {
-        event.respondWith(fetch(event.request));
-        return;
-    }
-
-    // ② Supabase & CDNs externes → réseau pur, pas de cache
-    if (url.hostname.includes('supabase') ||
-        url.hostname.includes('googleapis') ||
-        url.hostname.includes('cdn.jsdelivr') ||
-        url.hostname.includes('cdnjs')) {
-        event.respondWith(fetch(event.request));
+    // ① Requêtes API, Supabase & CDNs externes → le service worker ne s'en mêle PAS.
+    //    Relayer via respondWith(fetch()) mettait en mémoire tampon le flux de /api/chat
+    //    sur mobile (Safari iOS, certains Chrome Android) : réponse affichée d'un bloc,
+    //    très tard, ou jamais. Sans respondWith, le navigateur gère la requête lui-même.
+    if (url.pathname.startsWith('/api/') ||
+        url.origin !== self.location.origin) {
         return;
     }
 

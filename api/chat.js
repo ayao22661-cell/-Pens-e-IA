@@ -36,6 +36,13 @@ const MAX_EMPTY_RETRIES = 3;      // relances automatiques d'une réponse vide /
 const MAX_CONTENTS = 120;         // messages max acceptés dans l'historique
 const MAX_TOOL_RESPONSE_CHARS = 30000;
 
+// Délai max avant le PREMIER octet d'un modèle : au-delà, il est considéré bloqué
+// et on passe au suivant (avant, un modèle muet gelait la réponse jusqu'à 5 min).
+const FIRST_CHUNK_MS = { light: 9000, normal: 20000, heavy: 45000 };
+const IDLE_MS = 60000;            // silence max en plein flux
+const HEARTBEAT_MS = 8000;        // ping vers le client : les réseaux mobiles coupent les connexions muettes
+const SLOW_COOLDOWN_MS = 60 * 1000;
+
 const jsonError = (status, error, data) =>
     new Response(JSON.stringify({ error, ...(data || {}) }), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -60,9 +67,12 @@ export default async function handler(req) {
     const isContinuation = Boolean(body.continuation?.token);
 
     // ── 2. Auth + quota ──────────────────────────────────────
-    let userId, credits = null, quota = null, gateMode = 'dev', turnToken;
+    let userId, credits = null, quota = null, gateMode = 'dev', turnToken, knowledgeP = Promise.resolve('');
+    const lastUserText = findLastUserText(contents);
     try {
         ({ userId } = await authenticate(req));
+        // Lancé tout de suite, en parallèle du quota (au lieu d'attendre l'un puis l'autre)
+        if (mode === 'chat') knowledgeP = getKnowledgeContext(userId, agentId, lastUserText).catch(() => '');
         if (isContinuation) {
             if (!(await verifyTurnToken(body.continuation.token, userId))) {
                 throw new HttpError(401, 'Tour expiré. Renvoie ton message.');
@@ -81,14 +91,13 @@ export default async function handler(req) {
     }
 
     // ── 3. Contexte ─────────────────────────────────────────
-    const lastUserText = findLastUserText(contents);
     const taskText = findTaskText(contents) || lastUserText;
     const heavy = mode === 'chat' && isHeavyTask(agentId, taskText);
     const light = mode === 'chat' && !heavy && !isContinuation && isLightChat(agentId, contents, lastUserText);
     const ui = heavy && UI_TASK.test(taskText);
     const backend = heavy && BACKEND_TASK.test(taskText);
     const docs = mode === 'chat' && DOC_WORK.test(taskText);
-    const knowledge = mode === 'chat' ? await getKnowledgeContext(userId, agentId, lastUserText) : '';
+    const knowledge = await knowledgeP;
     const context = body.context || {};
     const systemFor = (toolsEnabled, textTools = false) => buildSystemInstruction({
         textTools,
@@ -108,8 +117,10 @@ export default async function handler(req) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
         async start(controller) {
-            const send = (ev) => controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
+            let closed = false;
+            const send = (ev) => { if (!closed) controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n')); };
             send({ t: 'meta', turnToken, credits, quota, heavy });
+            const heartbeat = setInterval(() => { try { send({ t: 'ping' }); } catch (_) { /* flux fermé */ } }, HEARTBEAT_MS);
             const usage = { units: 0 }; // requêtes modèle réellement servies (pondérées)
 
             try {
@@ -122,9 +133,11 @@ export default async function handler(req) {
                 if (!isContinuation && gateMode === 'legacy') await refundCredit(userId);
                 send({ t: 'error', v: e.message || 'Erreur interne.' });
             } finally {
+                clearInterval(heartbeat);
                 // On ne compte que ce qui a réellement été produit
                 const after = await quotaCharge(userId, messagesFor(usage.units, !isContinuation)).catch(() => null);
                 if (after) send({ t: 'meta', quota: after });
+                closed = true;
                 controller.close();
             }
         },
@@ -153,7 +166,7 @@ async function runAgent({ send, contents, agentId, mode, isContinuation, systemF
     for (let round = 0; round < MAX_SERVER_ROUNDS; round++) {
         const firstRound = round === 0 && !isContinuation;
         const result = await callWithCascade({
-            cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText, heavy, sigModel,
+            cascade, contents, agentId, mode, systemFor, apiKey, signal, lastUserText, heavy, light, sigModel,
             thinkingShift: emptyRetries,
             forceTools: firstRound ? forcedTools(agentId, lastUserText) : null,
             allowPreSearch: firstRound,
@@ -267,7 +280,8 @@ const isSaturated = (m) => (saturated.get(m) || 0) > Date.now();
 // ============================================================
 //  CASCADE DE MODÈLES
 // ============================================================
-async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, sigModel, thinkingShift = 0, onModel, handlers }) {
+async function callWithCascade({ cascade, contents, agentId, mode, systemFor, apiKey, signal, forceTools, allowPreSearch, lastUserText, heavy, light = false, sigModel, thinkingShift = 0, onModel, handlers }) {
+    const firstChunkMs = heavy ? FIRST_CHUNK_MS.heavy : light ? FIRST_CHUNK_MS.light : FIRST_CHUNK_MS.normal;
     const hasToolParts = contents.some(c => c.parts.some(p => p.functionCall || p.functionResponse));
 
     // Les modèles saturés passent en fin de liste (jamais exclus : le quota peut être revenu)
@@ -276,7 +290,8 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
         const gemma = isGemma(model);
         // Gemma : outils via le protocole texte (<tool_call>), pas de function calling natif
         let useTools = mode === 'chat';
-        const variants = gemma ? ['off'] : THINKING_VARIANTS[heavy ? 'heavy' : 'normal'];
+        // Échange simple (salut, petite question) : pas de réflexion, réponse immédiate
+        const variants = gemma || light ? ['off'] : THINKING_VARIANTS[heavy ? 'heavy' : 'normal'];
         let variant = Math.min(thinkingShift, variants.length - 1); // après une réponse vide : réflexion moins gourmande
         const modelContents = sigModel && model !== sigModel && hasToolParts ? neutralizeSignatures(contents) : contents;
 
@@ -289,17 +304,36 @@ async function callWithCascade({ cascade, contents, agentId, mode, systemFor, ap
                 preSearchQuery: allowPreSearch && !useTools && mode === 'chat' ? preSearchQuery(agentId, lastUserText) : null,
             });
 
-            let response;
+            // Contrôleur propre à cet essai : annulé si le client part OU si le modèle reste muet
+            const ctrl = new AbortController();
+            const onAbort = () => ctrl.abort();
+            signal?.addEventListener?.('abort', onAbort);
+            const timer = setTimeout(() => ctrl.abort(), firstChunkMs);
+            // Seul le minuteur est levé : l'annulation par le client doit continuer d'atteindre le flux
+            const cleanup = () => clearTimeout(timer);
+
+            let response, reader, first;
             try {
-                response = await streamGenerate(model, body, apiKey, signal);
+                response = await streamGenerate(model, body, apiKey, ctrl.signal);
+                if (response.ok) {
+                    // Sonde : on attend le premier morceau avant de s'engager sur ce modèle
+                    reader = response.body.getReader();
+                    first = await reader.read();
+                }
             } catch (e) {
+                cleanup();
                 if (signal?.aborted) return { error: 'Requête annulée.' };
-                break; // erreur réseau → modèle suivant
+                if (ctrl.signal.aborted) {
+                    console.warn('[PENSÉE] modèle trop lent, bascule', model, firstChunkMs + 'ms');
+                    saturated.set(model, Date.now() + SLOW_COOLDOWN_MS);
+                }
+                break; // erreur réseau ou délai dépassé → modèle suivant
             }
+            cleanup();
 
             if (response.ok) {
                 onModel(model);
-                const out = await consumeStream(response, handlers);
+                const out = await consumeStream(response, handlers, { reader, first, idleMs: IDLE_MS });
                 return { ...out, model };
             }
 
