@@ -33,11 +33,12 @@ const REASONING = /\b(analyse[rz]?|compare[rz]?|comparaison|pourquoi|explique[rz
 
 /**
  * Niveau de réflexion adapté à la tâche (avant bornage par le type).
- * @param {{ mode: string, agentId: string, text: string, heavy: boolean, light: boolean }} t
+ * @param {{ mode: string, agentId: string, text: string, heavy: boolean, light: boolean, analysis?: boolean }} t
  */
-export function taskEffort({ mode, agentId, text, heavy, light }) {
+export function taskEffort({ mode, agentId, text, heavy, light, analysis }) {
     if (mode === 'voice') return 'aucune';
-    if (heavy) return 'elevee';
+    // Analyser du code existant demande autant de réflexion que d'en écrire
+    if (heavy || analysis) return 'elevee';
     if (light) return 'aucune';
     const t = (text || '').trim();
     if (agentId === 'audit') return 'elevee';

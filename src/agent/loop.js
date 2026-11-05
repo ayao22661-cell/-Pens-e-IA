@@ -19,11 +19,13 @@ import { terminal } from '../ui/terminal.js';
 import { streamChat, ApiError } from './stream.js';
 import { buildContents } from './history.js';
 import { executeClientTool, FINAL_TOOLS } from './tools.js';
-import { workspaceBrief, compactOldResults } from './context.js';
+import { workspaceBrief, compactOldResults, REVIEW_PROMPT, ANALYSIS_REVIEW_PROMPT } from './context.js';
 import { showResolvedTier } from '../tiers.js';
 
 const MAX_QUALITY_RETRIES = 2; // corrections demandées par le contrôle qualité des documents
 const CODE_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'run_python']);
+// Outils de lecture : une analyse qui les a utilisés a des constats à contre-vérifier
+const EXPLORE_TOOLS = new Set(['read_file', 'search_files', 'list_files', 'bash', 'run_python']);
 /**
  * @param {object} o
  * @param {string} o.userText
@@ -45,6 +47,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
     let token = null;
     let model = null;
     let heavy = false;
+    let analysis = false;
     let reviewed = false;
     let qualityRetries = 0;
     let limitReached = false;
@@ -72,6 +75,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
                         if (typeof ev.credits === 'number') setCredits(ev.credits);
                         if (ev.quota) setQuota(ev.quota);
                         if (ev.heavy) heavy = true;
+                        if (ev.analysis) analysis = true;
                         if (ev.tierLabel) showResolvedTier(ev);
                         break;
                     case 'model': model = ev.v; break;
@@ -106,9 +110,17 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
         if (done.reason === 'max_tokens') view.note('Réponse tronquée (longueur maximale atteinte). Demande la suite.', 'warn');
         if (/malformed|unexpected_tool/.test(done.reason)) view.note("Le modèle n'a pas réussi à formuler son appel d'outil. Dis « continue » ou découpe la demande.", 'warn');
         if (done.reason !== 'client_tools') {
+            // Analyse de code : les constats du rapport sont contre-vérifiés dans le code
+            const explored = trace.some(t => EXPLORE_TOOLS.has(t.name));
+            if (analysis && explored && !reviewed && done.reason === 'stop' && step < CONFIG.maxAgentSteps - 2) {
+                reviewed = true;
+                view.note('Vérification des constats dans le code…');
+                contents.push({ role: 'user', parts: [{ text: ANALYSIS_REVIEW_PROMPT }] });
+                continue;
+            }
             // Tâche lourde qui a produit du code : une relecture obligatoire avant de conclure
             const producedCode = trace.some(t => CODE_TOOLS.has(t.name));
-            if (heavy && producedCode && !reviewed && done.reason === 'stop' && step < CONFIG.maxAgentSteps - 2) {
+            if (heavy && !analysis && producedCode && !reviewed && done.reason === 'stop' && step < CONFIG.maxAgentSteps - 2) {
                 reviewed = true;
                 view.note('Auto-vérification du travail…');
                 contents.push({ role: 'user', parts: [{ text: REVIEW_PROMPT }] });
@@ -141,7 +153,7 @@ export async function runAgentTurn({ userText, files = [], agentId, memory = '',
 
         // Livrables affichés sans erreur : inutile de relancer le modèle… sauf relecture due
         if (allFinal && anyFinal) {
-            if (heavy && !reviewed && trace.some(t => CODE_TOOLS.has(t.name)) && step < CONFIG.maxAgentSteps - 2) {
+            if (heavy && !analysis && !reviewed && trace.some(t => CODE_TOOLS.has(t.name)) && step < CONFIG.maxAgentSteps - 2) {
                 reviewed = true;
                 view.note('Auto-vérification du travail…');
                 contents.push({ role: 'user', parts: [{ text: REVIEW_PROMPT }] });

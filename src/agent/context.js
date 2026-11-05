@@ -53,8 +53,19 @@ export function compactOldResults(contents) {
     }
 }
 
+// Analyse de code : contre-vérification des constats une fois le rapport affiché.
+// Les constats non prouvés sont retirés, les flux critiques oubliés sont suivis.
+export const ANALYSIS_REVIEW_PROMPT = `[CONTRE-VÉRIFICATION — consigne interne, pas un message de l'utilisateur]
+Ton rapport est déjà affiché. Vérifie-le maintenant comme un relecteur sceptique, outils à l'appui :
+1. Pour chaque constat 🔴 et 🟠 : relis le code à l'emplacement cité ET autour (appelants, try/catch, .catch, valeur de retour réellement utilisée, await manquant). Le scénario décrit se produit-il vraiment ? Sinon le constat est faux.
+2. Flux critiques (argent/achats, sauvegarde/chargement, sécurité) : en as-tu suivi un de bout en bout, de l'action de l'utilisateur jusqu'au stockage ? Si non, fais-le maintenant (search_files, read_file).
+3. Toute affirmation sans emplacement précis, ou tout conseil générique, est à retirer.
+Puis réponds UNIQUEMENT ainsi :
+- si tout tient : « ✓ Rapport vérifié — » suivi d'une phrase ;
+- sinon : une section « Corrections après vérification » avec les constats retirés (et pourquoi), corrigés, et ajoutés (même format que le rapport). Ne répète pas le rapport.`;
+
 // Message technique envoyé au modèle (jamais affiché ni sauvegardé comme message utilisateur)
-const REVIEW_PROMPT = `[AUTO-REVUE — consigne interne, pas un message de l'utilisateur]
+export const REVIEW_PROMPT = `[AUTO-REVUE — consigne interne, pas un message de l'utilisateur]
 Avant de conclure, relis et corrige le code comme un relecteur exigeant :
 1. Relis réellement les fichiers créés ou modifiés (read_file, ou bash : cat / git diff).
 2. Confronte-les à la demande initiale : tout est-il implémenté, complet, sans TODO, placeholder ni donnée factice ?

@@ -98,13 +98,16 @@ export default async function handler(req) {
     const ui = heavy && UI_TASK.test(taskText);
     const backend = heavy && BACKEND_TASK.test(taskText);
     const docs = mode === 'chat' && DOC_WORK.test(taskText);
+    // Analyse / audit de code existant : rapport fondé sur des preuves + passe de vérification
+    const analysis = mode === 'chat' && isAnalysisTask(agentId, contents, taskText);
     // Type d'IA (choisi ou automatique) et niveau de réflexion adapté à la tâche
-    const { tier, effort } = resolveTier(body.tier, { mode, agentId, text: taskText, heavy, light });
+    const { tier, effort } = resolveTier(body.tier, { mode, agentId, text: taskText, heavy, light, analysis });
     const knowledge = await knowledgeP;
     const context = body.context || {};
     const systemFor = (toolsEnabled, textTools = false) => buildSystemInstruction({
         textTools,
         heavy,
+        analysis,
         ui,
         backend,
         docs,
@@ -122,7 +125,7 @@ export default async function handler(req) {
         async start(controller) {
             let closed = false;
             const send = (ev) => { if (!closed) controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n')); };
-            send({ t: 'meta', turnToken, credits, quota, heavy, tier, tierLabel: TIERS[tier].label, effort });
+            send({ t: 'meta', turnToken, credits, quota, heavy, analysis, tier, tierLabel: TIERS[tier].label, effort });
             const heartbeat = setInterval(() => { try { send({ t: 'ping' }); } catch (_) { /* flux fermé */ } }, HEARTBEAT_MS);
             const usage = { units: 0 }; // requêtes modèle réellement servies (pondérées)
 
@@ -418,6 +421,18 @@ function findTaskText(contents) {
         if (text) return text.slice(-4000);
     }
     return '';
+}
+
+// Analyse / audit / revue de code existant (pas de création)
+const ANALYSIS_VERB = /\b(analys\w*|audit\w*|revue|review|examine[rz]?|inspecte[rz]?|passe[rz]? en revue|relis|relire|d[ée]cortique[rz]?|diagnostique[rz]?|[ée]value[rz]?|critique[rz]?)\b|\b(cherche|trouve|rep[èe]re|identifie|liste)[rz]?\b[^.?!]{0,30}\b(bugs?|failles?|erreurs?|probl[èe]mes?|faiblesses?|risques?|vuln[ée]rabilit[ée]s?)\b|qu'est-ce qui (ne va pas|cloche)/i;
+const CODE_SUBJECT = /\b(code|fichier|script|app\w*|projet|fonction|module|classe|repo\w*|d[ée]p[ôo]t|backend|frontend|api|moteur|architecture)\b|\.(js|ts|jsx|tsx|py|java|kt|php|go|rs|cs|cpp|c|rb|swift|dart|html|css|sql)\b/i;
+function isAnalysisTask(agentId, contents, text) {
+    const t = text || '';
+    if (!ANALYSIS_VERB.test(t)) return false;
+    if (CODE_WORK.test(t) && !/\b(analys|audit|revue|review)/i.test(t)) return false; // demande de création
+    const attached = contents.some(c => c.role === 'user' && c.parts.some(p =>
+        typeof p.text === 'string' && p.text.startsWith('DOCUMENT JOINT')));
+    return attached || CODE_SUBJECT.test(t) || agentId === 'code' || agentId === 'audit';
 }
 
 // Présentations / documents à produire → modèles complets + règles de conception

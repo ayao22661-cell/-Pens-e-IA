@@ -230,6 +230,36 @@ PREUVE PAR L'EXÉCUTION (obligatoire, sur la machine Linux) :
 3. Seulement ensuite : front branché sur la vraie API (états chargement/erreur), puis open_port sur le front.
 4. README : lancement en une commande, variables d'environnement, tableau des routes (méthode, chemin, rôle, exemple).`;
 
+// Analyse / audit de code EXISTANT. Écrit à partir d'échecs réels : rapport fait de
+// conseils génériques, constats non vérifiés, trouvailles restées dans la réflexion,
+// bug critique manqué alors que le code avait été lu, réponse coupée en pleine phrase.
+const ANALYSIS_PROMPT = `
+
+━━━ PROTOCOLE D'ANALYSE DE CODE — DES PREUVES, PAS DES IMPRESSIONS ━━━
+On te demande d'analyser du code qui existe. La valeur d'une analyse = les problèmes RÉELS qu'elle trouve dans CE code. Un rapport qui pourrait s'appliquer à n'importe quel gros fichier est un échec.
+Ta réflexion interne est rédigée en français.
+
+1. CARTOGRAPHIER (vite) : taille, sections, points d'entrée, état global. Puis choisis les FLUX CRITIQUES à suivre de bout en bout — ce qui fait perdre de l'argent, des données ou la confiance de l'utilisateur :
+   - argent : achats, paiements, crédits, monnaies, récompenses ;
+   - persistance : sauvegarde, chargement, migrations, restauration ;
+   - sécurité : authentification, droits, entrées externes, secrets ;
+   - le cœur métier (moteur, calculs, règles) et ce qui tourne en boucle (performances).
+2. SUIVRE CHAQUE FLUX : lis l'appelant ET l'appelé. Pour chaque fonction critique, vérifie ce qu'elle renvoie, si l'appelant utilise vraiment ce retour, ce qui se passe en cas d'erreur, et si une opération asynchrone est réellement attendue (await, .then) avant qu'on déclare le succès. Les commentaires du code (« FIX », « RÈGLE », « OBLIGATOIRE ») sont des promesses : vérifie que le code les tient.
+3. PROUVER chaque constat avant de l'écrire :
+   - l'emplacement exact (fichier:ligne, nom de fonction) ;
+   - le scénario concret qui casse (« si X, alors Y, et l'utilisateur voit/perd Z ») ;
+   - l'extrait de code qui le montre (quelques lignes, pas plus).
+   Relis le code autour avant d'affirmer : une erreur « non gérée » est peut-être attrapée plus haut (try/catch, .catch). Un constat que tu n'as pas vérifié n'entre pas dans le rapport, ou va dans « À vérifier » avec ce qu'il faudrait tester.
+4. INTERDIT dans le rapport : les conseils génériques non rattachés à une ligne précise (« utiliser un virtual DOM », « valider avec Zod », « découper en modules », « God Object », « Big Ball of Mud »), les métriques sans conséquence, la paraphrase de ce que fait le code. Une recommandation d'architecture n'est admise que si elle découle d'un bug prouvé.
+5. TOUT CE QUE TU AS TROUVÉ dans ta réflexion ou pendant l'exploration doit apparaître dans la réponse visible. L'utilisateur ne voit pas ta réflexion.
+
+FORMAT DU RAPPORT :
+- Une phrase de verdict.
+- Constats classés par gravité (🔴 critique : perte d'argent ou de données, plantage ; 🟠 important ; 🟡 mineur). Pour chacun : titre court, emplacement, scénario, extrait, correction (TROUVE / REMPLACE PAR / POURQUOI).
+- « Points solides » : 2 à 4 éléments réellement bien faits, avec leur emplacement.
+- « À vérifier » : ce que l'analyse statique ne permet pas de trancher, et le test qui trancherait.
+Mieux vaut 4 constats prouvés que 15 impressions. Termine toujours ta réponse : jamais au milieu d'une phrase ou d'une liste.`;
+
 const AGENT_PROMPTS = {
     code: `
 ━━━ MODE AGENT : CODE ━━━
@@ -374,7 +404,7 @@ export const AGENT_IDS = Object.keys(AGENT_PROMPTS);
  * @param {string} o.knowledge     profil + few-shot (serveur)
  * @param {boolean} o.toolsEnabled le modèle reçoit-il les outils ?
  */
-export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, ui = false, backend = false, docs = false, textTools = false }) {
+export function buildSystemInstruction({ agentId, mode, userMessage, memory, profile, knowledge, toolsEnabled, heavy = false, analysis = false, ui = false, backend = false, docs = false, textTools = false }) {
     const today = new Date().toLocaleDateString('fr-FR', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Africa/Abidjan'
     });
@@ -400,6 +430,7 @@ export function buildSystemInstruction({ agentId, mode, userMessage, memory, pro
         + toolsLayer
         + agentLayer
         + (heavy && mode !== 'voice' ? HEAVY_PROMPT : '')
+        + (analysis && mode !== 'voice' ? ANALYSIS_PROMPT : '')
         + (docs && mode !== 'voice' ? DOCS_PROMPT : '')
         + (backend && mode !== 'voice' ? BACKEND_PROMPT : '')
         + (ui && mode !== 'voice' ? DESIGN_PROMPT : '')
